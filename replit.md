@@ -1,27 +1,114 @@
-# Workspace
+# ERP PRO — Complete Business Management Mobile App
 
-## Overview
+## Project Overview
+A full-featured ERP (Enterprise Resource Planning) mobile application built with Expo SDK 54, Express 5 API, Drizzle ORM, and PostgreSQL. Designed for multi-location business management with real-time POS, financial tracking, and inventory control.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+## Architecture
 
-## Stack
+### Stack
+- **Frontend**: Expo SDK 54, React Native, Expo Router 6, TanStack Query
+- **Backend**: Express 5, Drizzle ORM, PostgreSQL
+- **API Client**: Orval-generated React Query hooks (`@workspace/api-client-react`)
+- **Monorepo**: pnpm workspaces
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+### Packages
+- `@workspace/mobile` — Expo React Native app
+- `@workspace/api-server` — Express 5 REST API
+- `@workspace/db` — Drizzle ORM + schema
+- `@workspace/api-zod` — Shared Zod schemas
+- `@workspace/api-client-react` — Orval-generated hooks
 
-## Key Commands
+## Key Features
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/api-server run dev` — run API server locally
+### POS Screen (Core Feature)
+- Custom numpad for amount entry
+- **QTY = Math.round(totalAmount / unitPrice)** — auto-calculated, rounded
+- Amount displayed with **8 decimal places**
+- QTY is **copyable** (expo-clipboard)
+- Product picker with unit price display
+- Customer + Account + payment method selection
+- Complete Sale with real-time stock/balance updates
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+### 5 Tab Navigation
+1. **POS** — Point of Sale with numpad
+2. **Dashboard** — Today's stats, account balances, recent sales
+3. **Transactions** — Sales, Purchases, Expenses, Credits (with add forms)
+4. **Stock** — Inventory management with search & CRUD
+5. **More** — Access to all management screens
+
+### Management Screens
+- Customers, Suppliers (full CRUD)
+- Users (with role management: admin/manager/cashier)
+- Locations, Accounts, Categories, Wallets
+- Credits (receivable/payable with payment recording)
+- Audit Log (full activity history)
+
+## Database Schema (14 tables)
+`users`, `sessions`, `locations`, `accounts`, `categories`, `products`, `customers`, `suppliers`, `sales`, `sale_items`, `purchases`, `purchase_items`, `expenses`, `credits`, `wallets`, `audit_logs`
+
+## Authentication
+- SHA256 password hashing with salt
+- Bearer token sessions (stored in AsyncStorage)
+- Default credentials: `admin / admin123`, `cashier / cashier123`
+- Call `POST /api/seed` to initialize data
+
+## API Endpoints
+All routes require Bearer token except `/api/auth/login` and `/api/seed`.
+
+- `POST /api/auth/login` — Login
+- `GET/POST /api/users` — User management
+- `GET/POST /api/locations` — Locations
+- `GET/POST /api/accounts` — Financial accounts
+- `GET/POST /api/categories` — Product/expense categories
+- `GET/POST /api/products` — Product catalog
+- `GET/POST /api/customers` — Customer records
+- `GET/POST /api/suppliers` — Supplier records
+- `GET/POST /api/sales` — Sales transactions
+- `GET/POST /api/purchases` — Purchase records
+- `GET/POST /api/expenses` — Expense tracking
+- `GET/POST /api/credits` — Credit management
+- `POST /api/credits/:id/pay` — Record credit payment
+- `GET/POST /api/wallets` — Wallet management
+- `POST /api/wallets/transfer` — Wallet transfers
+- `GET /api/audit` — Audit log
+- `GET /api/dashboard` — Dashboard stats
+
+## Workflows
+- **API Server**: `pnpm --filter @workspace/api-server run dev` (port 8080)
+- **Expo**: `pnpm --filter @workspace/mobile run dev` (port varies)
+
+## Color Theme (Light ERP)
+- Background: `#F0F4F8`
+- Primary: `#2563EB` (blue)
+- Header: `#1E40AF` (deep blue)
+- Sale: `#16A34A` (green)
+- Purchase: `#0284C7` (light blue)
+- Expense: `#EA580C` (orange)
+- Credit: `#7C3AED` (purple)
+
+## File Structure
+```
+artifacts/
+  api-server/src/
+    routes/          — All 18 route files
+    lib/             — auth.ts, audit.ts
+    middlewares/     — requireAuth.ts
+  mobile/
+    app/
+      _layout.tsx    — Root layout with AuthProvider
+      login.tsx      — Login screen
+      (tabs)/        — 5 tab screens
+        index.tsx    — POS (core feature)
+        dashboard.tsx
+        transactions.tsx
+        inventory.tsx
+        more.tsx
+      customers.tsx, suppliers.tsx, users.tsx
+      locations.tsx, accounts.tsx, categories.tsx
+      wallets.tsx, audit.tsx, credits.tsx
+    context/
+      AuthContext.tsx — Token management
+    constants/
+      colors.ts      — ERP color palette
+lib/db/src/schema/   — 14 table definitions
+```
