@@ -108,7 +108,14 @@ export default function POSScreen() {
     if (key === "⌫") { setAmount(prev => prev.length > 1 ? prev.slice(0, -1) : "0"); return; }
     if (key === ".") { if (!amount.includes(".")) setAmount(prev => prev + "."); return; }
     if (amount === "0") setAmount(key);
-    else setAmount(prev => prev.length < 16 ? prev + key : prev);
+    else setAmount(prev => {
+      if (prev.includes(".")) {
+        const decPart = prev.split(".")[1] ?? "";
+        if (decPart.length >= 8) return prev;
+      }
+      if (prev.length >= 16) return prev;
+      return prev + key;
+    });
   };
 
   const handleCopyQty = async () => {
