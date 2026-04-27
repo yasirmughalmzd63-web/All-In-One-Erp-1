@@ -7,11 +7,11 @@ import {
   StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   useListProducts, useListCustomers, useListAccounts, useListLocations,
-  useCreateSale, useGetDashboard, customFetch,
+  useCreateSale, customFetch,
 } from "@workspace/api-client-react";
 import { useAuth, hasPrivilege, getAllowedProductIds, getAllowedAccountIds, getAllowedLocationIds } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -94,7 +94,6 @@ export default function POSScreen() {
   const { data: customersRaw } = useListCustomers();
   const { data: accountsRaw } = useListAccounts();
   const { data: locationsRaw } = useListLocations();
-  const { data: dashboardRaw } = useGetDashboard();
   const createSaleMutation = useCreateSale();
 
   React.useEffect(() => {
@@ -175,15 +174,42 @@ export default function POSScreen() {
     return { errors, canComplete: errors.length === 0 };
   }, [validations.errors, selectedAccount]);
 
-  // ── Dashboard figures ──────────────────────────────────────────────────
-  const dash = dashboardRaw as unknown as {
+  // ── Dashboard figures (location/user-filtered for non-admin) ───────────
+  const dashParams = isAdmin
+    ? ""
+    : `?userId=${user?.id ?? ""}${selectedLocation ? `&locationId=${selectedLocation.id}` : ""}`;
+
+  const { data: dashboardRaw } = useQuery<{
     totalAccountsBalance?: string; totalStockValue?: string;
     creditReceivable?: string; creditPayable?: string;
-  } | undefined;
-  const bankBal   = dash?.totalAccountsBalance ? parseFloat(dash.totalAccountsBalance) : null;
-  const stockVal  = dash?.totalStockValue      ? parseFloat(dash.totalStockValue)       : null;
-  const creditIn  = dash?.creditReceivable     ? parseFloat(dash.creditReceivable)      : null;
-  const outstanding = dash?.creditPayable      ? parseFloat(dash.creditPayable)         : null;
+  }>({
+    queryKey: ["dashboard-pos", dashParams],
+    queryFn: () => customFetch<{
+      totalAccountsBalance?: string; totalStockValue?: string;
+      creditReceivable?: string; creditPayable?: string;
+    }>(`/api/dashboard${dashParams}`),
+    refetchInterval: 30000,
+  });
+
+  // BANK: admin → global accounts sum, non-admin → allowed accounts sum
+  const bankBal = isAdmin
+    ? (dashboardRaw?.totalAccountsBalance ? parseFloat(dashboardRaw.totalAccountsBalance) : null)
+    : allowedAccounts.length > 0
+      ? allowedAccounts.reduce((s, a) => s + parseFloat((a as { balance?: string }).balance ?? "0"), 0)
+      : null;
+
+  // STOCK: admin → global stock value, non-admin → selected location products
+  const stockVal = isAdmin
+    ? (dashboardRaw?.totalStockValue ? parseFloat(dashboardRaw.totalStockValue) : null)
+    : selectedLocation
+      ? (products as unknown as { locationId?: number; stock?: number; unitPrice?: string; isActive?: boolean }[])
+          .filter(p => p.isActive !== false && p.locationId === selectedLocation.id)
+          .reduce((s, p) => s + (p.stock ?? 0) * parseFloat(p.unitPrice ?? "0"), 0)
+      : null;
+
+  // CREDIT IN / OUTSTANDING: from filtered dashboard (by userId for non-admin)
+  const creditIn    = dashboardRaw?.creditReceivable ? parseFloat(dashboardRaw.creditReceivable) : null;
+  const outstanding = dashboardRaw?.creditPayable    ? parseFloat(dashboardRaw.creditPayable)    : null;
 
   // ── Display helpers ────────────────────────────────────────────────────
   const { typedPart, ghostPart } = (() => {

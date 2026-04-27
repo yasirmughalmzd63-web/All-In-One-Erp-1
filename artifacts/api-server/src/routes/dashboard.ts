@@ -32,11 +32,26 @@ function getPeriodRange(period: string): { start: Date; end: Date } {
 
 router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
   const period = typeof req.query.period === "string" ? req.query.period : "today";
+  const filterUserId = typeof req.query.userId === "string" ? parseInt(req.query.userId) : null;
+  const filterLocationId = typeof req.query.locationId === "string" ? parseInt(req.query.locationId) : null;
+
   const { start, end } = getPeriodRange(period);
   const isYesterday = period === "yesterday";
 
   const periodFilter = (col: Parameters<typeof gte>[0]) =>
     isYesterday ? and(gte(col, start), lt(col, end)) : gte(col, start);
+
+  // Build sales filter: period + optional userId + optional locationId
+  const salesPeriodFilter = filterUserId && filterLocationId
+    ? and(periodFilter(salesTable.createdAt), eq(salesTable.userId, filterUserId), eq(salesTable.locationId, filterLocationId))
+    : filterUserId
+      ? and(periodFilter(salesTable.createdAt), eq(salesTable.userId, filterUserId))
+      : filterLocationId
+        ? and(periodFilter(salesTable.createdAt), eq(salesTable.locationId, filterLocationId))
+        : periodFilter(salesTable.createdAt);
+
+  // Credits filter by userId
+  const creditUserFilter = filterUserId ? eq(creditsTable.userId, filterUserId) : undefined;
 
   const [
     periodSalesRows, periodPurchasesRows, periodExpensesRows,
@@ -44,7 +59,7 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     creditReceivableRows, creditPayableRows,
     stockProducts, accounts, recentSales,
   ] = await Promise.all([
-    db.select({ total: salesTable.total }).from(salesTable).where(periodFilter(salesTable.createdAt)),
+    db.select({ total: salesTable.total }).from(salesTable).where(salesPeriodFilter),
     db.select({ total: purchasesTable.total }).from(purchasesTable).where(periodFilter(purchasesTable.createdAt)),
     db.select({ amount: expensesTable.amount }).from(expensesTable).where(periodFilter(expensesTable.createdAt)),
     db.select({ id: customersTable.id }).from(customersTable),
@@ -52,16 +67,29 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     db.select({ id: suppliersTable.id }).from(suppliersTable),
     db.select({ remaining: creditsTable.remainingAmount })
       .from(creditsTable)
-      .where(and(eq(creditsTable.type, "receivable"), or(eq(creditsTable.status, "pending"), eq(creditsTable.status, "partial")))),
+      .where(and(
+        eq(creditsTable.type, "receivable"),
+        or(eq(creditsTable.status, "pending"), eq(creditsTable.status, "partial")),
+        creditUserFilter,
+      )),
     db.select({ remaining: creditsTable.remainingAmount })
       .from(creditsTable)
-      .where(and(eq(creditsTable.type, "payable"), or(eq(creditsTable.status, "pending"), eq(creditsTable.status, "partial")))),
-    db.select({ stock: productsTable.stock, unitPrice: productsTable.unitPrice })
-      .from(productsTable)
-      .where(eq(productsTable.isActive, true)),
+      .where(and(
+        eq(creditsTable.type, "payable"),
+        or(eq(creditsTable.status, "pending"), eq(creditsTable.status, "partial")),
+        creditUserFilter,
+      )),
+    // Stock filtered by location if provided
+    filterLocationId
+      ? db.select({ stock: productsTable.stock, unitPrice: productsTable.unitPrice })
+          .from(productsTable)
+          .where(and(eq(productsTable.isActive, true), eq(productsTable.locationId, filterLocationId)))
+      : db.select({ stock: productsTable.stock, unitPrice: productsTable.unitPrice })
+          .from(productsTable)
+          .where(eq(productsTable.isActive, true)),
     db.select().from(accountsTable),
     db.select().from(salesTable)
-      .where(period === "today" || isYesterday ? periodFilter(salesTable.createdAt) : undefined)
+      .where(period === "today" || isYesterday ? salesPeriodFilter : undefined)
       .orderBy(desc(salesTable.createdAt))
       .limit(10),
   ]);
