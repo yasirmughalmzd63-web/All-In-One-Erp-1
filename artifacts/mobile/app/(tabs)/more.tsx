@@ -27,11 +27,12 @@ const MANAGEMENT_ITEMS: MenuItem[] = [
 ];
 
 const REPORTS_ITEMS: MenuItem[] = [
-  { label: "Dollar Wallet", icon: "pocket",       route: "/wallets",     color: "#0369A1", bg: "#E0F2FE", desc: "USD ledger & exchange",        module: "currency" },
-  { label: "Audit Log",    icon: "shield",       route: "/audit",       color: "#475569", bg: "#F8FAFC", desc: "Activity history",             module: "audit" },
-  { label: "Currency",     icon: "dollar-sign",  route: "/currency",    color: "#0891B2", bg: "#ECFEFF", desc: "Forex transactions",           module: "currency" },
-  { label: "Cash Count",   icon: "archive",      route: "/cash-count",  color: "#7C3AED", bg: "#F3E8FF", desc: "Balance sheet & reconcile",    module: "cash_count" },
-  { label: "Privileges",   icon: "shield",       route: "/privileges",  color: "#059669", bg: "#ECFDF5", desc: "User access control",          module: "users", adminOnly: true },
+  { label: "User Report",  icon: "bar-chart-2", route: "/user-report",  color: "#7C3AED", bg: "#F3E8FF", desc: "Stock issued & cash per user",  module: "users", adminOnly: true },
+  { label: "Dollar Wallet", icon: "pocket",     route: "/wallets",      color: "#0369A1", bg: "#E0F2FE", desc: "USD ledger & exchange",         module: "currency" },
+  { label: "Audit Log",    icon: "shield",      route: "/audit",        color: "#475569", bg: "#F8FAFC", desc: "Activity history",              module: "audit" },
+  { label: "Currency",     icon: "dollar-sign", route: "/currency",     color: "#0891B2", bg: "#ECFEFF", desc: "Forex transactions",            module: "currency" },
+  { label: "Cash Count",   icon: "archive",     route: "/cash-count",   color: "#7C3AED", bg: "#F3E8FF", desc: "Balance sheet & reconcile",     module: "cash_count" },
+  { label: "Privileges",   icon: "shield",      route: "/privileges",   color: "#059669", bg: "#ECFDF5", desc: "User access control",           module: "users", adminOnly: true },
 ];
 
 export default function MoreScreen() {

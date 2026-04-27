@@ -7,9 +7,7 @@ import { canModify } from "../lib/permissions.js";
 
 const router = Router();
 
-function formatAmount(val: number): string {
-  return val.toFixed(8);
-}
+function fmt(val: number): string { return val.toFixed(8); }
 
 function genInvoiceNo(): string {
   return "SAL-" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
@@ -65,6 +63,52 @@ router.get("/sales", requireAuth, async (_req, res): Promise<void> => {
   res.json(result);
 });
 
+router.get("/sales/user-report", requireAuth, async (_req, res): Promise<void> => {
+  const users = await db.select({ id: usersTable.id, name: usersTable.name, username: usersTable.username, role: usersTable.role })
+    .from(usersTable);
+  const sales = await db.select({
+    userId: salesTable.userId,
+    total: salesTable.total,
+    amountPaid: salesTable.amountPaid,
+    paymentMethod: salesTable.paymentMethod,
+    status: salesTable.status,
+  }).from(salesTable);
+  const saleItems = await db.select({
+    saleId: saleItemsTable.saleId,
+    qty: saleItemsTable.qty,
+    total: saleItemsTable.total,
+  }).from(saleItemsTable);
+  const credits = await db.select({
+    userId: creditsTable.userId,
+    remainingAmount: creditsTable.remainingAmount,
+    status: creditsTable.status,
+  }).from(creditsTable);
+
+  const saleItemMap: Record<number, { qty: number; total: number }> = {};
+  saleItems.forEach(si => {
+    if (!saleItemMap[si.saleId]) saleItemMap[si.saleId] = { qty: 0, total: 0 };
+    saleItemMap[si.saleId]!.qty += si.qty;
+    saleItemMap[si.saleId]!.total += parseFloat(si.total);
+  });
+
+  const report = users.map(u => {
+    const userSales = sales.filter(s => s.userId === u.id);
+    const stockIssued = userSales.reduce((sum, s) => {
+      return sum + (saleItemMap[s.userId]?.qty ?? 0);
+    }, 0);
+    const cashCollected = userSales.reduce((sum, s) => sum + parseFloat(s.amountPaid), 0);
+    const totalSales = userSales.reduce((sum, s) => sum + parseFloat(s.total), 0);
+    const creditPending = credits.filter(c => c.userId === u.id && (c.status === "pending" || c.status === "partial"))
+      .reduce((sum, c) => sum + parseFloat(c.remainingAmount), 0);
+    return {
+      userId: u.id, name: u.name, username: u.username, role: u.role,
+      totalSales, cashCollected, creditPending, outstanding: totalSales - cashCollected,
+    };
+  });
+
+  res.json(report);
+});
+
 router.get("/sales/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [sale] = await db.select().from(salesTable).where(eq(salesTable.id, id));
@@ -87,20 +131,66 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
     items: Array<{ productId: number; qty: number; unitPrice: string }>;
     discount: string; tax: string; amountPaid: string; paymentMethod: string; notes?: string | null;
   };
-  if (!items?.length || !userId) { res.status(400).json({ error: "userId and items required" }); return; }
 
+  if (!items?.length || !userId) {
+    res.status(400).json({ error: "userId and items required" });
+    return;
+  }
+
+  const paid = parseFloat(amountPaid ?? "0");
+  const isCash = paymentMethod !== "credit";
+
+  // Rule 1: Account required for cash payments
+  if (isCash && !accountId) {
+    res.status(422).json({ error: "An account must be selected for cash payments." });
+    return;
+  }
+
+  // Rules 3, 4, 5: Stock validation for every item
+  for (const item of items) {
+    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock })
+      .from(productsTable).where(eq(productsTable.id, item.productId));
+    if (!product) {
+      res.status(422).json({ error: `Product not found (id ${item.productId}).` });
+      return;
+    }
+    if ((product.stock ?? 0) <= 0) {
+      res.status(422).json({ error: `"${product.name}" is out of stock.` });
+      return;
+    }
+    if (item.qty > (product.stock ?? 0)) {
+      res.status(422).json({ error: `Only ${product.stock} ${product.name} in stock, but ${item.qty} requested.` });
+      return;
+    }
+    if (item.qty <= 0) {
+      res.status(422).json({ error: `Quantity must be greater than zero.` });
+      return;
+    }
+  }
+
+  // Calculate totals
   let subtotal = 0;
   const itemsWithTotal = items.map(item => {
     const lineTotal = parseFloat(item.unitPrice) * item.qty;
     subtotal += lineTotal;
-    return { ...item, total: formatAmount(lineTotal) };
+    return { ...item, total: fmt(lineTotal) };
   });
 
   const discountAmt = parseFloat(discount ?? "0");
   const taxAmt = parseFloat(tax ?? "0");
   const total = subtotal - discountAmt + taxAmt;
-  const paid = parseFloat(amountPaid ?? "0");
   const change = paid - total;
+
+  // Rule 2: Account balance must be sufficient for cash payments
+  if (isCash && accountId && paid > 0) {
+    const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (!account) {
+      res.status(422).json({ error: "Selected account not found." });
+      return;
+    }
+    // Note: for sales, we ADD to account (money received from customer)
+    // So balance check: account must exist (no minimum required for receiving)
+  }
 
   const invoiceNo = genInvoiceNo();
   const [sale] = await db.insert(salesTable).values({
@@ -109,70 +199,95 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
     locationId: locationId ?? null,
     accountId: accountId ?? null,
     userId,
-    subtotal: formatAmount(subtotal),
-    discount: formatAmount(discountAmt),
-    tax: formatAmount(taxAmt),
-    total: formatAmount(total),
-    amountPaid: formatAmount(paid),
-    change: formatAmount(change),
+    subtotal: fmt(subtotal),
+    discount: fmt(discountAmt),
+    tax: fmt(taxAmt),
+    total: fmt(total),
+    amountPaid: fmt(paid),
+    change: fmt(change),
     paymentMethod,
     status: "completed",
     notes: notes ?? null,
   }).returning();
 
+  // Deduct stock — guaranteed no negative (validated above)
   for (const item of itemsWithTotal) {
-    await db.insert(saleItemsTable).values({ saleId: sale!.id, productId: item.productId, qty: item.qty, unitPrice: item.unitPrice, total: item.total });
-    await db.update(productsTable).set({ stock: db.$count(productsTable) }).where(eq(productsTable.id, item.productId));
-    const [product] = await db.select({ stock: productsTable.stock }).from(productsTable).where(eq(productsTable.id, item.productId));
+    await db.insert(saleItemsTable).values({
+      saleId: sale!.id,
+      productId: item.productId,
+      qty: item.qty,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    });
+    const [product] = await db.select({ stock: productsTable.stock })
+      .from(productsTable).where(eq(productsTable.id, item.productId));
     if (product) {
-      const newStock = (product.stock ?? 0) - item.qty;
-      await db.update(productsTable).set({ stock: Math.max(0, newStock) }).where(eq(productsTable.id, item.productId));
+      const newStock = Math.max(0, (product.stock ?? 0) - item.qty);
+      await db.update(productsTable).set({ stock: newStock }).where(eq(productsTable.id, item.productId));
     }
   }
 
-  const remaining = total - paid;
-
+  // Credit account with received cash
   if (accountId && paid > 0) {
     const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
     if (account) {
       const newBal = parseFloat(account.balance) + paid;
-      await db.update(accountsTable).set({ balance: formatAmount(newBal) }).where(eq(accountsTable.id, accountId));
+      await db.update(accountsTable).set({ balance: fmt(newBal) }).where(eq(accountsTable.id, accountId));
     }
   }
 
+  const remaining = total - paid;
   if (paymentMethod === "credit" && customerId && remaining > 0) {
     await db.insert(creditsTable).values({
       type: "receivable",
       partyId: customerId,
       partyType: "customer",
-      amount: formatAmount(total),
-      paidAmount: formatAmount(paid),
-      remainingAmount: formatAmount(remaining),
+      amount: fmt(total),
+      paidAmount: fmt(paid),
+      remainingAmount: fmt(remaining),
       status: paid > 0 ? "partial" : "pending",
       notes: `Credit sale: ${invoiceNo}`,
       userId: req.userId,
     });
   }
 
-  await logAudit(req.userId, "create", "sale", sale!.id, `Sale ${invoiceNo} total ${formatAmount(total)}`);
-  res.status(201).json({ ...sale!, items: itemsWithTotal.map(i => ({ ...i, productName: "" })), customerName: null, locationName: null, accountName: null, createdAt: sale!.createdAt.toISOString() });
+  await logAudit(req.userId, "create", "sale", sale!.id, `Sale ${invoiceNo} total ${fmt(total)}`);
+  res.status(201).json({
+    ...sale!,
+    items: itemsWithTotal.map(i => ({ ...i, productName: "" })),
+    customerName: null, locationName: null, accountName: null,
+    createdAt: sale!.createdAt.toISOString(),
+  });
 });
 
 router.delete("/sales/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const [existing] = await db.select({ userId: salesTable.userId, accountId: salesTable.accountId, total: salesTable.total, amountPaid: salesTable.amountPaid })
-    .from(salesTable).where(eq(salesTable.id, id));
+  const [existing] = await db.select({
+    userId: salesTable.userId, accountId: salesTable.accountId,
+    total: salesTable.total, amountPaid: salesTable.amountPaid,
+  }).from(salesTable).where(eq(salesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Sale not found" }); return; }
   if (!canModify(req, res, existing.userId)) return;
+
+  // Restore stock
+  const items = await db.select().from(saleItemsTable).where(eq(saleItemsTable.saleId, id));
+  for (const item of items) {
+    const [product] = await db.select({ stock: productsTable.stock })
+      .from(productsTable).where(eq(productsTable.id, item.productId));
+    if (product) {
+      await db.update(productsTable).set({ stock: (product.stock ?? 0) + item.qty }).where(eq(productsTable.id, item.productId));
+    }
+  }
 
   await db.delete(saleItemsTable).where(eq(saleItemsTable.saleId, id));
   await db.delete(salesTable).where(eq(salesTable.id, id));
 
+  // Reverse account credit
   if (existing.accountId && parseFloat(existing.amountPaid) > 0) {
     const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, existing.accountId));
     if (account) {
       const newBal = parseFloat(account.balance) - parseFloat(existing.amountPaid);
-      await db.update(accountsTable).set({ balance: formatAmount(newBal) }).where(eq(accountsTable.id, existing.accountId));
+      await db.update(accountsTable).set({ balance: fmt(newBal) }).where(eq(accountsTable.id, existing.accountId));
     }
   }
 

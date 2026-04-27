@@ -1,28 +1,17 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
-  Alert,
-  FlatList,
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+  Alert, FlatList, Modal, Platform, ScrollView,
+  StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
-  useListProducts,
-  useListCustomers,
-  useListAccounts,
-  useCreateSale,
-  useGetDashboard,
-  customFetch,
+  useListProducts, useListCustomers, useListAccounts,
+  useCreateSale, useGetDashboard, customFetch,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -47,7 +36,7 @@ function PickerModal<T extends { id: number; name: string }>({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
-        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "75%" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "80%" }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{title}</Text>
             <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
@@ -101,15 +90,13 @@ export default function POSScreen() {
     customFetch<{ entryType: string; amountUsd: string; rate: string }[]>("/api/dollar-wallet")
       .then(rows => {
         const SIGNS: Record<string, number> = { received: 1, partial: 1, recovery: 1, product: -1 };
-        let usd = 0;
-        let lastRate = 0;
+        let usd = 0; let lastRate = 0;
         rows.forEach(r => {
           usd += (SIGNS[r.entryType] ?? 1) * parseFloat(r.amountUsd);
           if (!lastRate) lastRate = parseFloat(r.rate);
         });
         setDollarBalance({ usd, pkr: usd * lastRate, rate: lastRate });
-      })
-      .catch(() => {});
+      }).catch(() => {});
   }, []);
 
   const products = (productsRaw ?? []) as unknown as Product[];
@@ -123,35 +110,52 @@ export default function POSScreen() {
     : 0;
   const qty = selectedProduct && parsedAmount > 0 && activePrice > 0 ? Math.round(parsedAmount / activePrice) : 0;
 
+  // ── Strict validation state ───────────────────────────────────────────
+  const validations = useMemo(() => {
+    const errors: string[] = [];
+    const warnings: string[] = [];
+
+    if (!selectedProduct) {
+      errors.push("No product selected");
+    } else {
+      if ((selectedProduct.stock ?? 0) <= 0) errors.push(`"${selectedProduct.name}" is out of stock`);
+      else if (qty > (selectedProduct.stock ?? 0)) errors.push(`Only ${selectedProduct.stock} in stock — need ${qty}`);
+    }
+    if (parsedAmount <= 0) errors.push("Enter an amount");
+    if (qty <= 0 && selectedProduct && parsedAmount > 0) warnings.push("Amount too small for one unit");
+
+    return { errors, warnings, canSell: errors.length === 0, canCredit: errors.length === 0 && !!selectedCustomer };
+  }, [selectedProduct, qty, parsedAmount, selectedCustomer]);
+
+  const cashValidations = useMemo(() => {
+    const errors = [...validations.errors];
+    if (!selectedAccount) errors.push("Select an account to receive payment");
+    return { errors, canComplete: errors.length === 0 };
+  }, [validations.errors, selectedAccount]);
+
   const dash = dashboardRaw as unknown as { totalAccountsBalance?: string; totalStockValue?: string; creditReceivable?: string; creditPayable?: string } | undefined;
   const totalBank = dash?.totalAccountsBalance ? parseFloat(dash.totalAccountsBalance) : null;
   const totalStock = dash?.totalStockValue ? parseFloat(dash.totalStockValue) : null;
   const totalCredit = dash?.creditReceivable ? parseFloat(dash.creditReceivable) : null;
   const totalPayable = dash?.creditPayable ? parseFloat(dash.creditPayable) : null;
   const leftBalance = (totalBank !== null && totalStock !== null && totalCredit !== null && totalPayable !== null)
-    ? totalBank + totalStock + totalCredit - totalPayable
-    : null;
+    ? totalBank + totalStock + totalCredit - totalPayable : null;
 
   const { typedPart, ghostPart } = (() => {
     if (amount.includes(".")) {
       const [intPart, decPart = ""] = amount.split(".");
-      const ghost = "0".repeat(Math.max(0, 8 - decPart.length));
-      return { typedPart: intPart + "." + decPart, ghostPart: ghost };
+      return { typedPart: intPart + "." + decPart, ghostPart: "0".repeat(Math.max(0, 8 - decPart.length)) };
     }
     return { typedPart: amount + ".", ghostPart: "00000000" };
   })();
 
   const handleNumpad = (key: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    if (key === "C") { setAmount("0"); return; }
     if (key === "⌫") { setAmount(prev => prev.length > 1 ? prev.slice(0, -1) : "0"); return; }
     if (key === ".") { if (!amount.includes(".")) setAmount(prev => prev + "."); return; }
     if (amount === "0") setAmount(key);
     else setAmount(prev => {
-      if (prev.includes(".")) {
-        const decPart = prev.split(".")[1] ?? "";
-        if (decPart.length >= 8) return prev;
-      }
+      if (prev.includes(".") && (prev.split(".")[1]?.length ?? 0) >= 8) return prev;
       if (prev.length >= 16) return prev;
       return prev + key;
     });
@@ -159,36 +163,36 @@ export default function POSScreen() {
 
   const handleCopyQty = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    const qtyStr = String(qty);
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined") {
-        await navigator.clipboard.writeText(qtyStr);
+        await navigator.clipboard.writeText(String(qty));
       } else {
         const Clip = await import("expo-clipboard");
-        await Clip.setStringAsync(qtyStr);
+        await Clip.setStringAsync(String(qty));
       }
       setCopiedQty(true);
       setTimeout(() => setCopiedQty(false), 2000);
-    } catch {
-      Alert.alert("Copy QTY", `QTY: ${qtyStr}`);
-    }
+    } catch { Alert.alert("Copy QTY", `QTY: ${qty}`); }
   };
 
   const handleCompleteSale = async () => {
-    if (!selectedProduct) { Alert.alert("Select Product", "Please select a product first."); return; }
-    if (qty <= 0 || parsedAmount <= 0) { Alert.alert("Enter Amount", "Please enter a valid amount."); return; }
+    if (!cashValidations.canComplete) {
+      Alert.alert("Cannot Complete Sale", cashValidations.errors.join("\n• ").replace(/^/, "• "));
+      return;
+    }
     if (!user) return;
     try {
       await (createSaleMutation as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({
         data: {
           userId: user.id,
           customerId: selectedCustomer?.id ?? null,
-          accountId: selectedAccount?.id ?? null,
+          accountId: selectedAccount!.id,
           locationId: user.locationId ?? null,
-          items: [{ productId: selectedProduct.id, qty, unitPrice: activePrice.toFixed(8) }],
+          items: [{ productId: selectedProduct!.id, qty, unitPrice: activePrice.toFixed(8) }],
           discount: "0.00000000", tax: "0.00000000",
           amountPaid: parsedAmount.toFixed(8),
-          paymentMethod: "cash", notes: rateMode === "wholesale" ? "Wholesale rate" : null,
+          paymentMethod: "cash",
+          notes: rateMode === "wholesale" ? "Wholesale rate" : null,
         },
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -196,18 +200,23 @@ export default function POSScreen() {
       setAmount("0");
       Alert.alert(
         "✓ Sale Complete",
-        `${selectedProduct.name}\nQTY: ${qty} ${selectedProduct.unit}\nRate: ${rateMode === "wholesale" ? "Wholesale" : "Retail"} @ ${activePrice.toFixed(2)}/${selectedProduct.unit}\nAmount: ${parsedAmount.toFixed(2)}`,
+        `${selectedProduct!.name}\nQTY: ${qty} ${selectedProduct!.unit}\nRate: ${rateMode === "wholesale" ? "Wholesale" : "Retail"} @ ${activePrice.toFixed(2)}\nPaid: ${parsedAmount.toFixed(2)}\nAccount: ${selectedAccount!.name}`,
         [{ text: "New Sale", onPress: () => { setSelectedProduct(null); setSelectedCustomer(null); } }, { text: "OK" }]
       );
     } catch (e: unknown) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Sale failed");
+      Alert.alert("Sale Failed", e instanceof Error ? e.message : "Unexpected error");
     }
   };
 
   const handleCreditSale = async () => {
-    if (!selectedProduct) { Alert.alert("Select Product", "Please select a product first."); return; }
-    if (qty <= 0 || parsedAmount <= 0) { Alert.alert("Enter Amount", "Please enter a valid amount."); return; }
-    if (!selectedCustomer) { Alert.alert("Customer Required", "Please select a customer for a credit sale."); return; }
+    if (!validations.canSell) {
+      Alert.alert("Cannot Process Credit Sale", validations.errors.join("\n• ").replace(/^/, "• "));
+      return;
+    }
+    if (!selectedCustomer) {
+      Alert.alert("Customer Required", "Please select a customer to record a credit sale.");
+      return;
+    }
     if (!user) return;
     try {
       await (createSaleMutation as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({
@@ -216,10 +225,11 @@ export default function POSScreen() {
           customerId: selectedCustomer.id,
           accountId: selectedAccount?.id ?? null,
           locationId: user.locationId ?? null,
-          items: [{ productId: selectedProduct.id, qty, unitPrice: activePrice.toFixed(8) }],
+          items: [{ productId: selectedProduct!.id, qty, unitPrice: activePrice.toFixed(8) }],
           discount: "0.00000000", tax: "0.00000000",
           amountPaid: "0.00000000",
-          paymentMethod: "credit", notes: rateMode === "wholesale" ? "Wholesale rate — credit" : "Credit sale",
+          paymentMethod: "credit",
+          notes: rateMode === "wholesale" ? "Wholesale rate — credit" : "Credit sale",
         },
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
@@ -227,13 +237,19 @@ export default function POSScreen() {
       setAmount("0");
       Alert.alert(
         "Credit Entry Added",
-        `${selectedProduct.name}\nQTY: ${qty} ${selectedProduct.unit}\nAmount: ${parsedAmount.toFixed(2)}\nCustomer: ${selectedCustomer.name}\n\nEntry saved to Credits.`,
+        `${selectedProduct!.name}\nQTY: ${qty} ${selectedProduct!.unit}\nTotal: ${parsedAmount.toFixed(2)}\nCustomer: ${selectedCustomer.name}\n\nEntry saved to Credits.`,
         [{ text: "New Sale", onPress: () => { setSelectedProduct(null); setSelectedCustomer(null); } }, { text: "OK" }]
       );
     } catch (e: unknown) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Credit sale failed");
+      Alert.alert("Credit Failed", e instanceof Error ? e.message : "Unexpected error");
     }
   };
+
+  const stockWarning = selectedProduct && (selectedProduct.stock ?? 0) <= 0
+    ? "out-of-stock"
+    : selectedProduct && qty > (selectedProduct.stock ?? 0) && qty > 0
+      ? "exceeds-stock"
+      : null;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -243,7 +259,7 @@ export default function POSScreen() {
           <Text style={styles.headerSub}>Point of Sale</Text>
         </View>
         <View style={styles.headerRight}>
-          {dollarBalance !== null && (
+          {dollarBalance !== null && dollarBalance.usd !== 0 && (
             <View style={styles.dollarBadge}>
               <Feather name="dollar-sign" size={13} color="#0891B2" />
               <View>
@@ -259,9 +275,14 @@ export default function POSScreen() {
         </View>
       </LinearGradient>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
+
+        {/* Product picker */}
         <TouchableOpacity
-          style={[styles.productCard, { backgroundColor: colors.card, borderColor: selectedProduct ? colors.primary : colors.border }]}
+          style={[styles.productCard, {
+            backgroundColor: colors.card,
+            borderColor: stockWarning === "out-of-stock" ? colors.danger : stockWarning === "exceeds-stock" ? "#F59E0B" : selectedProduct ? colors.primary : colors.border,
+          }]}
           onPress={() => setShowProductModal(true)}
           activeOpacity={0.85}
         >
@@ -269,8 +290,13 @@ export default function POSScreen() {
             {selectedProduct ? (
               <>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: selectedProduct.stock > 0 ? colors.success : colors.danger }} />
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }} />
                   <Text style={[styles.productName, { color: colors.text }]}>{selectedProduct.name}</Text>
+                  <View style={[styles.stockBadge, { backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.saleBg : colors.dangerBg }]}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }}>
+                      Stock: {selectedProduct.stock ?? 0} {selectedProduct.unit}
+                    </Text>
+                  </View>
                 </View>
                 <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                   <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
@@ -279,15 +305,24 @@ export default function POSScreen() {
                   <View style={{ backgroundColor: colors.purchaseBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.purchase }}>Wholesale {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
                   </View>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: selectedProduct.stock > 0 ? colors.success : colors.danger }}>
-                    {selectedProduct.stock} {selectedProduct.unit}
-                  </Text>
                 </View>
+                {stockWarning === "out-of-stock" && (
+                  <View style={[styles.alertRow, { backgroundColor: colors.dangerBg }]}>
+                    <Feather name="alert-triangle" size={11} color={colors.danger} />
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
+                  </View>
+                )}
+                {stockWarning === "exceeds-stock" && (
+                  <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
+                    <Feather name="alert-circle" size={11} color="#D97706" />
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct.stock}</Text>
+                  </View>
+                )}
               </>
             ) : (
               <>
                 <Text style={[styles.productPlaceholder, { color: colors.mutedForeground }]}>Tap to select product</Text>
-                <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Choose a product to begin sale</Text>
+                <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Required to begin sale</Text>
               </>
             )}
           </View>
@@ -296,6 +331,7 @@ export default function POSScreen() {
           </View>
         </TouchableOpacity>
 
+        {/* Rate toggle */}
         {selectedProduct && (
           <View style={[styles.rateToggle, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <TouchableOpacity
@@ -319,6 +355,7 @@ export default function POSScreen() {
           </View>
         )}
 
+        {/* Amount display */}
         <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.amountSection}>
             <Text style={[styles.amountLabel, { color: colors.mutedForeground }]}>AMOUNT (8 DECIMALS)</Text>
@@ -333,14 +370,15 @@ export default function POSScreen() {
               <Text style={[styles.qtyLabel, { color: colors.mutedForeground }]}>
                 QTY{selectedProduct ? ` @ ${activePrice.toFixed(2)}/${selectedProduct.unit}` : ""}
               </Text>
-              <Text style={[styles.qtyValue, { color: qty > 0 ? colors.success : colors.mutedForeground }]}>
+              <Text style={[styles.qtyValue, {
+                color: stockWarning ? colors.danger : qty > 0 ? colors.success : colors.mutedForeground,
+              }]}>
                 {qty > 0 ? qty.toLocaleString() : "—"}
               </Text>
             </View>
             <TouchableOpacity
               style={[styles.copyBtn, { backgroundColor: copiedQty ? colors.saleBg : colors.secondary, borderColor: copiedQty ? colors.success : colors.border }]}
-              onPress={handleCopyQty}
-              disabled={qty <= 0}
+              onPress={handleCopyQty} disabled={qty <= 0}
             >
               <Feather name={copiedQty ? "check" : "copy"} size={15} color={copiedQty ? colors.success : colors.primary} />
               <Text style={[styles.copyText, { color: copiedQty ? colors.success : colors.primary }]}>{copiedQty ? "Copied!" : "Copy QTY"}</Text>
@@ -348,62 +386,74 @@ export default function POSScreen() {
           </View>
         </View>
 
+        {/* Customer + Account */}
         <View style={[styles.optionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TouchableOpacity style={[styles.optionRow, { borderBottomColor: colors.border }]} onPress={() => setShowCustomerModal(true)}>
-            <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}><Feather name="user" size={14} color={colors.primary} /></View>
+            <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}>
+              <Feather name="user" size={14} color={colors.primary} />
+            </View>
             <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Customer</Text>
-            <Text style={[styles.optionValue, { color: selectedCustomer ? colors.text : colors.mutedForeground }]}>{selectedCustomer?.name ?? "Walk-in"}</Text>
+            <Text style={[styles.optionValue, { color: selectedCustomer ? colors.text : colors.mutedForeground }]}>
+              {selectedCustomer?.name ?? "Walk-in"}
+            </Text>
             <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.optionRow} onPress={() => setShowAccountModal(true)}>
-            <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}><Feather name="credit-card" size={14} color={colors.primary} /></View>
+          <TouchableOpacity
+            style={[styles.optionRow, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}
+            onPress={() => setShowAccountModal(true)}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: selectedAccount ? colors.secondary : colors.dangerBg }]}>
+              <Feather name="credit-card" size={14} color={selectedAccount ? colors.primary : colors.danger} />
+            </View>
             <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Account</Text>
-            <Text style={[styles.optionValue, { color: selectedAccount ? colors.text : colors.mutedForeground }]}>{selectedAccount?.name ?? "None"}</Text>
+            {selectedAccount ? (
+              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6, marginRight: 4 }}>
+                <Text style={[styles.optionValue, { color: colors.text, flex: 0 }]}>{selectedAccount.name}</Text>
+                <View style={[styles.balBadge, { backgroundColor: colors.saleBg }]}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: colors.success }}>
+                    ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <Text style={[styles.optionValue, { color: colors.danger }]}>Required for cash sale</Text>
+            )}
             <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
           </TouchableOpacity>
         </View>
 
+        {/* Dashboard summary */}
         <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.infoCell}>
-            <Feather name="briefcase" size={11} color={colors.primary} style={{ marginBottom: 3 }} />
-            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>BANK</Text>
-            <Text style={[styles.infoValue, { color: totalBank !== null ? colors.primary : colors.mutedForeground }]} numberOfLines={1}>
-              {totalBank !== null ? formatK(totalBank) : "—"}
-            </Text>
-          </View>
-          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
-          <View style={styles.infoCell}>
-            <Feather name="package" size={11} color={colors.purchase} style={{ marginBottom: 3 }} />
-            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>STOCK</Text>
-            <Text style={[styles.infoValue, { color: totalStock !== null ? colors.purchase : colors.mutedForeground }]} numberOfLines={1}>
-              {totalStock !== null ? formatK(totalStock) : "—"}
-            </Text>
-          </View>
-          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
-          <View style={styles.infoCell}>
-            <Feather name="trending-up" size={11} color={colors.credit} style={{ marginBottom: 3 }} />
-            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>CREDIT</Text>
-            <Text style={[styles.infoValue, { color: totalCredit !== null ? colors.credit : colors.mutedForeground }]} numberOfLines={1}>
-              {totalCredit !== null ? formatK(totalCredit) : "—"}
-            </Text>
-          </View>
-          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
-          <View style={styles.infoCell}>
-            <Feather name="activity" size={11} color={leftBalance !== null && leftBalance >= 0 ? colors.success : colors.danger} style={{ marginBottom: 3 }} />
-            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>NET WORTH</Text>
-            <Text style={[styles.infoValue, { color: leftBalance === null ? colors.mutedForeground : leftBalance >= 0 ? colors.success : colors.danger }]} numberOfLines={1}>
-              {leftBalance !== null ? formatK(leftBalance) : "—"}
-            </Text>
-          </View>
+          {[
+            { label: "BANK", icon: "briefcase", value: totalBank, color: colors.primary },
+            { label: "STOCK", icon: "package", value: totalStock, color: colors.purchase },
+            { label: "CREDIT", icon: "trending-up", value: totalCredit, color: colors.credit },
+            { label: "NET", icon: "activity", value: leftBalance, color: leftBalance !== null && leftBalance >= 0 ? colors.success : colors.danger },
+          ].map((cell, i, arr) => (
+            <React.Fragment key={cell.label}>
+              <View style={styles.infoCell}>
+                <Feather name={cell.icon as "briefcase"} size={11} color={cell.color} style={{ marginBottom: 3 }} />
+                <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>{cell.label}</Text>
+                <Text style={[styles.infoValue, { color: cell.value !== null ? cell.color : colors.mutedForeground }]} numberOfLines={1}>
+                  {cell.value !== null ? formatK(cell.value) : "—"}
+                </Text>
+              </View>
+              {i < arr.length - 1 && <View style={[styles.infoSep, { backgroundColor: colors.border }]} />}
+            </React.Fragment>
+          ))}
         </View>
 
+        {/* Numpad */}
         <View style={[styles.numpadContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {NUMPAD_KEYS.map((row, ri) => (
             <View key={ri} style={styles.numpadRow}>
               {row.map(key => (
                 <TouchableOpacity
                   key={key}
-                  style={[styles.numpadKey, { backgroundColor: key === "⌫" ? colors.numpadDelete : key === "." ? colors.secondary : colors.numpadKey, borderColor: colors.border }]}
+                  style={[styles.numpadKey, {
+                    backgroundColor: key === "⌫" ? colors.numpadDelete : key === "." ? colors.secondary : colors.numpadKey,
+                    borderColor: colors.border,
+                  }]}
                   onPress={() => handleNumpad(key)}
                   activeOpacity={0.6}
                 >
@@ -416,6 +466,7 @@ export default function POSScreen() {
           ))}
         </View>
 
+        {/* Action buttons */}
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={[styles.clearBtn, { backgroundColor: colors.numpadDelete }]}
@@ -424,28 +475,66 @@ export default function POSScreen() {
             <Feather name="rotate-ccw" size={16} color={colors.danger} />
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.creditBtn, { backgroundColor: qty > 0 && selectedProduct ? colors.credit : colors.mutedForeground, opacity: createSaleMutation.isPending ? 0.7 : 1 }]}
+            style={[styles.creditBtn, {
+              backgroundColor: validations.canSell && selectedCustomer ? colors.credit : colors.mutedForeground,
+              opacity: createSaleMutation.isPending ? 0.7 : 1,
+            }]}
             onPress={handleCreditSale}
-            disabled={createSaleMutation.isPending || qty <= 0 || !selectedProduct}
+            disabled={createSaleMutation.isPending}
           >
             <Feather name="clock" size={18} color="#FFF" />
-            <Text style={styles.completeBtnText}>Credit</Text>
+            <Text style={styles.actionBtnText}>Credit</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.completeBtn, { backgroundColor: qty > 0 && selectedProduct ? colors.success : colors.mutedForeground, opacity: createSaleMutation.isPending ? 0.7 : 1 }]}
+            style={[styles.completeBtn, {
+              backgroundColor: cashValidations.canComplete ? colors.success : colors.mutedForeground,
+              opacity: createSaleMutation.isPending ? 0.7 : 1,
+            }]}
             onPress={handleCompleteSale}
-            disabled={createSaleMutation.isPending || qty <= 0 || !selectedProduct}
+            disabled={createSaleMutation.isPending}
           >
             {createSaleMutation.isPending
-              ? <Text style={styles.completeBtnText}>Processing...</Text>
-              : <><Feather name="check-circle" size={18} color="#FFF" /><Text style={styles.completeBtnText}>Complete Sale</Text></>}
+              ? <Text style={styles.actionBtnText}>Processing...</Text>
+              : <><Feather name="check-circle" size={18} color="#FFF" /><Text style={styles.actionBtnText}>Complete Sale</Text></>}
           </TouchableOpacity>
         </View>
+
+        {/* Validation hints */}
+        {(cashValidations.errors.length > 0 || validations.warnings.length > 0) && (
+          <View style={[styles.validationBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.validationTitle, { color: colors.mutedForeground }]}>CHECKLIST</Text>
+            {cashValidations.errors.map((e, i) => (
+              <View key={i} style={styles.validationRow}>
+                <Feather name="x-circle" size={13} color={colors.danger} />
+                <Text style={[styles.validationText, { color: colors.danger }]}>{e}</Text>
+              </View>
+            ))}
+            {validations.warnings.map((w, i) => (
+              <View key={i} style={styles.validationRow}>
+                <Feather name="alert-triangle" size={13} color="#D97706" />
+                <Text style={[styles.validationText, { color: "#D97706" }]}>{w}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
       </ScrollView>
 
-      <PickerModal<Product> visible={showProductModal} title="Select Product" items={activeProducts} onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }} onClose={() => setShowProductModal(false)} renderSub={p => `Retail ${parseFloat(p.unitPrice).toFixed(2)}  ·  Wholesale ${parseFloat(p.wholesalePrice || p.unitPrice).toFixed(2)}  ·  Stock: ${p.stock}`} />
-      <PickerModal<Customer> visible={showCustomerModal} title="Select Customer" items={customers} onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)} renderSub={c => c.phone ?? ""} />
-      <PickerModal<Account> visible={showAccountModal} title="Select Account" items={accounts} onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)} renderSub={a => `${a.type}  ·  Balance: ${parseFloat(a.balance).toFixed(2)}`} />
+      <PickerModal<Product>
+        visible={showProductModal} title="Select Product" items={activeProducts}
+        onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }} onClose={() => setShowProductModal(false)}
+        renderSub={p => `Stock: ${p.stock} ${p.unit}  ·  Retail ${parseFloat(p.unitPrice).toFixed(2)}  ·  WS ${parseFloat(p.wholesalePrice || p.unitPrice).toFixed(2)}`}
+      />
+      <PickerModal<Customer>
+        visible={showCustomerModal} title="Select Customer" items={customers}
+        onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)}
+        renderSub={c => c.phone ?? ""}
+      />
+      <PickerModal<Account>
+        visible={showAccountModal} title="Select Payment Account" items={accounts}
+        onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)}
+        renderSub={a => `${a.type}  ·  Balance: ${parseFloat(a.balance).toFixed(2)}`}
+      />
     </View>
   );
 }
@@ -461,10 +550,12 @@ const styles = StyleSheet.create({
   dollarPkr: { fontFamily: "Inter_400Regular", fontSize: 10, color: "#475569", lineHeight: 13 },
   userBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   productCard: { marginHorizontal: 14, marginTop: 12, borderRadius: 16, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
-  productName: { fontFamily: "Inter_700Bold", fontSize: 16 },
+  productName: { fontFamily: "Inter_700Bold", fontSize: 15 },
   productPlaceholder: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
   productSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 3 },
   productChevron: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  stockBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  alertRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, padding: 7, borderRadius: 8 },
   rateToggle: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, flexDirection: "row", padding: 4, gap: 4 },
   rateBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 11 },
   rateBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
@@ -481,8 +572,9 @@ const styles = StyleSheet.create({
   optionsCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   optionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, gap: 10, borderBottomWidth: 1 },
   optionIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  optionLabel: { fontFamily: "Inter_500Medium", fontSize: 13, width: 70 },
+  optionLabel: { fontFamily: "Inter_500Medium", fontSize: 13, width: 72 },
   optionValue: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13, textAlign: "right", marginRight: 4 },
+  balBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   infoCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, flexDirection: "row", alignItems: "center" },
   infoCell: { flex: 1, alignItems: "center", paddingVertical: 14 },
   infoSep: { width: 1, height: 40 },
@@ -496,5 +588,9 @@ const styles = StyleSheet.create({
   clearBtn: { width: 52, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   creditBtn: { flex: 1, height: 56, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   completeBtn: { flex: 2, height: 56, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
-  completeBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFFFFF" },
+  actionBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFFFFF" },
+  validationBox: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, padding: 14, gap: 8 },
+  validationTitle: { fontFamily: "Inter_600SemiBold", fontSize: 10, letterSpacing: 1, marginBottom: 2 },
+  validationRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  validationText: { fontFamily: "Inter_500Medium", fontSize: 13, flex: 1 },
 });
