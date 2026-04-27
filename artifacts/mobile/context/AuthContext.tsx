@@ -14,10 +14,14 @@ export interface AuthUser {
 }
 
 export const ALL_MODULES = [
+  // Main screens
   "dashboard", "pos", "sales", "purchases", "expenses", "credits",
   "inventory", "customers", "suppliers", "accounts", "locations",
   "categories", "users", "audit", "currency", "cash_count",
+  // POS granular controls
+  "pos_product", "pos_location", "pos_account", "pos_credit_customer",
 ] as const;
+
 export type AppModule = typeof ALL_MODULES[number];
 
 export function hasPrivilege(user: AuthUser | null, module: AppModule): boolean {
@@ -48,9 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadStoredAuth();
-  }, []);
+  useEffect(() => { loadStoredAuth(); }, []);
 
   useEffect(() => {
     const currentToken = token;
