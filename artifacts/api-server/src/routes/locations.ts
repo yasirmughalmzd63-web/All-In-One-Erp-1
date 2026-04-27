@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
-import { db, locationsTable } from "@workspace/db";
+import { desc, eq, sql } from "drizzle-orm";
+import { db, locationsTable, productsTable, stockTransfersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 
@@ -39,6 +39,73 @@ router.delete("/locations/:id", requireAuth, async (req, res): Promise<void> => 
   if (!row) { res.status(404).json({ error: "Location not found" }); return; }
   await logAudit(req.userId, "delete", "location", id);
   res.sendStatus(204);
+});
+
+// ── Stock Transfers ─────────────────────────────────────────────────────────
+
+router.get("/locations/stock-transfers", requireAuth, async (_req, res): Promise<void> => {
+  const rows = await db
+    .select({
+      id: stockTransfersTable.id,
+      qty: stockTransfersTable.qty,
+      notes: stockTransfersTable.notes,
+      userId: stockTransfersTable.userId,
+      createdAt: stockTransfersTable.createdAt,
+      fromLocationId: stockTransfersTable.fromLocationId,
+      toLocationId: stockTransfersTable.toLocationId,
+      fromProductId: stockTransfersTable.fromProductId,
+      toProductId: stockTransfersTable.toProductId,
+      fromLocationName: sql<string>`fl.name`,
+      toLocationName: sql<string>`tl.name`,
+      fromProductName: sql<string>`fp.name`,
+      toProductName: sql<string>`tp.name`,
+    })
+    .from(stockTransfersTable)
+    .leftJoin(sql`locations fl`, sql`fl.id = ${stockTransfersTable.fromLocationId}`)
+    .leftJoin(sql`locations tl`, sql`tl.id = ${stockTransfersTable.toLocationId}`)
+    .leftJoin(sql`products fp`, sql`fp.id = ${stockTransfersTable.fromProductId}`)
+    .leftJoin(sql`products tp`, sql`tp.id = ${stockTransfersTable.toProductId}`)
+    .orderBy(desc(stockTransfersTable.createdAt))
+    .limit(100);
+  res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
+});
+
+router.post("/locations/stock-transfer", requireAuth, async (req, res): Promise<void> => {
+  const { fromLocationId, toLocationId, fromProductId, toProductId, qty, notes } =
+    req.body as { fromLocationId?: number; toLocationId?: number; fromProductId?: number; toProductId?: number; qty?: number; notes?: string };
+
+  if (!fromLocationId || !toLocationId || !fromProductId || !toProductId || !qty) {
+    res.status(400).json({ error: "fromLocationId, toLocationId, fromProductId, toProductId, qty required" });
+    return;
+  }
+  if (qty <= 0) { res.status(400).json({ error: "qty must be positive" }); return; }
+  if (fromProductId === toProductId) { res.status(400).json({ error: "Source and destination product must be different" }); return; }
+
+  // Check source product has enough stock
+  const [fromProduct] = await db.select().from(productsTable).where(eq(productsTable.id, fromProductId));
+  if (!fromProduct) { res.status(404).json({ error: "Source product not found" }); return; }
+  if ((fromProduct.stock ?? 0) < qty) {
+    res.status(422).json({ error: `Insufficient stock. Available: ${fromProduct.stock ?? 0}` });
+    return;
+  }
+
+  // Deduct from source product, add to destination product
+  await db.update(productsTable).set({ stock: (fromProduct.stock ?? 0) - qty }).where(eq(productsTable.id, fromProductId));
+  const [toProduct] = await db.select().from(productsTable).where(eq(productsTable.id, toProductId));
+  if (toProduct) {
+    await db.update(productsTable).set({ stock: (toProduct.stock ?? 0) + qty }).where(eq(productsTable.id, toProductId));
+  }
+
+  // Record the transfer
+  const [row] = await db.insert(stockTransfersTable).values({
+    fromLocationId, toLocationId, fromProductId, toProductId, qty,
+    notes: notes ?? null, userId: req.userId,
+  }).returning();
+
+  await logAudit(req.userId, "create", "stock_transfer", row!.id,
+    `Transferred ${qty} units from product #${fromProductId} (loc #${fromLocationId}) to product #${toProductId} (loc #${toLocationId})`);
+
+  res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
 
 export default router;

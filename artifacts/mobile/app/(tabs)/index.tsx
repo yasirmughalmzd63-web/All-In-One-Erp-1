@@ -71,6 +71,7 @@ export default function POSScreen() {
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
   // ── Privileges ─────────────────────────────────────────────────────────
+  const isAdmin           = user?.role === "admin";
   const canSelectProduct  = hasPrivilege(user, "pos_product");
   const canSelectAccount  = hasPrivilege(user, "pos_account");
   const canCreditSale     = hasPrivilege(user, "pos_credit_customer");
@@ -323,6 +324,34 @@ export default function POSScreen() {
         </View>
       </LinearGradient>
 
+      {/* ── Location banner ─────────────────────────────────────────────── */}
+      <TouchableOpacity
+        style={[styles.locationBanner, {
+          backgroundColor: selectedLocation ? "#ECFDF5" : colors.card,
+          borderBottomColor: selectedLocation ? "#A7F3D0" : colors.border,
+        }]}
+        onPress={isAdmin ? () => setShowLocationModal(true) : undefined}
+        activeOpacity={isAdmin ? 0.7 : 1}
+      >
+        <View style={[styles.locationIconWrap, { backgroundColor: selectedLocation ? "#D1FAE5" : colors.secondary }]}>
+          <Feather name="map-pin" size={14} color={selectedLocation ? "#059669" : colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.locationBannerLabel, { color: colors.mutedForeground }]}>
+            {isAdmin ? "ACTIVE LOCATION" : "YOUR LOCATION"}
+          </Text>
+          <Text style={[styles.locationBannerName, { color: selectedLocation ? "#065F46" : colors.mutedForeground }]}>
+            {selectedLocation?.name ?? (isAdmin ? "Tap to select location" : "No location assigned")}
+          </Text>
+        </View>
+        {isAdmin && <Feather name="chevron-down" size={16} color={selectedLocation ? "#059669" : colors.mutedForeground} />}
+        {!isAdmin && selectedLocation && (
+          <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#065F46" }}>ASSIGNED</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
         {/* ── Balance tiles ──────────────────────────────────────────── */}
@@ -483,31 +512,6 @@ export default function POSScreen() {
               <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
             </TouchableOpacity>
           )}
-
-          {/* Location */}
-          <TouchableOpacity
-            style={[styles.optionRow, { borderBottomColor: colors.border }]}
-            onPress={() => {
-              if (!canSelectLocation) {
-                Alert.alert("Access Denied", "You don't have permission to change the location.");
-                return;
-              }
-              setShowLocationModal(true);
-            }}
-          >
-            <View style={[styles.optionIcon, { backgroundColor: selectedLocation ? colors.secondary : (canSelectLocation ? colors.secondary : colors.input) }]}>
-              <Feather
-                name={canSelectLocation ? "map-pin" : "lock"}
-                size={14}
-                color={selectedLocation ? colors.primary : (canSelectLocation ? colors.primary : colors.mutedForeground)}
-              />
-            </View>
-            <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Location</Text>
-            <Text style={[styles.optionValue, { color: selectedLocation ? colors.text : colors.mutedForeground }]}>
-              {selectedLocation?.name ?? (canSelectLocation ? "Select location" : "Locked by admin")}
-            </Text>
-            <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
-          </TouchableOpacity>
 
           {/* Account */}
           <TouchableOpacity
@@ -701,6 +705,11 @@ const styles = StyleSheet.create({
   dollarUsd: { fontFamily: "Inter_700Bold", fontSize: 11, color: "#0891B2", lineHeight: 14 },
   dollarPkr: { fontFamily: "Inter_400Regular", fontSize: 10, color: "#475569", lineHeight: 13 },
   userBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  // Location banner
+  locationBanner: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
+  locationIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  locationBannerLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8 },
+  locationBannerName: { fontFamily: "Inter_700Bold", fontSize: 14, marginTop: 1 },
   // Balance tiles
   balanceGrid: { marginHorizontal: 14, marginTop: 12, borderRadius: 16, borderWidth: 1, flexDirection: "row", alignItems: "stretch" },
   balanceTile: { flex: 1, alignItems: "center", paddingVertical: 12, paddingHorizontal: 4 },
