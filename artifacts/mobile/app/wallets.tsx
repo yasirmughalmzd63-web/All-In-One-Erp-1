@@ -1,158 +1,301 @@
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
-  ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
-  StyleSheet, Text, TextInput, TouchableOpacity, View,
+  ActivityIndicator, Alert, FlatList, Modal, Platform,
+  RefreshControl, ScrollView, StyleSheet, Text, TextInput,
+  TouchableOpacity, View,
 } from "react-native";
-import { useQueryClient } from "@tanstack/react-query";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { useListWallets, useCreateWallet, useWalletTransfer } from "@workspace/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 
-type Wallet = { id: number; name: string; type: string; balance: string; currency: string; isActive: boolean };
-const TYPES = ["cash", "bank", "mobile", "crypto", "other"];
-const emptyForm = { name: "", type: "cash", currency: "USD", balance: "0" };
+type DollarEntry = {
+  id: number;
+  entryType: string;
+  amountUsd: string;
+  rate: string;
+  totalPkr: string;
+  partyName: string | null;
+  notes: string | null;
+  date: string;
+  createdAt: string;
+};
+
+const ENTRY_TYPES: { key: string; label: string; desc: string; sign: 1 | -1; color: string; bg: string; icon: string }[] = [
+  { key: "received",  label: "Received USD",      desc: "Customer paid in dollars",    sign:  1, color: "#16A34A", bg: "#DCFCE7", icon: "arrow-down-circle" },
+  { key: "product",   label: "Sent Product",       desc: "Goods given — deduct USD",    sign: -1, color: "#DC2626", bg: "#FEE2E2", icon: "package" },
+  { key: "partial",   label: "Partial Payment",    desc: "Part cash, part credit",      sign:  1, color: "#0891B2", bg: "#ECFEFF", icon: "divide-circle" },
+  { key: "recovery",  label: "Credit Recovery",    desc: "Old credit recovered as USD", sign:  1, color: "#7C3AED", bg: "#F3E8FF", icon: "refresh-cw" },
+];
+
+const emptyForm = {
+  entryType: "received",
+  amountUsd: "",
+  rate: "",
+  partyName: "",
+  notes: "",
+  date: new Date().toISOString().split("T")[0]!,
+};
+
+const WALLET_KEY = "/api/dollar-wallet";
+
+async function loadEntries(): Promise<DollarEntry[]> {
+  try { return await customFetch<DollarEntry[]>(WALLET_KEY); } catch { return []; }
+}
+
+async function saveEntry(body: object): Promise<void> {
+  await customFetch<DollarEntry>(WALLET_KEY, { method: "POST", body: JSON.stringify(body) });
+}
+
+async function deleteEntry(id: number): Promise<void> {
+  await customFetch<void>(`${WALLET_KEY}/${id}`, { method: "DELETE" });
+}
 
 export default function WalletsScreen() {
+  const insets = useSafeAreaInsets();
   const colors = useColors();
-  const queryClient = useQueryClient();
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const topPad = Platform.OS === "web" ? 20 : insets.top;
+
+  const [entries, setEntries] = useState<DollarEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [transfer, setTransfer] = useState({ fromId: "", toId: "", amount: "", notes: "" });
+  const [saving, setSaving] = useState(false);
 
-  const { data: raw, isLoading, refetch } = useListWallets();
-  const createMut = useCreateWallet();
-  const transferMut = useWalletTransfer();
-  const items = (raw ?? []) as unknown as Wallet[];
-  const total = items.reduce((sum, w) => sum + parseFloat(w.balance), 0);
-
-  const handleCreate = async () => {
-    if (!form.name.trim()) { Alert.alert("Error", "Name required"); return; }
-    try {
-      await (createMut as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({ data: { name: form.name, type: form.type, currency: form.currency, balance: parseFloat(form.balance || "0").toFixed(8) } });
-      queryClient.invalidateQueries();
-      setShowAddModal(false);
-      setForm(emptyForm);
-    } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
+  const load = async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    const data = await loadEntries();
+    setEntries(data);
+    setLoading(false);
+    setRefreshing(false);
   };
 
-  const handleTransfer = async () => {
-    if (!transfer.amount || parseFloat(transfer.amount) <= 0) { Alert.alert("Error", "Valid amount required"); return; }
+  React.useEffect(() => { load(); }, []);
+
+  const totalUsd = entries.reduce((sum, e) => {
+    const et = ENTRY_TYPES.find(t => t.key === e.entryType);
+    return sum + (et?.sign ?? 1) * parseFloat(e.amountUsd);
+  }, 0);
+
+  const lastRate = entries.length > 0 ? parseFloat(entries[0]!.rate) : 0;
+  const totalPkr = totalUsd * lastRate;
+
+  const totalInBase = form.amountUsd && form.rate
+    ? (parseFloat(form.amountUsd || "0") * parseFloat(form.rate || "0")).toFixed(2)
+    : "0.00";
+
+  const handleSave = async () => {
+    if (!form.amountUsd || !form.rate || !form.date) {
+      Alert.alert("Error", "Amount, rate and date are required");
+      return;
+    }
+    setSaving(true);
     try {
-      await (transferMut as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({
-        data: {
-          fromWalletId: transfer.fromId ? parseInt(transfer.fromId) : null,
-          toWalletId: transfer.toId ? parseInt(transfer.toId) : null,
-          amount: parseFloat(transfer.amount).toFixed(8),
-          notes: transfer.notes || null,
-        },
+      await saveEntry({
+        entryType: form.entryType,
+        amountUsd: parseFloat(form.amountUsd).toFixed(8),
+        rate: parseFloat(form.rate).toFixed(8),
+        totalPkr: (parseFloat(form.amountUsd) * parseFloat(form.rate)).toFixed(8),
+        partyName: form.partyName || null,
+        notes: form.notes || null,
+        date: form.date,
       });
-      queryClient.invalidateQueries();
-      setShowTransferModal(false);
-      setTransfer({ fromId: "", toId: "", amount: "", notes: "" });
-      Alert.alert("Success", "Transfer completed");
-    } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
+      setShowModal(false);
+      setForm(emptyForm);
+      load();
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save");
+    }
+    setSaving(false);
   };
 
-  return (
-    <View style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={[styles.totalCard, { backgroundColor: "#0891B2" }]}>
-        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>TOTAL WALLET BALANCE</Text>
-        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 28, color: "#FFFFFF", marginTop: 4 }}>${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-        <TouchableOpacity style={[styles.transferBtn, { backgroundColor: "rgba(255,255,255,0.25)" }]} onPress={() => setShowTransferModal(true)}>
-          <Feather name="arrow-right-circle" size={16} color="#FFF" />
-          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" }}>Transfer</Text>
-        </TouchableOpacity>
-      </View>
-      {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={colors.primary} /> : (
-        <FlatList
-          data={items}
-          keyExtractor={i => String(i.id)}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}
-          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="pocket" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No wallets</Text></View>}
-          renderItem={({ item: w }) => (
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                <View style={[styles.iconBox, { backgroundColor: "#ECFEFF" }]}><Feather name="pocket" size={20} color="#0891B2" /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>{w.name}</Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>{w.type} • {w.currency}</Text>
-                </View>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 17, color: parseFloat(w.balance) >= 0 ? colors.success : colors.danger }}>
-                  {parseFloat(w.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </Text>
-              </View>
-            </View>
-          )}
-        />
-      )}
-      <TouchableOpacity style={[styles.fab, { backgroundColor: "#0891B2" }]} onPress={() => setShowAddModal(true)}><Feather name="plus" size={24} color="#FFFFFF" /></TouchableOpacity>
+  const handleDelete = (item: DollarEntry) => {
+    Alert.alert("Delete Entry", "Remove this dollar wallet entry?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete", style: "destructive", onPress: async () => {
+          try { await deleteEntry(item.id); load(); }
+          catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
+        },
+      },
+    ]);
+  };
 
-      <Modal visible={showAddModal} animationType="slide" transparent onRequestClose={() => setShowAddModal(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
-          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>New Wallet</Text>
-              <TouchableOpacity onPress={() => setShowAddModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
-            </View>
-            <View style={{ padding: 20 }}>
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Name *</Text>
-              <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, backgroundColor: colors.input, marginBottom: 12 }} value={form.name} onChangeText={v => setForm(f => ({ ...f, name: v }))} />
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>Type</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                {TYPES.map(t => (
-                  <TouchableOpacity key={t} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, backgroundColor: form.type === t ? "#0891B2" : colors.input, borderColor: form.type === t ? "#0891B2" : colors.border }} onPress={() => setForm(f => ({ ...f, type: t }))}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: form.type === t ? "#FFF" : colors.text }}>{t}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Currency</Text>
-              <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, backgroundColor: colors.input, marginBottom: 12 }} value={form.currency} onChangeText={v => setForm(f => ({ ...f, currency: v }))} autoCapitalize="characters" />
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Initial Balance</Text>
-              <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, backgroundColor: colors.input, marginBottom: 20 }} value={form.balance} onChangeText={v => setForm(f => ({ ...f, balance: v }))} keyboardType="decimal-pad" />
-              <TouchableOpacity style={{ backgroundColor: "#0891B2", paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 40 }} onPress={handleCreate}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>Create Wallet</Text>
+  const renderItem = ({ item }: { item: DollarEntry }) => {
+    const et = ENTRY_TYPES.find(t => t.key === item.entryType);
+    const sign = et?.sign ?? 1;
+    return (
+      <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.cardRow}>
+          <View style={[styles.iconBox, { backgroundColor: et?.bg ?? colors.secondary }]}>
+            <Feather name={(et?.icon ?? "circle") as "circle"} size={17} color={et?.color ?? colors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>
+              {et?.label ?? item.entryType}
+              {item.partyName ? <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground }}> — {item.partyName}</Text> : null}
+            </Text>
+            <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>
+              Rate: {parseFloat(item.rate).toFixed(2)} • {item.date}
+            </Text>
+            {item.notes ? <Text style={[styles.noteText, { color: colors.mutedForeground }]}>{item.notes}</Text> : null}
+          </View>
+          <View style={{ alignItems: "flex-end", gap: 6 }}>
+            <Text style={[styles.usdAmt, { color: sign > 0 ? colors.success : colors.danger }]}>
+              {sign > 0 ? "+" : "-"}{parseFloat(item.amountUsd).toFixed(2)} USD
+            </Text>
+            <Text style={[styles.pkrAmt, { color: colors.mutedForeground }]}>
+              ₨{parseFloat(item.totalPkr).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </Text>
+            {isAdmin && (
+              <TouchableOpacity style={[styles.delBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(item)}>
+                <Feather name="trash-2" size={13} color={colors.danger} />
               </TouchableOpacity>
-            </View>
+            )}
           </View>
         </View>
-      </Modal>
+      </View>
+    );
+  };
 
-      <Modal visible={showTransferModal} animationType="slide" transparent onRequestClose={() => setShowTransferModal(false)}>
-        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
-          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Transfer Funds</Text>
-              <TouchableOpacity onPress={() => setShowTransferModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+  const selectedType = ENTRY_TYPES.find(t => t.key === form.entryType);
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <LinearGradient colors={["#0369A1", "#0891B2"]} style={[styles.header, { paddingTop: topPad + 8 }]}>
+        <Text style={styles.headerTitle}>Dollar Wallet</Text>
+        <Text style={styles.headerSub}>USD ledger with PKR exchange</Text>
+        <View style={styles.balanceRow}>
+          <View style={styles.balCard}>
+            <Text style={styles.balLabel}>DOLLAR BALANCE</Text>
+            <Text style={[styles.balValue, { color: totalUsd >= 0 ? "#4ADE80" : "#F87171" }]}>
+              {totalUsd >= 0 ? "+" : ""}{totalUsd.toFixed(2)} USD
+            </Text>
+          </View>
+          <View style={[styles.balCard, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
+            <Text style={styles.balLabel}>IN PKR ({lastRate > 0 ? `@${lastRate.toFixed(0)}` : "set rate"})</Text>
+            <Text style={styles.balValue}>
+              ₨{totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      {loading ? (
+        <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
+      ) : (
+        <FlatList
+          data={entries}
+          keyExtractor={i => String(i.id)}
+          renderItem={renderItem}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
+          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Feather name="dollar-sign" size={40} color={colors.mutedForeground} />
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No dollar wallet entries yet</Text>
+              <Text style={[styles.emptyHint, { color: colors.mutedForeground }]}>Tap + to record received dollars, products, payments or credit recoveries</Text>
             </View>
-            <View style={{ padding: 20 }}>
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>From Wallet</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                <TouchableOpacity style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, backgroundColor: !transfer.fromId ? "#0891B2" : colors.input, borderColor: "#0891B2" }} onPress={() => setTransfer(t => ({ ...t, fromId: "" }))}>
-                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: !transfer.fromId ? "#FFF" : colors.text }}>External</Text>
-                </TouchableOpacity>
-                {items.map(w => (
-                  <TouchableOpacity key={w.id} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, backgroundColor: transfer.fromId === String(w.id) ? "#0891B2" : colors.input, borderColor: colors.border }} onPress={() => setTransfer(t => ({ ...t, fromId: String(w.id) }))}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: transfer.fromId === String(w.id) ? "#FFF" : colors.text }}>{w.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>To Wallet</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                {items.map(w => (
-                  <TouchableOpacity key={w.id} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5, backgroundColor: transfer.toId === String(w.id) ? "#0891B2" : colors.input, borderColor: colors.border }} onPress={() => setTransfer(t => ({ ...t, toId: String(w.id) }))}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: transfer.toId === String(w.id) ? "#FFF" : colors.text }}>{w.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Amount</Text>
-              <TextInput style={{ borderWidth: 1.5, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, backgroundColor: colors.input, marginBottom: 20 }} value={transfer.amount} onChangeText={v => setTransfer(t => ({ ...t, amount: v }))} keyboardType="decimal-pad" />
-              <TouchableOpacity style={{ backgroundColor: "#0891B2", paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 40 }} onPress={handleTransfer}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>Confirm Transfer</Text>
+          }
+        />
+      )}
+
+      <TouchableOpacity style={[styles.fab, { backgroundColor: "#0891B2" }]} onPress={() => setShowModal(true)}>
+        <Feather name="plus" size={24} color="#FFF" />
+      </TouchableOpacity>
+
+      <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "92%" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>New Dollar Entry</Text>
+              <TouchableOpacity onPress={() => setShowModal(false)}>
+                <Feather name="x" size={22} color={colors.mutedForeground} />
               </TouchableOpacity>
             </View>
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>ENTRY TYPE</Text>
+              <View style={styles.typeGrid}>
+                {ENTRY_TYPES.map(t => (
+                  <TouchableOpacity
+                    key={t.key}
+                    style={[styles.typeBtn, {
+                      backgroundColor: form.entryType === t.key ? t.color : colors.card,
+                      borderColor: form.entryType === t.key ? t.color : colors.border,
+                    }]}
+                    onPress={() => setForm(f => ({ ...f, entryType: t.key }))}
+                  >
+                    <Feather name={t.icon as "circle"} size={14} color={form.entryType === t.key ? "#FFF" : t.color} />
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: form.entryType === t.key ? "#FFF" : colors.text, marginTop: 4 }}>{t.label}</Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: form.entryType === t.key ? "rgba(255,255,255,0.8)" : colors.mutedForeground }}>{t.desc}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>AMOUNT (USD)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={form.amountUsd} onChangeText={v => setForm(f => ({ ...f, amountUsd: v }))}
+                    placeholder="100" keyboardType="numeric" placeholderTextColor={colors.mutedForeground}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>EXCHANGE RATE (PKR)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={form.rate} onChangeText={v => setForm(f => ({ ...f, rate: v }))}
+                    placeholder="280" keyboardType="numeric" placeholderTextColor={colors.mutedForeground}
+                  />
+                </View>
+              </View>
+
+              <View style={[styles.totalBox, { backgroundColor: selectedType ? selectedType.bg : colors.secondary, borderColor: selectedType?.color ?? colors.primary }]}>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground }}>
+                  {selectedType?.sign === -1 ? "Deduction" : "Receipt"} in PKR
+                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: selectedType?.color ?? colors.primary }}>
+                  ₨{parseFloat(totalInBase).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </Text>
+              </View>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PARTY NAME (CUSTOMER / SUPPLIER)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
+                value={form.partyName} onChangeText={v => setForm(f => ({ ...f, partyName: v }))}
+                placeholder="e.g. Ahmed Khan" placeholderTextColor={colors.mutedForeground}
+              />
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DATE</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
+                value={form.date} onChangeText={v => setForm(f => ({ ...f, date: v }))}
+                placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground}
+              />
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>NOTES (OPTIONAL)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 20 }]}
+                value={form.notes} onChangeText={v => setForm(f => ({ ...f, notes: v }))}
+                placeholder="Any notes..." placeholderTextColor={colors.mutedForeground}
+                multiline numberOfLines={2}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: selectedType?.color ?? "#0891B2", opacity: saving ? 0.6 : 1 }]}
+                onPress={handleSave} disabled={saving}
+              >
+                <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save Entry"}</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -161,9 +304,32 @@ export default function WalletsScreen() {
 }
 
 const styles = StyleSheet.create({
-  totalCard: { margin: 16, borderRadius: 16, padding: 20 },
-  transferBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginTop: 12, alignSelf: "flex-start" },
-  card: { borderRadius: 12, borderWidth: 1, padding: 14 },
-  iconBox: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
-  fab: { position: "absolute", bottom: 24, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
+  container: { flex: 1 },
+  header: { paddingHorizontal: 20, paddingBottom: 20 },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 22, color: "#FFF", marginBottom: 2 },
+  headerSub: { fontFamily: "Inter_400Regular", fontSize: 13, color: "rgba(255,255,255,0.8)", marginBottom: 16 },
+  balanceRow: { flexDirection: "row", gap: 10 },
+  balCard: { flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 14, padding: 14 },
+  balLabel: { fontFamily: "Inter_500Medium", fontSize: 10, color: "rgba(255,255,255,0.75)", letterSpacing: 0.5, marginBottom: 4 },
+  balValue: { fontFamily: "Inter_700Bold", fontSize: 18, color: "#FFF" },
+  card: { borderRadius: 14, borderWidth: 1, padding: 14, marginBottom: 10 },
+  cardRow: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", marginTop: 2 },
+  cardTitle: { fontFamily: "Inter_600SemiBold", fontSize: 14, marginBottom: 2 },
+  cardSub: { fontFamily: "Inter_400Regular", fontSize: 11 },
+  usdAmt: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  pkrAmt: { fontFamily: "Inter_400Regular", fontSize: 12 },
+  delBtn: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  noteText: { fontFamily: "Inter_400Regular", fontSize: 11, fontStyle: "italic", marginTop: 3 },
+  empty: { alignItems: "center", paddingVertical: 60, gap: 10, paddingHorizontal: 40 },
+  emptyText: { fontFamily: "Inter_600SemiBold", fontSize: 15, textAlign: "center" },
+  emptyHint: { fontFamily: "Inter_400Regular", fontSize: 13, textAlign: "center" },
+  fab: { position: "absolute", bottom: 24, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8 },
+  formLabel: { fontFamily: "Inter_600SemiBold", fontSize: 11, letterSpacing: 0.5, marginBottom: 8 },
+  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontFamily: "Inter_400Regular", fontSize: 14, marginBottom: 0 },
+  typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
+  typeBtn: { width: "47.5%", borderWidth: 1.5, borderRadius: 12, padding: 12, gap: 2 },
+  totalBox: { borderWidth: 1.5, borderRadius: 12, padding: 16, marginBottom: 16, alignItems: "center", gap: 4 },
+  saveBtn: { borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 8 },
+  saveBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" },
 });

@@ -22,6 +22,7 @@ import {
   useListAccounts,
   useCreateSale,
   useGetDashboard,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
@@ -88,12 +89,28 @@ export default function POSScreen() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [dollarBalance, setDollarBalance] = useState<{ usd: number; pkr: number; rate: number } | null>(null);
 
   const { data: productsRaw } = useListProducts();
   const { data: customersRaw } = useListCustomers();
   const { data: accountsRaw } = useListAccounts();
   const { data: dashboardRaw } = useGetDashboard();
   const createSaleMutation = useCreateSale();
+
+  React.useEffect(() => {
+    customFetch<{ entryType: string; amountUsd: string; rate: string }[]>("/api/dollar-wallet")
+      .then(rows => {
+        const SIGNS: Record<string, number> = { received: 1, partial: 1, recovery: 1, product: -1 };
+        let usd = 0;
+        let lastRate = 0;
+        rows.forEach(r => {
+          usd += (SIGNS[r.entryType] ?? 1) * parseFloat(r.amountUsd);
+          if (!lastRate) lastRate = parseFloat(r.rate);
+        });
+        setDollarBalance({ usd, pkr: usd * lastRate, rate: lastRate });
+      })
+      .catch(() => {});
+  }, []);
 
   const products = (productsRaw ?? []) as unknown as Product[];
   const customers = (customersRaw ?? []) as unknown as Customer[];
@@ -221,11 +238,20 @@ export default function POSScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>COINS SALE</Text>
           <Text style={styles.headerSub}>Point of Sale</Text>
         </View>
         <View style={styles.headerRight}>
+          {dollarBalance !== null && (
+            <View style={styles.dollarBadge}>
+              <Feather name="dollar-sign" size={13} color="#0891B2" />
+              <View>
+                <Text style={styles.dollarUsd}>{dollarBalance.usd.toFixed(2)} USD</Text>
+                <Text style={styles.dollarPkr}>₨{dollarBalance.pkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+              </View>
+            </View>
+          )}
           <View style={styles.userBadge}>
             <Feather name="user" size={12} color={colors.primary} />
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.primary }}>{user?.name?.split(" ")[0] ?? "—"}</Text>
@@ -429,7 +455,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14 },
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFFFFF", letterSpacing: 1 },
   headerSub: { fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.7)" },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 6 },
+  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dollarBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
+  dollarUsd: { fontFamily: "Inter_700Bold", fontSize: 11, color: "#0891B2", lineHeight: 14 },
+  dollarPkr: { fontFamily: "Inter_400Regular", fontSize: 10, color: "#475569", lineHeight: 13 },
   userBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   productCard: { marginHorizontal: 14, marginTop: 12, borderRadius: 16, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
   productName: { fontFamily: "Inter_700Bold", fontSize: 16 },

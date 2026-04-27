@@ -14,3 +14,4 @@ export * from "./wallets";
 export * from "./audit";
 export * from "./currencies";
 export * from "./cash-counts";
+export * from "./dollar-wallet";
