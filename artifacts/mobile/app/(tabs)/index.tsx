@@ -13,7 +13,7 @@ import {
   useListProducts, useListCustomers, useListAccounts,
   useCreateSale, useGetDashboard, customFetch,
 } from "@workspace/api-client-react";
-import { useAuth, hasPrivilege } from "@/context/AuthContext";
+import { useAuth, hasPrivilege, getAllowedProductIds, getAllowedAccountIds } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 const NUMPAD_KEYS = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], [".", "0", "⌫"]];
@@ -108,7 +108,30 @@ export default function POSScreen() {
   const products = (productsRaw ?? []) as unknown as Product[];
   const customers = (customersRaw ?? []) as unknown as Customer[];
   const accounts = (accountsRaw ?? []) as unknown as Account[];
-  const activeProducts = products.filter(p => p.isActive !== false);
+
+  // ── Entity-level filtering ─────────────────────────────────────────────
+  const allowedProductIds = getAllowedProductIds(user);
+  const allowedAccountIds = getAllowedAccountIds(user);
+
+  const activeProducts = products
+    .filter(p => p.isActive !== false)
+    .filter(p => allowedProductIds === null || allowedProductIds.has(p.id));
+
+  const allowedAccounts = accounts
+    .filter(a => allowedAccountIds === null || allowedAccountIds.has(a.id));
+
+  // Auto-select if only one option allowed
+  React.useEffect(() => {
+    if (allowedAccounts.length === 1 && !selectedAccount) {
+      setSelectedAccount(allowedAccounts[0]!);
+    }
+  }, [allowedAccounts.length]);
+
+  React.useEffect(() => {
+    if (activeProducts.length === 1 && !selectedProduct) {
+      setSelectedProduct(activeProducts[0]!);
+    }
+  }, [activeProducts.length]);
 
   const parsedAmount = parseFloat(amount) || 0;
   const activePrice = selectedProduct
@@ -564,14 +587,17 @@ export default function POSScreen() {
         )}
 
         {/* ── Privilege notice ────────────────────────────────────────── */}
-        {(!canSelectProduct || !canSelectAccount || !canCreditSale) && (
+        {(!canSelectProduct || !canSelectAccount || !canCreditSale || allowedProductIds !== null || allowedAccountIds !== null) && (
           <View style={[styles.privNotice, { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }]}>
             <Feather name="shield" size={13} color="#D97706" />
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#92400E", flex: 1 }}>
-              Some POS controls are restricted by your admin.
-              {!canSelectProduct ? " Product locked." : ""}
-              {!canSelectAccount ? " Account locked." : ""}
-              {!canCreditSale ? " Credit sales disabled." : ""}
+              {allowedProductIds !== null
+                ? `Products: ${activeProducts.length} allowed. `
+                : ""}
+              {allowedAccountIds !== null
+                ? `Accounts: ${allowedAccounts.length} allowed. `
+                : ""}
+              {!canCreditSale ? "Credit sales disabled." : ""}
             </Text>
           </View>
         )}
@@ -589,7 +615,7 @@ export default function POSScreen() {
         renderSub={c => c.phone ?? ""}
       />
       <PickerModal<Account>
-        visible={showAccountModal} title="Select Payment Account" items={accounts}
+        visible={showAccountModal} title="Select Payment Account" items={allowedAccounts}
         onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)}
         renderSub={a => `${a.type}  ·  Balance: ₨${parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
       />

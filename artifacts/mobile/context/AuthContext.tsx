@@ -14,21 +14,80 @@ export interface AuthUser {
 }
 
 export const ALL_MODULES = [
-  // Main screens
   "dashboard", "pos", "sales", "purchases", "expenses", "credits",
   "inventory", "customers", "suppliers", "accounts", "locations",
   "categories", "users", "audit", "currency", "cash_count",
-  // POS granular controls
   "pos_product", "pos_location", "pos_account", "pos_credit_customer",
 ] as const;
 
 export type AppModule = typeof ALL_MODULES[number];
 
+// ── Module-level privilege check ─────────────────────────────────────────────
 export function hasPrivilege(user: AuthUser | null, module: AppModule): boolean {
   if (!user) return false;
   if (user.role === "admin") return true;
   if (!user.privileges || user.privileges.length === 0) return true;
   return user.privileges.includes(module);
+}
+
+// ── Entity-level privilege checks ────────────────────────────────────────────
+// Logic: admin → always. null privileges → always. pos_product → all products.
+// If user has any product:X entries → only those. Otherwise no restriction.
+
+export function hasProductAccess(user: AuthUser | null, productId: number): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (!user.privileges || user.privileges.length === 0) return true;
+  if (user.privileges.includes("pos_product")) return true;
+  const entityPrivs = user.privileges.filter(p => p.startsWith("product:"));
+  if (entityPrivs.length === 0) return true; // no product restrictions configured
+  return user.privileges.includes(`product:${productId}`);
+}
+
+export function hasAccountAccess(user: AuthUser | null, accountId: number): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (!user.privileges || user.privileges.length === 0) return true;
+  if (user.privileges.includes("pos_account")) return true;
+  const entityPrivs = user.privileges.filter(p => p.startsWith("account:"));
+  if (entityPrivs.length === 0) return true;
+  return user.privileges.includes(`account:${accountId}`);
+}
+
+export function hasLocationAccess(user: AuthUser | null, locationId: number): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (!user.privileges || user.privileges.length === 0) return true;
+  if (user.privileges.includes("pos_location")) return true;
+  const entityPrivs = user.privileges.filter(p => p.startsWith("location:"));
+  if (entityPrivs.length === 0) return true;
+  return user.privileges.includes(`location:${locationId}`);
+}
+
+// ── Helpers to extract allowed entity IDs ────────────────────────────────────
+// Returns null when ALL are allowed, or a Set of allowed IDs.
+export function getAllowedProductIds(user: AuthUser | null): Set<number> | null {
+  if (!user || !user.privileges || user.privileges.length === 0) return null;
+  if (user.role === "admin") return null;
+  if (user.privileges.includes("pos_product")) return null;
+  const ids = user.privileges.filter(p => p.startsWith("product:")).map(p => parseInt(p.split(":")[1]!));
+  return ids.length > 0 ? new Set(ids) : null;
+}
+
+export function getAllowedAccountIds(user: AuthUser | null): Set<number> | null {
+  if (!user || !user.privileges || user.privileges.length === 0) return null;
+  if (user.role === "admin") return null;
+  if (user.privileges.includes("pos_account")) return null;
+  const ids = user.privileges.filter(p => p.startsWith("account:")).map(p => parseInt(p.split(":")[1]!));
+  return ids.length > 0 ? new Set(ids) : null;
+}
+
+export function getAllowedLocationIds(user: AuthUser | null): Set<number> | null {
+  if (!user || !user.privileges || user.privileges.length === 0) return null;
+  if (user.role === "admin") return null;
+  if (user.privileges.includes("pos_location")) return null;
+  const ids = user.privileges.filter(p => p.startsWith("location:")).map(p => parseInt(p.split(":")[1]!));
+  return ids.length > 0 ? new Set(ids) : null;
 }
 
 interface AuthContextType {
@@ -40,11 +99,8 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({
-  user: null,
-  token: null,
-  isLoading: true,
-  login: async () => {},
-  logout: async () => {},
+  user: null, token: null, isLoading: true,
+  login: async () => {}, logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -53,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => { loadStoredAuth(); }, []);
-
   useEffect(() => {
     const currentToken = token;
     setAuthTokenGetter(() => currentToken);
