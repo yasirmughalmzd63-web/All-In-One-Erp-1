@@ -92,7 +92,15 @@ export default function POSScreen() {
   const parsedAmount = parseFloat(amount) || 0;
   const unitPriceNum = selectedProduct ? parseFloat(selectedProduct.unitPrice) : 0;
   const qty = selectedProduct && parsedAmount > 0 && unitPriceNum > 0 ? Math.round(parsedAmount / unitPriceNum) : 0;
-  const displayAmount = parsedAmount.toFixed(8);
+
+  const { typedPart, ghostPart } = (() => {
+    if (amount.includes(".")) {
+      const [intPart, decPart = ""] = amount.split(".");
+      const ghost = "0".repeat(Math.max(0, 8 - decPart.length));
+      return { typedPart: intPart + "." + decPart, ghostPart: ghost };
+    }
+    return { typedPart: amount + ".", ghostPart: "00000000" };
+  })();
 
   const handleNumpad = (key: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
@@ -200,7 +208,9 @@ export default function POSScreen() {
           <View style={styles.amountSection}>
             <Text style={[styles.amountLabel, { color: colors.mutedForeground }]}>AMOUNT (8 DECIMALS)</Text>
             <Text style={[styles.amountValue, { color: colors.text }]}>
-              <Text style={{ color: colors.primary, fontSize: 24 }}>$ </Text>{displayAmount}
+              <Text style={{ color: colors.primary, fontSize: 24 }}>$ </Text>
+              {typedPart}
+              <Text style={{ color: colors.mutedForeground, opacity: 0.35 }}>{ghostPart}</Text>
             </Text>
           </View>
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
