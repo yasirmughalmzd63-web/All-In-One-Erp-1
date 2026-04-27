@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
   Alert,
@@ -26,9 +27,10 @@ import { useColors } from "@/hooks/useColors";
 
 const NUMPAD_KEYS = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], [".", "0", "⌫"]];
 
-type Product = { id: number; name: string; unitPrice: string; unit: string; stock: number; isActive?: boolean };
+type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean };
 type Customer = { id: number; name: string; phone?: string | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string };
+type RateMode = "normal" | "wholesale";
 
 function PickerModal<T extends { id: number; name: string }>({
   visible, title, items, onSelect, onClose, renderSub,
@@ -37,10 +39,12 @@ function PickerModal<T extends { id: number; name: string }>({
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
-        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "75%" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "75%" }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{title}</Text>
-            <TouchableOpacity onPress={onClose}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+            <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
+              <Feather name="x" size={18} color={colors.mutedForeground} />
+            </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={() => { onSelect(null); onClose(); }} style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <Text style={{ fontFamily: "Inter_500Medium", color: colors.mutedForeground, fontSize: 15 }}>— None —</Text>
@@ -69,6 +73,7 @@ export default function POSScreen() {
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
   const [amount, setAmount] = useState("0");
+  const [rateMode, setRateMode] = useState<RateMode>("normal");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
@@ -88,8 +93,10 @@ export default function POSScreen() {
   const activeProducts = products.filter(p => p.isActive !== false);
 
   const parsedAmount = parseFloat(amount) || 0;
-  const unitPriceNum = selectedProduct ? parseFloat(selectedProduct.unitPrice) : 0;
-  const qty = selectedProduct && parsedAmount > 0 && unitPriceNum > 0 ? Math.round(parsedAmount / unitPriceNum) : 0;
+  const activePrice = selectedProduct
+    ? parseFloat(rateMode === "wholesale" ? (selectedProduct.wholesalePrice || selectedProduct.unitPrice) : selectedProduct.unitPrice)
+    : 0;
+  const qty = selectedProduct && parsedAmount > 0 && activePrice > 0 ? Math.round(parsedAmount / activePrice) : 0;
   const accountBalance = selectedAccount ? parseFloat(selectedAccount.balance) : null;
   const stockValue = selectedProduct ? selectedProduct.stock * parseFloat(selectedProduct.unitPrice) : null;
   const leftBalance = accountBalance !== null ? accountBalance - parsedAmount : null;
@@ -132,7 +139,7 @@ export default function POSScreen() {
       setCopiedQty(true);
       setTimeout(() => setCopiedQty(false), 2000);
     } catch {
-      Alert.alert("Copy QTY", `QTY: ${qtyStr}\n\nPlease note this value.`);
+      Alert.alert("Copy QTY", `QTY: ${qtyStr}`);
     }
   };
 
@@ -140,7 +147,6 @@ export default function POSScreen() {
     if (!selectedProduct) { Alert.alert("Select Product", "Please select a product first."); return; }
     if (qty <= 0 || parsedAmount <= 0) { Alert.alert("Enter Amount", "Please enter a valid amount."); return; }
     if (!user) return;
-
     try {
       await (createSaleMutation as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({
         data: {
@@ -148,20 +154,18 @@ export default function POSScreen() {
           customerId: selectedCustomer?.id ?? null,
           accountId: selectedAccount?.id ?? null,
           locationId: user.locationId ?? null,
-          items: [{ productId: selectedProduct.id, qty, unitPrice: selectedProduct.unitPrice }],
+          items: [{ productId: selectedProduct.id, qty, unitPrice: activePrice.toFixed(8) }],
           discount: "0.00000000", tax: "0.00000000",
           amountPaid: parsedAmount.toFixed(8),
-          paymentMethod: "cash", notes: null,
+          paymentMethod: "cash", notes: rateMode === "wholesale" ? "Wholesale rate" : null,
         },
       });
-
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       queryClient.invalidateQueries();
       setAmount("0");
-
       Alert.alert(
         "✓ Sale Complete",
-        `${selectedProduct.name}\nQTY: ${qty} ${selectedProduct.unit}\nAmount: $${parsedAmount.toFixed(2)}\nMethod: ${paymentMethod.toUpperCase()}`,
+        `${selectedProduct.name}\nQTY: ${qty} ${selectedProduct.unit}\nRate: ${rateMode === "wholesale" ? "Wholesale" : "Retail"} @ $${activePrice.toFixed(2)}\nAmount: $${parsedAmount.toFixed(2)}`,
         [{ text: "New Sale", onPress: () => { setSelectedProduct(null); setSelectedCustomer(null); } }, { text: "OK" }]
       );
     } catch (e: unknown) {
@@ -171,39 +175,48 @@ export default function POSScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: colors.headerBg }]}>
+      <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8 }]}>
         <View>
           <Text style={styles.headerTitle}>COINS SALE</Text>
           <Text style={styles.headerSub}>Point of Sale</Text>
         </View>
         <View style={styles.headerRight}>
-          <Feather name="user" size={14} color="rgba(255,255,255,0.8)" />
-          <Text style={styles.headerUser}>{user?.name ?? "—"}</Text>
+          <View style={styles.userBadge}>
+            <Feather name="user" size={12} color={colors.primary} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.primary }}>{user?.name?.split(" ")[0] ?? "—"}</Text>
+          </View>
         </View>
-      </View>
+      </LinearGradient>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
         <TouchableOpacity
           style={[styles.productCard, { backgroundColor: colors.card, borderColor: selectedProduct ? colors.primary : colors.border }]}
           onPress={() => setShowProductModal(true)}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
         >
           <View style={{ flex: 1 }}>
             {selectedProduct ? (
               <>
-                <Text style={[styles.productName, { color: colors.text }]}>{selectedProduct.name}</Text>
-                <Text style={[styles.productPrice, { color: colors.primary }]}>
-                  ${parseFloat(selectedProduct.unitPrice).toFixed(8)} / {selectedProduct.unit}
-                  {"  "}
-                  <Text style={{ color: selectedProduct.stock > 0 ? colors.success : colors.danger }}>
-                    Stock: {selectedProduct.stock}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: selectedProduct.stock > 0 ? colors.success : colors.danger }} />
+                  <Text style={[styles.productName, { color: colors.text }]}>{selectedProduct.name}</Text>
+                </View>
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                  <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.primary }}>Retail ${parseFloat(selectedProduct.unitPrice).toFixed(2)}</Text>
+                  </View>
+                  <View style={{ backgroundColor: colors.purchaseBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.purchase }}>Wholesale ${parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
+                  </View>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: selectedProduct.stock > 0 ? colors.success : colors.danger }}>
+                    {selectedProduct.stock} {selectedProduct.unit}
                   </Text>
-                </Text>
+                </View>
               </>
             ) : (
               <>
                 <Text style={[styles.productPlaceholder, { color: colors.mutedForeground }]}>Tap to select product</Text>
-                <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Required to calculate QTY</Text>
+                <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Choose a product to begin sale</Text>
               </>
             )}
           </View>
@@ -211,6 +224,29 @@ export default function POSScreen() {
             <Feather name="chevron-down" size={18} color={colors.primary} />
           </View>
         </TouchableOpacity>
+
+        {selectedProduct && (
+          <View style={[styles.rateToggle, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={[styles.rateBtn, rateMode === "normal" && { backgroundColor: colors.primary }]}
+              onPress={() => { setRateMode("normal"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }}
+            >
+              <Feather name="tag" size={13} color={rateMode === "normal" ? "#FFF" : colors.mutedForeground} />
+              <Text style={[styles.rateBtnText, { color: rateMode === "normal" ? "#FFF" : colors.mutedForeground }]}>
+                Retail ${parseFloat(selectedProduct.unitPrice).toFixed(2)}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.rateBtn, rateMode === "wholesale" && { backgroundColor: colors.purchase }]}
+              onPress={() => { setRateMode("wholesale"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }}
+            >
+              <Feather name="layers" size={13} color={rateMode === "wholesale" ? "#FFF" : colors.mutedForeground} />
+              <Text style={[styles.rateBtnText, { color: rateMode === "wholesale" ? "#FFF" : colors.mutedForeground }]}>
+                Wholesale ${parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.amountSection}>
@@ -225,18 +261,18 @@ export default function POSScreen() {
           <View style={styles.qtySection}>
             <View>
               <Text style={[styles.qtyLabel, { color: colors.mutedForeground }]}>
-                QTY (ROUNDED){selectedProduct ? ` × $${parseFloat(selectedProduct.unitPrice).toFixed(2)}` : ""}
+                QTY{selectedProduct ? ` @ $${activePrice.toFixed(2)}/${selectedProduct.unit}` : ""}
               </Text>
               <Text style={[styles.qtyValue, { color: qty > 0 ? colors.success : colors.mutedForeground }]}>
                 {qty > 0 ? qty.toLocaleString() : "—"}
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.copyBtn, { backgroundColor: copiedQty ? colors.successBg : colors.secondary, borderColor: copiedQty ? colors.success : colors.border }]}
+              style={[styles.copyBtn, { backgroundColor: copiedQty ? colors.saleBg : colors.secondary, borderColor: copiedQty ? colors.success : colors.border }]}
               onPress={handleCopyQty}
               disabled={qty <= 0}
             >
-              <Feather name={copiedQty ? "check" : "copy"} size={16} color={copiedQty ? colors.success : colors.primary} />
+              <Feather name={copiedQty ? "check" : "copy"} size={15} color={copiedQty ? colors.success : colors.primary} />
               <Text style={[styles.copyText, { color: copiedQty ? colors.success : colors.primary }]}>{copiedQty ? "Copied!" : "Copy QTY"}</Text>
             </TouchableOpacity>
           </View>
@@ -244,13 +280,13 @@ export default function POSScreen() {
 
         <View style={[styles.optionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <TouchableOpacity style={[styles.optionRow, { borderBottomColor: colors.border }]} onPress={() => setShowCustomerModal(true)}>
-            <Feather name="user" size={16} color={colors.mutedForeground} />
+            <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}><Feather name="user" size={14} color={colors.primary} /></View>
             <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Customer</Text>
             <Text style={[styles.optionValue, { color: selectedCustomer ? colors.text : colors.mutedForeground }]}>{selectedCustomer?.name ?? "Walk-in"}</Text>
             <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
           </TouchableOpacity>
           <TouchableOpacity style={styles.optionRow} onPress={() => setShowAccountModal(true)}>
-            <Feather name="credit-card" size={16} color={colors.mutedForeground} />
+            <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}><Feather name="credit-card" size={14} color={colors.primary} /></View>
             <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Account</Text>
             <Text style={[styles.optionValue, { color: selectedAccount ? colors.text : colors.mutedForeground }]}>{selectedAccount?.name ?? "None"}</Text>
             <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
@@ -286,8 +322,15 @@ export default function POSScreen() {
           {NUMPAD_KEYS.map((row, ri) => (
             <View key={ri} style={styles.numpadRow}>
               {row.map(key => (
-                <TouchableOpacity key={key} style={[styles.numpadKey, { backgroundColor: key === "⌫" ? colors.numpadDelete : colors.numpadKey, borderColor: colors.border }]} onPress={() => handleNumpad(key)} activeOpacity={0.6}>
-                  {key === "⌫" ? <Feather name="delete" size={20} color={colors.numpadDeleteText} /> : <Text style={[styles.numpadKeyText, { color: key === "." ? colors.primary : colors.numpadKeyText }]}>{key}</Text>}
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.numpadKey, { backgroundColor: key === "⌫" ? colors.numpadDelete : key === "." ? colors.secondary : colors.numpadKey, borderColor: colors.border }]}
+                  onPress={() => handleNumpad(key)}
+                  activeOpacity={0.6}
+                >
+                  {key === "⌫"
+                    ? <Feather name="delete" size={20} color={colors.numpadDeleteText} />
+                    : <Text style={[styles.numpadKeyText, { color: key === "." ? colors.primary : colors.numpadKeyText }]}>{key}</Text>}
                 </TouchableOpacity>
               ))}
             </View>
@@ -295,8 +338,11 @@ export default function POSScreen() {
         </View>
 
         <View style={styles.actionsRow}>
-          <TouchableOpacity style={[styles.clearBtn, { backgroundColor: colors.numpadDelete }]} onPress={() => { setAmount("0"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}>
-            <Text style={[styles.clearBtnText, { color: colors.danger }]}>Clear</Text>
+          <TouchableOpacity
+            style={[styles.clearBtn, { backgroundColor: colors.numpadDelete }]}
+            onPress={() => { setAmount("0"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
+          >
+            <Feather name="rotate-ccw" size={16} color={colors.danger} />
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.completeBtn, { backgroundColor: qty > 0 && selectedProduct ? colors.success : colors.mutedForeground, opacity: createSaleMutation.isPending ? 0.7 : 1 }]}
@@ -310,7 +356,7 @@ export default function POSScreen() {
         </View>
       </ScrollView>
 
-      <PickerModal<Product> visible={showProductModal} title="Select Product" items={activeProducts} onSelect={setSelectedProduct} onClose={() => setShowProductModal(false)} renderSub={p => `$${parseFloat(p.unitPrice).toFixed(2)} / ${p.unit}  ·  Stock: ${p.stock}`} />
+      <PickerModal<Product> visible={showProductModal} title="Select Product" items={activeProducts} onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }} onClose={() => setShowProductModal(false)} renderSub={p => `Retail $${parseFloat(p.unitPrice).toFixed(2)}  ·  Wholesale $${parseFloat(p.wholesalePrice || p.unitPrice).toFixed(2)}  ·  Stock: ${p.stock}`} />
       <PickerModal<Customer> visible={showCustomerModal} title="Select Customer" items={customers} onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)} renderSub={c => c.phone ?? ""} />
       <PickerModal<Account> visible={showAccountModal} title="Select Account" items={accounts} onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)} renderSub={a => `${a.type}  ·  Balance: $${parseFloat(a.balance).toFixed(2)}`} />
     </View>
@@ -323,39 +369,41 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFFFFF", letterSpacing: 1 },
   headerSub: { fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.7)" },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 6 },
-  headerUser: { fontFamily: "Inter_500Medium", fontSize: 13, color: "rgba(255,255,255,0.9)" },
-  productCard: { marginHorizontal: 16, marginTop: 12, borderRadius: 14, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
+  userBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  productCard: { marginHorizontal: 14, marginTop: 12, borderRadius: 16, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
   productName: { fontFamily: "Inter_700Bold", fontSize: 16 },
-  productPrice: { fontFamily: "Inter_500Medium", fontSize: 13, marginTop: 2 },
   productPlaceholder: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
-  productSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
+  productSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 3 },
   productChevron: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  displayCard: { marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, overflow: "hidden" },
+  rateToggle: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, flexDirection: "row", padding: 4, gap: 4 },
+  rateBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 11 },
+  rateBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  displayCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   amountSection: { padding: 16, paddingBottom: 12 },
-  amountLabel: { fontFamily: "Inter_500Medium", fontSize: 11, letterSpacing: 1, marginBottom: 4 },
+  amountLabel: { fontFamily: "Inter_500Medium", fontSize: 10, letterSpacing: 1, marginBottom: 4 },
   amountValue: { fontFamily: "Inter_700Bold", fontSize: 26, letterSpacing: -0.5 },
-  divider: { height: 1, marginHorizontal: 16 },
+  divider: { height: 1 },
   qtySection: { padding: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  qtyLabel: { fontFamily: "Inter_500Medium", fontSize: 11, letterSpacing: 1, marginBottom: 4 },
+  qtyLabel: { fontFamily: "Inter_500Medium", fontSize: 10, letterSpacing: 1, marginBottom: 4 },
   qtyValue: { fontFamily: "Inter_700Bold", fontSize: 44, lineHeight: 52 },
   copyBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5 },
   copyText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
-  optionsCard: { marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, overflow: "hidden" },
-  optionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, gap: 10, borderBottomWidth: 1 },
+  optionsCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
+  optionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, gap: 10, borderBottomWidth: 1 },
+  optionIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   optionLabel: { fontFamily: "Inter_500Medium", fontSize: 13, width: 76 },
   optionValue: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 14, textAlign: "right" },
-  infoCard: { marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, flexDirection: "row", overflow: "hidden" },
+  infoCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, flexDirection: "row", overflow: "hidden" },
   infoCell: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, alignItems: "center" },
   infoLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8, marginBottom: 4, textAlign: "center" },
   infoValue: { fontFamily: "Inter_700Bold", fontSize: 14, textAlign: "center" },
   infoSep: { width: 1 },
-  numpadContainer: { marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 8, gap: 6 },
+  numpadContainer: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, padding: 8, gap: 6 },
   numpadRow: { flexDirection: "row", gap: 6 },
-  numpadKey: { flex: 1, height: 58, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  numpadKey: { flex: 1, height: 58, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   numpadKeyText: { fontFamily: "Inter_600SemiBold", fontSize: 22 },
-  actionsRow: { flexDirection: "row", marginHorizontal: 16, marginTop: 10, gap: 10 },
-  clearBtn: { width: 80, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  clearBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
+  actionsRow: { flexDirection: "row", marginHorizontal: 14, marginTop: 10, gap: 10 },
+  clearBtn: { width: 56, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   completeBtn: { flex: 1, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10 },
   completeBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" },
 });

@@ -14,6 +14,7 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
     categoryId: productsTable.categoryId,
     categoryName: categoriesTable.name,
     unitPrice: productsTable.unitPrice,
+    wholesalePrice: productsTable.wholesalePrice,
     costPrice: productsTable.costPrice,
     stock: productsTable.stock,
     locationId: productsTable.locationId,
@@ -27,13 +28,14 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
-  const { name, sku, categoryId, unitPrice, costPrice, stock, locationId, unit } = req.body as {
+  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, locationId, unit } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
-    unitPrice?: string; costPrice?: string; stock?: number; locationId?: number | null; unit?: string;
+    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; locationId?: number | null; unit?: string;
   };
   if (!name || !unitPrice || !costPrice || !unit) { res.status(400).json({ error: "name, unitPrice, costPrice, unit required" }); return; }
   const [row] = await db.insert(productsTable).values({
-    name, sku: sku ?? null, categoryId: categoryId ?? null, unitPrice, costPrice,
+    name, sku: sku ?? null, categoryId: categoryId ?? null,
+    unitPrice, wholesalePrice: wholesalePrice ?? unitPrice, costPrice,
     stock: stock ?? 0, locationId: locationId ?? null, unit,
   }).returning();
   await logAudit(req.userId, "create", "product", row!.id, `Created product ${name}`);
@@ -42,15 +44,16 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const { name, sku, categoryId, unitPrice, costPrice, stock, unit, isActive } = req.body as {
+  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
-    unitPrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean;
+    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean;
   };
   const updates: Record<string, unknown> = {};
   if (name != null) updates.name = name;
   if (sku !== undefined) updates.sku = sku;
   if (categoryId !== undefined) updates.categoryId = categoryId;
   if (unitPrice != null) updates.unitPrice = unitPrice;
+  if (wholesalePrice != null) updates.wholesalePrice = wholesalePrice;
   if (costPrice != null) updates.costPrice = costPrice;
   if (stock != null) updates.stock = stock;
   if (unit != null) updates.unit = unit;
