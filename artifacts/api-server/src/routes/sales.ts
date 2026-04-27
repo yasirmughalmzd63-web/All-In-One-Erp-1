@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, desc } from "drizzle-orm";
-import { db, salesTable, saleItemsTable, productsTable, customersTable, locationsTable, accountsTable, usersTable } from "@workspace/db";
+import { db, salesTable, saleItemsTable, productsTable, customersTable, locationsTable, accountsTable, usersTable, creditsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 
@@ -129,12 +129,28 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  if (accountId) {
+  const remaining = total - paid;
+
+  if (accountId && paid > 0) {
     const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
     if (account) {
-      const newBal = parseFloat(account.balance) + total;
+      const newBal = parseFloat(account.balance) + paid;
       await db.update(accountsTable).set({ balance: formatAmount(newBal) }).where(eq(accountsTable.id, accountId));
     }
+  }
+
+  if (paymentMethod === "credit" && customerId && remaining > 0) {
+    await db.insert(creditsTable).values({
+      type: "receivable",
+      partyId: customerId,
+      partyType: "customer",
+      amount: formatAmount(total),
+      paidAmount: formatAmount(paid),
+      remainingAmount: formatAmount(remaining),
+      status: paid > 0 ? "partial" : "pending",
+      notes: `Credit sale: ${invoiceNo}`,
+      userId: req.userId,
+    });
   }
 
   await logAudit(req.userId, "create", "sale", sale!.id, `Sale ${invoiceNo} total ${formatAmount(total)}`);
