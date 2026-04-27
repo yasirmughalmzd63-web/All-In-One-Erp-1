@@ -10,10 +10,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
-  useListProducts, useListCustomers, useListAccounts,
+  useListProducts, useListCustomers, useListAccounts, useListLocations,
   useCreateSale, useGetDashboard, customFetch,
 } from "@workspace/api-client-react";
-import { useAuth, hasPrivilege, getAllowedProductIds, getAllowedAccountIds } from "@/context/AuthContext";
+import { useAuth, hasPrivilege, getAllowedProductIds, getAllowedAccountIds, getAllowedLocationIds } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 const NUMPAD_KEYS = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], [".", "0", "⌫"]];
@@ -27,6 +27,7 @@ function formatK(n: number): string {
 type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean };
 type Customer = { id: number; name: string; phone?: string | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string };
+type Location = { id: number; name: string; address?: string | null };
 type RateMode = "normal" | "wholesale";
 
 function PickerModal<T extends { id: number; name: string }>({
@@ -80,15 +81,18 @@ export default function POSScreen() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [copiedQty, setCopiedQty] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
   const [dollarBalance, setDollarBalance] = useState<{ usd: number; pkr: number; rate: number } | null>(null);
 
   const { data: productsRaw } = useListProducts();
   const { data: customersRaw } = useListCustomers();
   const { data: accountsRaw } = useListAccounts();
+  const { data: locationsRaw } = useListLocations();
   const { data: dashboardRaw } = useGetDashboard();
   const createSaleMutation = useCreateSale();
 
@@ -108,10 +112,12 @@ export default function POSScreen() {
   const products = (productsRaw ?? []) as unknown as Product[];
   const customers = (customersRaw ?? []) as unknown as Customer[];
   const accounts = (accountsRaw ?? []) as unknown as Account[];
+  const locations = (locationsRaw ?? []) as unknown as Location[];
 
   // ── Entity-level filtering ─────────────────────────────────────────────
-  const allowedProductIds = getAllowedProductIds(user);
-  const allowedAccountIds = getAllowedAccountIds(user);
+  const allowedProductIds  = getAllowedProductIds(user);
+  const allowedAccountIds  = getAllowedAccountIds(user);
+  const allowedLocationIds = getAllowedLocationIds(user);
 
   const activeProducts = products
     .filter(p => p.isActive !== false)
@@ -119,6 +125,9 @@ export default function POSScreen() {
 
   const allowedAccounts = accounts
     .filter(a => allowedAccountIds === null || allowedAccountIds.has(a.id));
+
+  const allowedLocations = locations
+    .filter(l => allowedLocationIds === null || allowedLocationIds.has(l.id));
 
   // Auto-select if only one option allowed
   React.useEffect(() => {
@@ -132,6 +141,12 @@ export default function POSScreen() {
       setSelectedProduct(activeProducts[0]!);
     }
   }, [activeProducts.length]);
+
+  React.useEffect(() => {
+    if (allowedLocations.length === 1 && !selectedLocation) {
+      setSelectedLocation(allowedLocations[0]!);
+    }
+  }, [allowedLocations.length]);
 
   const parsedAmount = parseFloat(amount) || 0;
   const activePrice = selectedProduct
@@ -216,7 +231,7 @@ export default function POSScreen() {
           userId: user.id,
           customerId: selectedCustomer?.id ?? null,
           accountId: selectedAccount!.id,
-          locationId: user.locationId ?? null,
+          locationId: selectedLocation?.id ?? user.locationId ?? null,
           items: [{ productId: selectedProduct!.id, qty, unitPrice: activePrice.toFixed(8) }],
           discount: "0.00000000", tax: "0.00000000",
           amountPaid: parsedAmount.toFixed(8),
@@ -257,7 +272,7 @@ export default function POSScreen() {
           userId: user.id,
           customerId: selectedCustomer.id,
           accountId: selectedAccount?.id ?? null,
-          locationId: user.locationId ?? null,
+          locationId: selectedLocation?.id ?? user.locationId ?? null,
           items: [{ productId: selectedProduct!.id, qty, unitPrice: activePrice.toFixed(8) }],
           discount: "0.00000000", tax: "0.00000000",
           amountPaid: "0.00000000",
@@ -450,7 +465,7 @@ export default function POSScreen() {
           </View>
         </View>
 
-        {/* ── Customer + Account pickers ───────────────────────────────── */}
+        {/* ── Customer + Location + Account pickers ───────────────────── */}
         <View style={[styles.optionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {/* Customer — only shown if credit sale is allowed */}
           {canCreditSale && (
@@ -468,6 +483,31 @@ export default function POSScreen() {
               <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
             </TouchableOpacity>
           )}
+
+          {/* Location */}
+          <TouchableOpacity
+            style={[styles.optionRow, { borderBottomColor: colors.border }]}
+            onPress={() => {
+              if (!canSelectLocation) {
+                Alert.alert("Access Denied", "You don't have permission to change the location.");
+                return;
+              }
+              setShowLocationModal(true);
+            }}
+          >
+            <View style={[styles.optionIcon, { backgroundColor: selectedLocation ? colors.secondary : (canSelectLocation ? colors.secondary : colors.input) }]}>
+              <Feather
+                name={canSelectLocation ? "map-pin" : "lock"}
+                size={14}
+                color={selectedLocation ? colors.primary : (canSelectLocation ? colors.primary : colors.mutedForeground)}
+              />
+            </View>
+            <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Location</Text>
+            <Text style={[styles.optionValue, { color: selectedLocation ? colors.text : colors.mutedForeground }]}>
+              {selectedLocation?.name ?? (canSelectLocation ? "Select location" : "Locked by admin")}
+            </Text>
+            <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
+          </TouchableOpacity>
 
           {/* Account */}
           <TouchableOpacity
@@ -587,12 +627,15 @@ export default function POSScreen() {
         )}
 
         {/* ── Privilege notice ────────────────────────────────────────── */}
-        {(!canSelectProduct || !canSelectAccount || !canCreditSale || allowedProductIds !== null || allowedAccountIds !== null) && (
+        {(!canCreditSale || allowedProductIds !== null || allowedAccountIds !== null || allowedLocationIds !== null) && (
           <View style={[styles.privNotice, { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }]}>
             <Feather name="shield" size={13} color="#D97706" />
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#92400E", flex: 1 }}>
               {allowedProductIds !== null
                 ? `Products: ${activeProducts.length} allowed. `
+                : ""}
+              {allowedLocationIds !== null
+                ? `Locations: ${allowedLocations.length} allowed. `
                 : ""}
               {allowedAccountIds !== null
                 ? `Accounts: ${allowedAccounts.length} allowed. `
@@ -618,6 +661,11 @@ export default function POSScreen() {
         visible={showAccountModal} title="Select Payment Account" items={allowedAccounts}
         onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)}
         renderSub={a => `${a.type}  ·  Balance: ₨${parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+      />
+      <PickerModal<Location>
+        visible={showLocationModal} title="Select Location" items={allowedLocations}
+        onSelect={setSelectedLocation} onClose={() => setShowLocationModal(false)}
+        renderSub={l => l.address ?? ""}
       />
     </View>
   );
