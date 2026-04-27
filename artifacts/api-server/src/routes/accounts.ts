@@ -38,4 +38,27 @@ router.delete("/accounts/:id", requireAuth, async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
+router.post("/accounts/transfer", requireAuth, async (req, res): Promise<void> => {
+  const { fromAccountId, toAccountId, amount, notes } = req.body as {
+    fromAccountId?: number | null; toAccountId?: number | null; amount: string; notes?: string | null;
+  };
+  const amt = parseFloat(amount);
+  if (isNaN(amt) || amt <= 0) { res.status(400).json({ error: "Invalid amount" }); return; }
+  if (!fromAccountId && !toAccountId) { res.status(400).json({ error: "At least one account required" }); return; }
+  if (fromAccountId === toAccountId) { res.status(400).json({ error: "Source and destination cannot be the same" }); return; }
+
+  if (fromAccountId) {
+    const [from] = await db.select().from(accountsTable).where(eq(accountsTable.id, fromAccountId));
+    if (!from) { res.status(404).json({ error: "Source account not found" }); return; }
+    await db.update(accountsTable).set({ balance: (parseFloat(from.balance) - amt).toFixed(8) }).where(eq(accountsTable.id, fromAccountId));
+  }
+  if (toAccountId) {
+    const [to] = await db.select().from(accountsTable).where(eq(accountsTable.id, toAccountId));
+    if (!to) { res.status(404).json({ error: "Destination account not found" }); return; }
+    await db.update(accountsTable).set({ balance: (parseFloat(to.balance) + amt).toFixed(8) }).where(eq(accountsTable.id, toAccountId));
+  }
+  await logAudit(req.userId, "transfer", "account", undefined, `Transfer ${amount} from account #${fromAccountId ?? "external"} to #${toAccountId ?? "external"}${notes ? ": " + notes : ""}`);
+  res.json({ success: true, message: `Transferred ${amount} successfully` });
+});
+
 export default router;

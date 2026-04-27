@@ -49,6 +49,7 @@ export default function TransactionsScreen() {
   const [showPayModal, setShowPayModal] = useState(false);
   const [selectedCredit, setSelectedCredit] = useState<Credit | null>(null);
   const [payAmount, setPayAmount] = useState("");
+  const [payAccountId, setPayAccountId] = useState("");
 
   const { data: salesRaw, isLoading: loadingSales, refetch: refetchSales } = useListSales();
   const { data: purchasesRaw, isLoading: loadingPurchases, refetch: refetchPurchases } = useListPurchases();
@@ -156,11 +157,16 @@ export default function TransactionsScreen() {
     if (!selectedCredit || !payAmount) { Alert.alert("Error", "Enter pay amount"); return; }
     try {
       await (payCreditMutation as unknown as { mutateAsync: (a: { id: number; data: unknown }) => Promise<unknown> }).mutateAsync({
-        id: selectedCredit.id, data: { payAmount: parseFloat(payAmount).toFixed(8) },
+        id: selectedCredit.id,
+        data: {
+          payAmount: parseFloat(payAmount).toFixed(8),
+          accountId: payAccountId ? parseInt(payAccountId) : null,
+        },
       });
       queryClient.invalidateQueries();
       setShowPayModal(false);
       setPayAmount("");
+      setPayAccountId("");
       Alert.alert("Success", "Payment recorded");
     } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
   };
@@ -391,10 +397,12 @@ export default function TransactionsScreen() {
                   onChangeText={setPayAmount}
                   keyboardType="decimal-pad"
                 />
-                <TouchableOpacity style={[fStyles.submitBtn, { backgroundColor: colors.credit, marginTop: 16 }]} onPress={handlePayCredit}>
+                <Text style={[fStyles.label, { color: colors.mutedForeground, marginTop: 12 }]}>Account (optional — updates balance)</Text>
+                <SelectField label="" value={payAccountId} items={accounts} onSelect={setPayAccountId} />
+                <TouchableOpacity style={[fStyles.submitBtn, { backgroundColor: colors.credit, marginTop: 8 }]} onPress={handlePayCredit}>
                   <Text style={fStyles.submitText}>Record Payment</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={{ marginTop: 12, alignItems: "center" }} onPress={() => setShowPayModal(false)}>
+                <TouchableOpacity style={{ marginTop: 12, alignItems: "center" }} onPress={() => { setShowPayModal(false); setPayAmount(""); setPayAccountId(""); }}>
                   <Text style={{ fontFamily: "Inter_500Medium", color: colors.mutedForeground }}>Cancel</Text>
                 </TouchableOpacity>
               </>

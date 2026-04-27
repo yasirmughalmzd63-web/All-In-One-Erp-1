@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { eq, desc } from "drizzle-orm";
-import { db, creditsTable, customersTable, suppliersTable } from "@workspace/db";
+import { db, creditsTable, customersTable, suppliersTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 
@@ -42,17 +42,33 @@ router.post("/credits", requireAuth, async (req, res): Promise<void> => {
 
 router.post("/credits/:id/pay", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const { payAmount } = req.body as { payAmount: string; accountId?: number | null };
+  const { payAmount, accountId } = req.body as { payAmount: string; accountId?: number | null };
+
   const [credit] = await db.select().from(creditsTable).where(eq(creditsTable.id, id));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
-  const newPaid = parseFloat(credit.paidAmount) + parseFloat(payAmount);
+
+  const paid = parseFloat(payAmount);
+  if (isNaN(paid) || paid <= 0) { res.status(400).json({ error: "Invalid payAmount" }); return; }
+
+  const newPaid = parseFloat(credit.paidAmount) + paid;
   const newRemaining = parseFloat(credit.amount) - newPaid;
   const status = newRemaining <= 0 ? "paid" : "partial";
+
   const [updated] = await db.update(creditsTable).set({
     paidAmount: newPaid.toFixed(8), remainingAmount: Math.max(0, newRemaining).toFixed(8), status,
   }).where(eq(creditsTable.id, id)).returning();
+
+  if (accountId) {
+    const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (account) {
+      const direction = credit.type === "receivable" ? 1 : -1;
+      const newBal = parseFloat(account.balance) + direction * paid;
+      await db.update(accountsTable).set({ balance: newBal.toFixed(8) }).where(eq(accountsTable.id, accountId));
+    }
+  }
+
   const partyName = await getPartyName(updated!.partyId, updated!.partyType);
-  await logAudit(req.userId, "payment", "credit", id, `Paid ${payAmount}`);
+  await logAudit(req.userId, "payment", "credit", id, `Paid ${payAmount}${accountId ? ` via account #${accountId}` : ""}`);
   res.json({ ...updated!, partyName, createdAt: updated!.createdAt.toISOString() });
 });
 
