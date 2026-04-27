@@ -25,11 +25,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 const NUMPAD_KEYS = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], [".", "0", "⌫"]];
-const PAYMENT_METHODS = ["cash", "card", "transfer", "other"];
 
 type Product = { id: number; name: string; unitPrice: string; unit: string; stock: number; isActive?: boolean };
 type Customer = { id: number; name: string; phone?: string | null };
-type Account = { id: number; name: string; type: string };
+type Account = { id: number; name: string; type: string; balance: string; currency: string };
 
 function PickerModal<T extends { id: number; name: string }>({
   visible, title, items, onSelect, onClose, renderSub,
@@ -73,7 +72,6 @@ export default function POSScreen() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState("cash");
   const [copiedQty, setCopiedQty] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
@@ -92,6 +90,9 @@ export default function POSScreen() {
   const parsedAmount = parseFloat(amount) || 0;
   const unitPriceNum = selectedProduct ? parseFloat(selectedProduct.unitPrice) : 0;
   const qty = selectedProduct && parsedAmount > 0 && unitPriceNum > 0 ? Math.round(parsedAmount / unitPriceNum) : 0;
+  const accountBalance = selectedAccount ? parseFloat(selectedAccount.balance) : null;
+  const stockValue = selectedProduct ? selectedProduct.stock * parseFloat(selectedProduct.unitPrice) : null;
+  const leftBalance = accountBalance !== null ? accountBalance - parsedAmount : null;
 
   const { typedPart, ghostPart } = (() => {
     if (amount.includes(".")) {
@@ -150,7 +151,7 @@ export default function POSScreen() {
           items: [{ productId: selectedProduct.id, qty, unitPrice: selectedProduct.unitPrice }],
           discount: "0.00000000", tax: "0.00000000",
           amountPaid: parsedAmount.toFixed(8),
-          paymentMethod, notes: null,
+          paymentMethod: "cash", notes: null,
         },
       });
 
@@ -256,12 +257,29 @@ export default function POSScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.paymentRow}>
-          {PAYMENT_METHODS.map(pm => (
-            <TouchableOpacity key={pm} style={[styles.payBtn, { backgroundColor: paymentMethod === pm ? colors.primary : colors.card, borderColor: paymentMethod === pm ? colors.primary : colors.border }]} onPress={() => setPaymentMethod(pm)}>
-              <Text style={[styles.payBtnText, { color: paymentMethod === pm ? "#FFF" : colors.mutedForeground }]}>{pm.charAt(0).toUpperCase() + pm.slice(1)}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View style={styles.infoCell}>
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>
+              {selectedAccount ? selectedAccount.name.toUpperCase() : "ACCOUNT"}
+            </Text>
+            <Text style={[styles.infoValue, { color: accountBalance !== null ? colors.primary : colors.mutedForeground }]}>
+              {accountBalance !== null ? `$${accountBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+            </Text>
+          </View>
+          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
+          <View style={styles.infoCell}>
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>STOCK VALUE</Text>
+            <Text style={[styles.infoValue, { color: stockValue !== null ? colors.purchase : colors.mutedForeground }]}>
+              {stockValue !== null ? `$${stockValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+            </Text>
+          </View>
+          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
+          <View style={styles.infoCell}>
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>LEFT BALANCE</Text>
+            <Text style={[styles.infoValue, { color: leftBalance === null ? colors.mutedForeground : leftBalance >= 0 ? colors.success : colors.danger }]}>
+              {leftBalance !== null ? `$${leftBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+            </Text>
+          </View>
         </View>
 
         <View style={[styles.numpadContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -294,7 +312,7 @@ export default function POSScreen() {
 
       <PickerModal<Product> visible={showProductModal} title="Select Product" items={activeProducts} onSelect={setSelectedProduct} onClose={() => setShowProductModal(false)} renderSub={p => `$${parseFloat(p.unitPrice).toFixed(2)} / ${p.unit}  ·  Stock: ${p.stock}`} />
       <PickerModal<Customer> visible={showCustomerModal} title="Select Customer" items={customers} onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)} renderSub={c => c.phone ?? ""} />
-      <PickerModal<Account> visible={showAccountModal} title="Select Account" items={accounts} onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)} renderSub={a => a.type} />
+      <PickerModal<Account> visible={showAccountModal} title="Select Account" items={accounts} onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)} renderSub={a => `${a.type}  ·  Balance: $${parseFloat(a.balance).toFixed(2)}`} />
     </View>
   );
 }
@@ -326,9 +344,11 @@ const styles = StyleSheet.create({
   optionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, gap: 10, borderBottomWidth: 1 },
   optionLabel: { fontFamily: "Inter_500Medium", fontSize: 13, width: 76 },
   optionValue: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 14, textAlign: "right" },
-  paymentRow: { flexDirection: "row", gap: 8, paddingHorizontal: 16, marginTop: 10 },
-  payBtn: { flex: 1, paddingVertical: 9, borderRadius: 10, borderWidth: 1.5, alignItems: "center" },
-  payBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
+  infoCard: { marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, flexDirection: "row", overflow: "hidden" },
+  infoCell: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, alignItems: "center" },
+  infoLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8, marginBottom: 4, textAlign: "center" },
+  infoValue: { fontFamily: "Inter_700Bold", fontSize: 14, textAlign: "center" },
+  infoSep: { width: 1 },
   numpadContainer: { marginHorizontal: 16, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 8, gap: 6 },
   numpadRow: { flexDirection: "row", gap: 6 },
   numpadKey: { flex: 1, height: 58, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
