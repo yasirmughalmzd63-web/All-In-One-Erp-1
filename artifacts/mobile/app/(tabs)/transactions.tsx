@@ -72,6 +72,12 @@ export default function TransactionsScreen() {
   const accounts = (accountsRaw ?? []) as unknown as Account[];
   const categories = (categoriesRaw ?? []) as unknown as Category[];
 
+  // Non-admin users see only their own transactions
+  const visibleSales     = isAdmin ? sales     : sales.filter(s => s.userId === user?.id);
+  const visiblePurchases = isAdmin ? purchases : purchases.filter(p => p.userId === user?.id);
+  const visibleExpenses  = isAdmin ? expenses  : expenses.filter(e => e.userId === user?.id);
+  const visibleCredits   = isAdmin ? credits   : credits.filter(c => c.userId === user?.id);
+
   const createPurchase = useCreatePurchase();
   const createExpense = useCreateExpense();
   const createCredit = useCreateCredit();
@@ -356,6 +362,12 @@ export default function TransactionsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: colors.headerBg }]}>
         <Text style={styles.headerTitle}>Transactions</Text>
+        {!isAdmin && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.18)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
+            <Feather name="user" size={11} color="#FFFFFF" />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#FFFFFF" }}>My Records</Text>
+          </View>
+        )}
       </View>
 
       <View style={[styles.tabBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
@@ -372,10 +384,10 @@ export default function TransactionsScreen() {
         </View>
       ) : (
         <>
-          {activeTab === "Sales" && <FlatList data={sales} renderItem={renderSale} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingSales} onRefresh={refetchSales} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="shopping-cart" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No sales yet</Text></View>} />}
-          {activeTab === "Purchases" && <FlatList data={purchases} renderItem={renderPurchase} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingPurchases} onRefresh={refetchPurchases} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="shopping-bag" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No purchases yet</Text></View>} />}
-          {activeTab === "Expenses" && <FlatList data={expenses} renderItem={renderExpense} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingExpenses} onRefresh={refetchExpenses} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="arrow-down-circle" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No expenses yet</Text></View>} />}
-          {activeTab === "Credits" && <FlatList data={credits} renderItem={renderCredit} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingCredits} onRefresh={refetchCredits} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="clock" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No credits yet</Text></View>} />}
+          {activeTab === "Sales" && <FlatList data={visibleSales} renderItem={renderSale} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingSales} onRefresh={refetchSales} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="shopping-cart" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No sales yet</Text></View>} />}
+          {activeTab === "Purchases" && <FlatList data={visiblePurchases} renderItem={renderPurchase} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingPurchases} onRefresh={refetchPurchases} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="shopping-bag" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No purchases yet</Text></View>} />}
+          {activeTab === "Expenses" && <FlatList data={visibleExpenses} renderItem={renderExpense} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingExpenses} onRefresh={refetchExpenses} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="arrow-down-circle" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No expenses yet</Text></View>} />}
+          {activeTab === "Credits" && <FlatList data={visibleCredits} renderItem={renderCredit} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingCredits} onRefresh={refetchCredits} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="clock" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No credits yet</Text></View>} />}
         </>
       )}
 
@@ -493,7 +505,7 @@ export default function TransactionsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 14 },
+  header: { paddingHorizontal: 20, paddingBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 22, color: "#FFFFFF" },
   tabBar: { flexDirection: "row", borderBottomWidth: 1 },
   tab: { flex: 1, paddingVertical: 14, alignItems: "center" },

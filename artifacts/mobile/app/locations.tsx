@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useListLocations, useCreateLocation, useUpdateLocation, useDeleteLocation } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, getAllowedLocationIds } from "@/context/AuthContext";
 
 type Location = { id: number; name: string; address?: string | null; phone?: string | null; isActive: boolean };
 const emptyForm = { name: "", address: "", phone: "" };
@@ -26,7 +26,9 @@ export default function LocationsScreen() {
   const createMut = useCreateLocation();
   const updateMut = useUpdateLocation();
   const deleteMut = useDeleteLocation();
-  const items = (raw ?? []) as unknown as Location[];
+  const allItems = (raw ?? []) as unknown as Location[];
+  const allowedLocationIds = getAllowedLocationIds(user);
+  const items = isAdmin ? allItems : allItems.filter(l => allowedLocationIds === null || allowedLocationIds.has(l.id));
 
   const openAdd = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };
   const openEdit = (l: Location) => { setEditItem(l); setForm({ name: l.name, address: l.address ?? "", phone: l.phone ?? "" }); setShowModal(true); };

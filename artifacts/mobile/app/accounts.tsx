@@ -8,7 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useListAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount, customFetch } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, getAllowedAccountIds } from "@/context/AuthContext";
 
 type Account = { id: number; name: string; type: string; balance: string; currency: string; isActive: boolean };
 const ACCOUNT_TYPES = ["cash", "bank", "mobile", "other"];
@@ -30,7 +30,9 @@ export default function AccountsScreen() {
   const createMut = useCreateAccount();
   const updateMut = useUpdateAccount();
   const deleteMut = useDeleteAccount();
-  const items = (raw ?? []) as unknown as Account[];
+  const allItems = (raw ?? []) as unknown as Account[];
+  const allowedAccountIds = getAllowedAccountIds(user);
+  const items = isAdmin ? allItems : allItems.filter(a => allowedAccountIds === null || allowedAccountIds.has(a.id));
   const total = items.reduce((sum, a) => sum + parseFloat(a.balance), 0);
 
   const openAdd = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };

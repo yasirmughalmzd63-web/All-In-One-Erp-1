@@ -33,11 +33,14 @@ export default function UserReportScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const isAdmin = user?.role === "admin";
+
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const rows = await customFetch<UserReport[]>("/api/sales/user-report");
-      setData(rows);
+      // Non-admin users only see their own report row
+      setData(isAdmin ? rows : rows.filter(r => r.userId === user?.id));
     } catch {}
     setLoading(false);
     setRefreshing(false);
@@ -114,8 +117,8 @@ export default function UserReportScreen() {
           <Feather name="arrow-left" size={20} color="#FFF" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>User Report</Text>
-          <Text style={styles.headerSub}>Stock issued · Cash collected · Balances</Text>
+          <Text style={styles.headerTitle}>{isAdmin ? "User Report" : "My Report"}</Text>
+          <Text style={styles.headerSub}>{isAdmin ? "All users · Sales · Cash · Balances" : "Your sales · Cash collected · Balances"}</Text>
         </View>
       </LinearGradient>
 
