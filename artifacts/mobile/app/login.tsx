@@ -50,9 +50,9 @@ export default function LoginScreen() {
     <LinearGradient colors={["#1E3A8A", "#1E40AF", "#2563EB"]} style={[styles.container, { paddingTop: topInset }]}>
       <View style={styles.logoArea}>
         <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>E</Text>
+          <Text style={styles.logoText}>C</Text>
         </View>
-        <Text style={styles.appName}>ERP PRO</Text>
+        <Text style={styles.appName}>COINS SALE</Text>
         <Text style={styles.tagline}>Complete Business Management</Text>
       </View>
 
@@ -125,7 +125,8 @@ export default function LoginScreen() {
       </View>
 
       <View style={[styles.footer, { paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 16 }]}>
-        <Text style={styles.footerText}>ERP PRO v1.0 • Secure Business Platform</Text>
+        <Text style={styles.footerText}>Coins Sale v1.0 • Secure Business Platform</Text>
+        <Text style={[styles.footerText, { marginTop: 4 }]}>Made by Yasir Mughal</Text>
       </View>
     </LinearGradient>
   );

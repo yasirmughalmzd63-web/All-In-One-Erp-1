@@ -173,7 +173,7 @@ export default function POSScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 8, backgroundColor: colors.headerBg }]}>
         <View>
-          <Text style={styles.headerTitle}>ERP PRO</Text>
+          <Text style={styles.headerTitle}>COINS SALE</Text>
           <Text style={styles.headerSub}>Point of Sale</Text>
         </View>
         <View style={styles.headerRight}>

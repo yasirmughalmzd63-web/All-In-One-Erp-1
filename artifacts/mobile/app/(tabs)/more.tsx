@@ -73,7 +73,7 @@ export default function MoreScreen() {
           <View style={[styles.infoRow, { borderBottomColor: colors.border, borderBottomWidth: 1 }]}>
             <Feather name="info" size={16} color={colors.mutedForeground} />
             <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>Version</Text>
-            <Text style={[styles.infoValue, { color: colors.text }]}>ERP PRO 1.0.0</Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>Coins Sale 1.0.0</Text>
           </View>
           <View style={styles.infoRow}>
             <Feather name="user" size={16} color={colors.mutedForeground} />
