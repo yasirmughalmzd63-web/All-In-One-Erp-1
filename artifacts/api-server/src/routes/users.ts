@@ -15,9 +15,10 @@ router.get("/users", requireAuth, async (req, res): Promise<void> => {
     role: usersTable.role,
     locationId: usersTable.locationId,
     isActive: usersTable.isActive,
+    privileges: usersTable.privileges,
     createdAt: usersTable.createdAt,
   }).from(usersTable).orderBy(usersTable.name);
-  res.json(users.map(u => ({ ...u, createdAt: u.createdAt.toISOString() })));
+  res.json(users.map(u => ({ ...u, privileges: u.privileges ? JSON.parse(u.privileges) : null, createdAt: u.createdAt.toISOString() })));
 });
 
 router.post("/users", requireAuth, async (req, res): Promise<void> => {
@@ -37,8 +38,9 @@ router.post("/users", requireAuth, async (req, res): Promise<void> => {
 router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw!, 10);
-  const { name, role, locationId, isActive, password } = req.body as {
+  const { name, role, locationId, isActive, password, privileges } = req.body as {
     name?: string; role?: string; locationId?: number | null; isActive?: boolean; password?: string;
+    privileges?: string[] | null;
   };
   const updateData: Record<string, unknown> = {};
   if (name != null) updateData.name = name;
@@ -46,11 +48,20 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   if (locationId !== undefined) updateData.locationId = locationId;
   if (isActive != null) updateData.isActive = isActive;
   if (password) updateData.passwordHash = hashPassword(password);
+  if (privileges !== undefined) updateData.privileges = privileges == null ? null : JSON.stringify(privileges);
 
   const [user] = await db.update(usersTable).set(updateData).where(eq(usersTable.id, id)).returning();
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   await logAudit(req.userId, "update", "user", id);
-  res.json({ ...user, createdAt: user.createdAt.toISOString() });
+  res.json({ ...user, privileges: user.privileges ? JSON.parse(user.privileges) : null, createdAt: user.createdAt.toISOString() });
+});
+
+router.get("/users/:id/privileges", requireAuth, async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw!, 10);
+  const [user] = await db.select({ id: usersTable.id, role: usersTable.role, privileges: usersTable.privileges }).from(usersTable).where(eq(usersTable.id, id));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  res.json({ userId: id, role: user.role, privileges: user.privileges ? JSON.parse(user.privileges) : null });
 });
 
 router.delete("/users/:id", requireAuth, async (req, res): Promise<void> => {

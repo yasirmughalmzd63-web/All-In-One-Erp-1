@@ -16,6 +16,8 @@ import walletsRouter from "./wallets";
 import auditRouter from "./audit";
 import dashboardRouter from "./dashboard";
 import seedRouter from "./seed";
+import currenciesRouter from "./currencies";
+import cashCountsRouter from "./cash-counts";
 
 const router: IRouter = Router();
 
@@ -36,5 +38,7 @@ router.use(walletsRouter);
 router.use(auditRouter);
 router.use(dashboardRouter);
 router.use(seedRouter);
+router.use(currenciesRouter);
+router.use(cashCountsRouter);
 
 export default router;

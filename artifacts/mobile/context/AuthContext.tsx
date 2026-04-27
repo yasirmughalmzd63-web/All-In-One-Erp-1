@@ -9,7 +9,22 @@ export interface AuthUser {
   role: string;
   locationId: number | null;
   isActive: boolean;
+  privileges: string[] | null;
   createdAt: string;
+}
+
+export const ALL_MODULES = [
+  "dashboard", "pos", "sales", "purchases", "expenses", "credits",
+  "inventory", "customers", "suppliers", "accounts", "locations",
+  "categories", "users", "audit", "currency", "cash_count",
+] as const;
+export type AppModule = typeof ALL_MODULES[number];
+
+export function hasPrivilege(user: AuthUser | null, module: AppModule): boolean {
+  if (!user) return false;
+  if (user.role === "admin") return true;
+  if (!user.privileges || user.privileges.length === 0) return true;
+  return user.privileges.includes(module);
 }
 
 interface AuthContextType {

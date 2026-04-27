@@ -12,3 +12,5 @@ export * from "./expenses";
 export * from "./credits";
 export * from "./wallets";
 export * from "./audit";
+export * from "./currencies";
+export * from "./cash-counts";
