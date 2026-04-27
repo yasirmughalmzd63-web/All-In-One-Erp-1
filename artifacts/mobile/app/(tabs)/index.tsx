@@ -21,11 +21,18 @@ import {
   useListCustomers,
   useListAccounts,
   useCreateSale,
+  useGetDashboard,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
 const NUMPAD_KEYS = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], [".", "0", "⌫"]];
+
+function formatK(n: number): string {
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean };
 type Customer = { id: number; name: string; phone?: string | null };
@@ -85,6 +92,7 @@ export default function POSScreen() {
   const { data: productsRaw } = useListProducts();
   const { data: customersRaw } = useListCustomers();
   const { data: accountsRaw } = useListAccounts();
+  const { data: dashboardRaw } = useGetDashboard();
   const createSaleMutation = useCreateSale();
 
   const products = (productsRaw ?? []) as unknown as Product[];
@@ -97,9 +105,15 @@ export default function POSScreen() {
     ? parseFloat(rateMode === "wholesale" ? (selectedProduct.wholesalePrice || selectedProduct.unitPrice) : selectedProduct.unitPrice)
     : 0;
   const qty = selectedProduct && parsedAmount > 0 && activePrice > 0 ? Math.round(parsedAmount / activePrice) : 0;
-  const accountBalance = selectedAccount ? parseFloat(selectedAccount.balance) : null;
-  const stockValue = selectedProduct ? selectedProduct.stock * parseFloat(selectedProduct.unitPrice) : null;
-  const leftBalance = accountBalance !== null ? accountBalance - parsedAmount : null;
+
+  const dash = dashboardRaw as unknown as { totalAccountsBalance?: string; totalStockValue?: string; creditReceivable?: string; creditPayable?: string } | undefined;
+  const totalBank = dash?.totalAccountsBalance ? parseFloat(dash.totalAccountsBalance) : null;
+  const totalStock = dash?.totalStockValue ? parseFloat(dash.totalStockValue) : null;
+  const totalCredit = dash?.creditReceivable ? parseFloat(dash.creditReceivable) : null;
+  const totalPayable = dash?.creditPayable ? parseFloat(dash.creditPayable) : null;
+  const leftBalance = (totalBank !== null && totalStock !== null && totalCredit !== null && totalPayable !== null)
+    ? totalBank + totalStock + totalCredit - totalPayable
+    : null;
 
   const { typedPart, ghostPart } = (() => {
     if (amount.includes(".")) {
@@ -295,25 +309,34 @@ export default function POSScreen() {
 
         <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={styles.infoCell}>
-            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>
-              {selectedAccount ? selectedAccount.name.toUpperCase() : "ACCOUNT"}
-            </Text>
-            <Text style={[styles.infoValue, { color: accountBalance !== null ? colors.primary : colors.mutedForeground }]}>
-              {accountBalance !== null ? `$${accountBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
-            </Text>
-          </View>
-          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
-          <View style={styles.infoCell}>
-            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>STOCK VALUE</Text>
-            <Text style={[styles.infoValue, { color: stockValue !== null ? colors.purchase : colors.mutedForeground }]}>
-              {stockValue !== null ? `$${stockValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+            <Feather name="briefcase" size={11} color={colors.primary} style={{ marginBottom: 3 }} />
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>BANK</Text>
+            <Text style={[styles.infoValue, { color: totalBank !== null ? colors.primary : colors.mutedForeground }]} numberOfLines={1}>
+              {totalBank !== null ? formatK(totalBank) : "—"}
             </Text>
           </View>
           <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
           <View style={styles.infoCell}>
-            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>LEFT BALANCE</Text>
-            <Text style={[styles.infoValue, { color: leftBalance === null ? colors.mutedForeground : leftBalance >= 0 ? colors.success : colors.danger }]}>
-              {leftBalance !== null ? `$${leftBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
+            <Feather name="package" size={11} color={colors.purchase} style={{ marginBottom: 3 }} />
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>STOCK</Text>
+            <Text style={[styles.infoValue, { color: totalStock !== null ? colors.purchase : colors.mutedForeground }]} numberOfLines={1}>
+              {totalStock !== null ? formatK(totalStock) : "—"}
+            </Text>
+          </View>
+          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
+          <View style={styles.infoCell}>
+            <Feather name="trending-up" size={11} color={colors.credit} style={{ marginBottom: 3 }} />
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>CREDIT</Text>
+            <Text style={[styles.infoValue, { color: totalCredit !== null ? colors.credit : colors.mutedForeground }]} numberOfLines={1}>
+              {totalCredit !== null ? formatK(totalCredit) : "—"}
+            </Text>
+          </View>
+          <View style={[styles.infoSep, { backgroundColor: colors.border }]} />
+          <View style={styles.infoCell}>
+            <Feather name="activity" size={11} color={leftBalance !== null && leftBalance >= 0 ? colors.success : colors.danger} style={{ marginBottom: 3 }} />
+            <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>NET WORTH</Text>
+            <Text style={[styles.infoValue, { color: leftBalance === null ? colors.mutedForeground : leftBalance >= 0 ? colors.success : colors.danger }]} numberOfLines={1}>
+              {leftBalance !== null ? formatK(leftBalance) : "—"}
             </Text>
           </View>
         </View>
