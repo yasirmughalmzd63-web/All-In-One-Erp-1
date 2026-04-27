@@ -29,9 +29,9 @@ import { useColors } from "@/hooks/useColors";
 const NUMPAD_KEYS = [["7", "8", "9"], ["4", "5", "6"], ["1", "2", "3"], [".", "0", "⌫"]];
 
 function formatK(n: number): string {
-  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean };
@@ -179,11 +179,42 @@ export default function POSScreen() {
       setAmount("0");
       Alert.alert(
         "✓ Sale Complete",
-        `${selectedProduct.name}\nQTY: ${qty} ${selectedProduct.unit}\nRate: ${rateMode === "wholesale" ? "Wholesale" : "Retail"} @ $${activePrice.toFixed(2)}\nAmount: $${parsedAmount.toFixed(2)}`,
+        `${selectedProduct.name}\nQTY: ${qty} ${selectedProduct.unit}\nRate: ${rateMode === "wholesale" ? "Wholesale" : "Retail"} @ ${activePrice.toFixed(2)}/${selectedProduct.unit}\nAmount: ${parsedAmount.toFixed(2)}`,
         [{ text: "New Sale", onPress: () => { setSelectedProduct(null); setSelectedCustomer(null); } }, { text: "OK" }]
       );
     } catch (e: unknown) {
       Alert.alert("Error", e instanceof Error ? e.message : "Sale failed");
+    }
+  };
+
+  const handleCreditSale = async () => {
+    if (!selectedProduct) { Alert.alert("Select Product", "Please select a product first."); return; }
+    if (qty <= 0 || parsedAmount <= 0) { Alert.alert("Enter Amount", "Please enter a valid amount."); return; }
+    if (!selectedCustomer) { Alert.alert("Customer Required", "Please select a customer for a credit sale."); return; }
+    if (!user) return;
+    try {
+      await (createSaleMutation as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({
+        data: {
+          userId: user.id,
+          customerId: selectedCustomer.id,
+          accountId: selectedAccount?.id ?? null,
+          locationId: user.locationId ?? null,
+          items: [{ productId: selectedProduct.id, qty, unitPrice: activePrice.toFixed(8) }],
+          discount: "0.00000000", tax: "0.00000000",
+          amountPaid: "0.00000000",
+          paymentMethod: "credit", notes: rateMode === "wholesale" ? "Wholesale rate — credit" : "Credit sale",
+        },
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      queryClient.invalidateQueries();
+      setAmount("0");
+      Alert.alert(
+        "Credit Entry Added",
+        `${selectedProduct.name}\nQTY: ${qty} ${selectedProduct.unit}\nAmount: ${parsedAmount.toFixed(2)}\nCustomer: ${selectedCustomer.name}\n\nEntry saved to Credits.`,
+        [{ text: "New Sale", onPress: () => { setSelectedProduct(null); setSelectedCustomer(null); } }, { text: "OK" }]
+      );
+    } catch (e: unknown) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Credit sale failed");
     }
   };
 
@@ -217,10 +248,10 @@ export default function POSScreen() {
                 </View>
                 <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
                   <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.primary }}>Retail ${parseFloat(selectedProduct.unitPrice).toFixed(2)}</Text>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.primary }}>Retail {parseFloat(selectedProduct.unitPrice).toFixed(2)}</Text>
                   </View>
                   <View style={{ backgroundColor: colors.purchaseBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.purchase }}>Wholesale ${parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.purchase }}>Wholesale {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
                   </View>
                   <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: selectedProduct.stock > 0 ? colors.success : colors.danger }}>
                     {selectedProduct.stock} {selectedProduct.unit}
@@ -247,7 +278,7 @@ export default function POSScreen() {
             >
               <Feather name="tag" size={13} color={rateMode === "normal" ? "#FFF" : colors.mutedForeground} />
               <Text style={[styles.rateBtnText, { color: rateMode === "normal" ? "#FFF" : colors.mutedForeground }]}>
-                Retail ${parseFloat(selectedProduct.unitPrice).toFixed(2)}
+                Retail {parseFloat(selectedProduct.unitPrice).toFixed(2)}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -256,7 +287,7 @@ export default function POSScreen() {
             >
               <Feather name="layers" size={13} color={rateMode === "wholesale" ? "#FFF" : colors.mutedForeground} />
               <Text style={[styles.rateBtnText, { color: rateMode === "wholesale" ? "#FFF" : colors.mutedForeground }]}>
-                Wholesale ${parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}
+                Wholesale {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}
               </Text>
             </TouchableOpacity>
           </View>
@@ -266,7 +297,6 @@ export default function POSScreen() {
           <View style={styles.amountSection}>
             <Text style={[styles.amountLabel, { color: colors.mutedForeground }]}>AMOUNT (8 DECIMALS)</Text>
             <Text style={[styles.amountValue, { color: colors.text }]}>
-              <Text style={{ color: colors.primary, fontSize: 24 }}>$ </Text>
               {typedPart}
               <Text style={{ color: colors.mutedForeground, opacity: 0.35 }}>{ghostPart}</Text>
             </Text>
@@ -275,7 +305,7 @@ export default function POSScreen() {
           <View style={styles.qtySection}>
             <View>
               <Text style={[styles.qtyLabel, { color: colors.mutedForeground }]}>
-                QTY{selectedProduct ? ` @ $${activePrice.toFixed(2)}/${selectedProduct.unit}` : ""}
+                QTY{selectedProduct ? ` @ ${activePrice.toFixed(2)}/${selectedProduct.unit}` : ""}
               </Text>
               <Text style={[styles.qtyValue, { color: qty > 0 ? colors.success : colors.mutedForeground }]}>
                 {qty > 0 ? qty.toLocaleString() : "—"}
@@ -368,20 +398,28 @@ export default function POSScreen() {
             <Feather name="rotate-ccw" size={16} color={colors.danger} />
           </TouchableOpacity>
           <TouchableOpacity
+            style={[styles.creditBtn, { backgroundColor: qty > 0 && selectedProduct ? colors.credit : colors.mutedForeground, opacity: createSaleMutation.isPending ? 0.7 : 1 }]}
+            onPress={handleCreditSale}
+            disabled={createSaleMutation.isPending || qty <= 0 || !selectedProduct}
+          >
+            <Feather name="clock" size={18} color="#FFF" />
+            <Text style={styles.completeBtnText}>Credit</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.completeBtn, { backgroundColor: qty > 0 && selectedProduct ? colors.success : colors.mutedForeground, opacity: createSaleMutation.isPending ? 0.7 : 1 }]}
             onPress={handleCompleteSale}
             disabled={createSaleMutation.isPending || qty <= 0 || !selectedProduct}
           >
             {createSaleMutation.isPending
               ? <Text style={styles.completeBtnText}>Processing...</Text>
-              : <><Feather name="check-circle" size={20} color="#FFF" /><Text style={styles.completeBtnText}>Complete Sale</Text></>}
+              : <><Feather name="check-circle" size={18} color="#FFF" /><Text style={styles.completeBtnText}>Complete Sale</Text></>}
           </TouchableOpacity>
         </View>
       </ScrollView>
 
-      <PickerModal<Product> visible={showProductModal} title="Select Product" items={activeProducts} onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }} onClose={() => setShowProductModal(false)} renderSub={p => `Retail $${parseFloat(p.unitPrice).toFixed(2)}  ·  Wholesale $${parseFloat(p.wholesalePrice || p.unitPrice).toFixed(2)}  ·  Stock: ${p.stock}`} />
+      <PickerModal<Product> visible={showProductModal} title="Select Product" items={activeProducts} onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }} onClose={() => setShowProductModal(false)} renderSub={p => `Retail ${parseFloat(p.unitPrice).toFixed(2)}  ·  Wholesale ${parseFloat(p.wholesalePrice || p.unitPrice).toFixed(2)}  ·  Stock: ${p.stock}`} />
       <PickerModal<Customer> visible={showCustomerModal} title="Select Customer" items={customers} onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)} renderSub={c => c.phone ?? ""} />
-      <PickerModal<Account> visible={showAccountModal} title="Select Account" items={accounts} onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)} renderSub={a => `${a.type}  ·  Balance: $${parseFloat(a.balance).toFixed(2)}`} />
+      <PickerModal<Account> visible={showAccountModal} title="Select Account" items={accounts} onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)} renderSub={a => `${a.type}  ·  Balance: ${parseFloat(a.balance).toFixed(2)}`} />
     </View>
   );
 }
@@ -414,19 +452,20 @@ const styles = StyleSheet.create({
   optionsCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   optionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, gap: 10, borderBottomWidth: 1 },
   optionIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  optionLabel: { fontFamily: "Inter_500Medium", fontSize: 13, width: 76 },
-  optionValue: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 14, textAlign: "right" },
-  infoCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, flexDirection: "row", overflow: "hidden" },
-  infoCell: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, alignItems: "center" },
-  infoLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8, marginBottom: 4, textAlign: "center" },
-  infoValue: { fontFamily: "Inter_700Bold", fontSize: 14, textAlign: "center" },
-  infoSep: { width: 1 },
-  numpadContainer: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, padding: 8, gap: 6 },
-  numpadRow: { flexDirection: "row", gap: 6 },
-  numpadKey: { flex: 1, height: 58, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
-  numpadKeyText: { fontFamily: "Inter_600SemiBold", fontSize: 22 },
-  actionsRow: { flexDirection: "row", marginHorizontal: 14, marginTop: 10, gap: 10 },
-  clearBtn: { width: 56, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center" },
-  completeBtn: { flex: 1, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10 },
-  completeBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" },
+  optionLabel: { fontFamily: "Inter_500Medium", fontSize: 13, width: 70 },
+  optionValue: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13, textAlign: "right", marginRight: 4 },
+  infoCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, flexDirection: "row", alignItems: "center" },
+  infoCell: { flex: 1, alignItems: "center", paddingVertical: 14 },
+  infoSep: { width: 1, height: 40 },
+  infoLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.5 },
+  infoValue: { fontFamily: "Inter_700Bold", fontSize: 12, marginTop: 2 },
+  numpadContainer: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, padding: 10, gap: 8 },
+  numpadRow: { flexDirection: "row", gap: 8 },
+  numpadKey: { flex: 1, borderRadius: 12, borderWidth: 1, height: 56, alignItems: "center", justifyContent: "center" },
+  numpadKeyText: { fontFamily: "Inter_700Bold", fontSize: 20 },
+  actionsRow: { marginHorizontal: 14, marginTop: 10, flexDirection: "row", gap: 8 },
+  clearBtn: { width: 52, height: 56, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  creditBtn: { flex: 1, height: 56, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  completeBtn: { flex: 2, height: 56, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  completeBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFFFFF" },
 });
