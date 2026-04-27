@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useListAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount, customFetch } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 
 type Account = { id: number; name: string; type: string; balance: string; currency: string; isActive: boolean };
 const ACCOUNT_TYPES = ["cash", "bank", "mobile", "other"];
@@ -15,6 +16,8 @@ const emptyForm = { name: "", type: "cash", currency: "USD", balance: "0" };
 
 export default function AccountsScreen() {
   const colors = useColors();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -138,14 +141,14 @@ export default function AccountsScreen() {
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: parseFloat(a.balance) >= 0 ? colors.success : colors.danger }}>
                     {a.currency} {parseFloat(a.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
-                  <View style={{ flexDirection: "row", gap: 6 }}>
+                  {isAdmin && <View style={{ flexDirection: "row", gap: 6 }}>
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(a)}>
                       <Feather name="edit-2" size={13} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(a)}>
                       <Feather name="trash-2" size={13} color={colors.danger} />
                     </TouchableOpacity>
-                  </View>
+                  </View>}
                 </View>
               </View>
             </View>
@@ -153,9 +156,9 @@ export default function AccountsScreen() {
         />
       )}
 
-      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
+      {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
         <Feather name="plus" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
+      </TouchableOpacity>}
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>

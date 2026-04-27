@@ -13,6 +13,7 @@ import {
   useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useListCategories,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 
 type Product = {
   id: number; name: string; sku?: string | null; categoryName?: string | null;
@@ -40,6 +41,8 @@ const chipStyles = StyleSheet.create({
 export default function InventoryScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const queryClient = useQueryClient();
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
@@ -141,10 +144,10 @@ export default function InventoryScreen() {
           <Text style={styles.headerTitle}>Inventory</Text>
           <Text style={styles.headerSub}>{products.length} products · ${totalStockValue.toLocaleString(undefined, { maximumFractionDigits: 0 })} total value</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
+        {isAdmin && <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
           <Feather name="plus" size={18} color="#FFF" />
           <Text style={styles.addBtnText}>Add</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
       </LinearGradient>
 
       <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -201,14 +204,14 @@ export default function InventoryScreen() {
                       </View>
                     </View>
                   </View>
-                  <View style={{ flexDirection: "row", gap: 6 }}>
+                  {isAdmin && <View style={{ flexDirection: "row", gap: 6 }}>
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(p)}>
                       <Feather name="edit-2" size={13} color={colors.primary} />
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(p)}>
                       <Feather name="trash-2" size={13} color={colors.danger} />
                     </TouchableOpacity>
-                  </View>
+                  </View>}
                 </View>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   <PriceChip label="COST" value={`$${parseFloat(p.costPrice).toFixed(2)}`} color={colors.mutedForeground} bg={colors.input} />
@@ -221,9 +224,9 @@ export default function InventoryScreen() {
         />
       )}
 
-      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
+      {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
         <Feather name="plus" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
+      </TouchableOpacity>}
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>

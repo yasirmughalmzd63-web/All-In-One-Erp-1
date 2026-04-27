@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, productsTable, categoriesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { requireAdmin } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -28,6 +29,7 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
   const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, locationId, unit } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
     unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; locationId?: number | null; unit?: string;
@@ -43,6 +45,7 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
@@ -65,9 +68,11 @@ router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.delete("/products/:id", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [row] = await db.delete(productsTable).where(eq(productsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Product not found" }); return; }
+  await logAudit(req.userId, "delete", "product", id);
   res.sendStatus(204);
 });
 

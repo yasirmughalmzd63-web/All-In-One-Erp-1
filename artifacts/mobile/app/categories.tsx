@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useListCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 
 type Category = { id: number; name: string; type: string; description?: string | null };
 const TYPES = ["product", "expense", "other"];
@@ -16,6 +17,8 @@ const typeColor = { product: ["#2563EB", "#EFF6FF"], expense: ["#EA580C", "#FFF7
 
 export default function CategoriesScreen() {
   const colors = useColors();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<Category | null>(null);
@@ -69,8 +72,8 @@ export default function CategoriesScreen() {
                   </View>
                   <View style={[styles.typeBadge, { backgroundColor: tb }]}><Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: tc }}>{c.type}</Text></View>
                   <View style={{ gap: 6 }}>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(c)}><Feather name="edit-2" size={13} color={colors.primary} /></TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(c)}><Feather name="trash-2" size={13} color={colors.danger} /></TouchableOpacity>
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(c)}><Feather name="edit-2" size={13} color={colors.primary} /></TouchableOpacity>}
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(c)}><Feather name="trash-2" size={13} color={colors.danger} /></TouchableOpacity>}
                   </View>
                 </View>
               </View>
@@ -78,7 +81,7 @@ export default function CategoriesScreen() {
           }}
         />
       )}
-      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.danger }]} onPress={openAdd}><Feather name="plus" size={24} color="#FFFFFF" /></TouchableOpacity>
+      {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.danger }]} onPress={openAdd}><Feather name="plus" size={24} color="#FFFFFF" /></TouchableOpacity>}
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>

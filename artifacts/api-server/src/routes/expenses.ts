@@ -3,6 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { db, expensesTable, categoriesTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { canModify } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -49,6 +50,10 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  const [existing] = await db.select({ userId: expensesTable.userId }).from(expensesTable).where(eq(expensesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Expense not found" }); return; }
+  if (!canModify(req, res, existing.userId)) return;
+
   const { title, amount, notes } = req.body as { title?: string; amount?: string; notes?: string | null };
   const updates: Record<string, unknown> = {};
   if (title != null) updates.title = title;
@@ -56,13 +61,18 @@ router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
   if (notes !== undefined) updates.notes = notes;
   const [row] = await db.update(expensesTable).set(updates).where(eq(expensesTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Expense not found" }); return; }
+  await logAudit(req.userId, "update", "expense", id);
   res.json({ ...row, categoryName: null, accountName: null, createdAt: row.createdAt.toISOString() });
 });
 
 router.delete("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const [row] = await db.delete(expensesTable).where(eq(expensesTable.id, id)).returning();
-  if (!row) { res.status(404).json({ error: "Expense not found" }); return; }
+  const [existing] = await db.select({ userId: expensesTable.userId }).from(expensesTable).where(eq(expensesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Expense not found" }); return; }
+  if (!canModify(req, res, existing.userId)) return;
+
+  await db.delete(expensesTable).where(eq(expensesTable.id, id));
+  await logAudit(req.userId, "delete", "expense", id);
   res.sendStatus(204);
 });
 

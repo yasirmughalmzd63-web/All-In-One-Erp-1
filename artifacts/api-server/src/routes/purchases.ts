@@ -3,6 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { db, purchasesTable, purchaseItemsTable, productsTable, suppliersTable, locationsTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { canModify } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -110,6 +111,28 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
 
   await logAudit(req.userId, "create", "purchase", purchase!.id, `Purchase ${invoiceNo}`);
   res.status(201).json({ ...purchase!, supplierName: null, items: itemsWithTotal.map(i => ({ ...i, productName: "" })), createdAt: purchase!.createdAt.toISOString() });
+});
+
+router.delete("/purchases/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  const [existing] = await db.select({ userId: purchasesTable.userId, accountId: purchasesTable.accountId, total: purchasesTable.total })
+    .from(purchasesTable).where(eq(purchasesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Purchase not found" }); return; }
+  if (!canModify(req, res, existing.userId)) return;
+
+  await db.delete(purchaseItemsTable).where(eq(purchaseItemsTable.purchaseId, id));
+  await db.delete(purchasesTable).where(eq(purchasesTable.id, id));
+
+  if (existing.accountId) {
+    const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, existing.accountId));
+    if (account) {
+      const newBal = parseFloat(account.balance) + parseFloat(existing.total);
+      await db.update(accountsTable).set({ balance: newBal.toFixed(8) }).where(eq(accountsTable.id, existing.accountId));
+    }
+  }
+
+  await logAudit(req.userId, "delete", "purchase", id);
+  res.sendStatus(204);
 });
 
 export default router;

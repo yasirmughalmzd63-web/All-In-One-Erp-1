@@ -8,6 +8,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { useListUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
+import { useAuth } from "@/context/AuthContext";
 
 type User = { id: number; name: string; username: string; role: string; isActive: boolean; locationId?: number | null };
 const ROLES = ["admin", "manager", "cashier"];
@@ -15,6 +16,8 @@ const emptyForm = { name: "", username: "", password: "", role: "cashier" };
 
 export default function UsersScreen() {
   const colors = useColors();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editItem, setEditItem] = useState<User | null>(null);
@@ -88,8 +91,8 @@ export default function UsersScreen() {
                     </View>
                   </View>
                   <View style={{ gap: 8 }}>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(u)}><Feather name="edit-2" size={14} color={colors.primary} /></TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(u)}><Feather name="trash-2" size={14} color={colors.danger} /></TouchableOpacity>
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(u)}><Feather name="edit-2" size={14} color={colors.primary} /></TouchableOpacity>}
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(u)}><Feather name="trash-2" size={14} color={colors.danger} /></TouchableOpacity>}
                   </View>
                 </View>
               </View>
@@ -98,9 +101,9 @@ export default function UsersScreen() {
         />
       )}
 
-      <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
+      {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
         <Feather name="plus" size={24} color="#FFFFFF" />
-      </TouchableOpacity>
+      </TouchableOpacity>}
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>

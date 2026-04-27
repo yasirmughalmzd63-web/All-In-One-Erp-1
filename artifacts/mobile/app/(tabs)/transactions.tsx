@@ -11,15 +11,16 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useListSales, useListPurchases, useListExpenses, useListCredits,
   useListProducts, useListSuppliers, useListCustomers, useListAccounts, useListCategories,
-  useCreatePurchase, useCreateExpense, useCreateCredit, usePayCredit,
+  useCreatePurchase, useCreateExpense, useCreateCredit, usePayCredit, useDeleteExpense,
+  customFetch,
 } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 
-type Sale = { id: number; invoiceNo: string; customerName?: string | null; total: string; paymentMethod: string; status: string; createdAt: string; items?: Array<{ productName: string; qty: number; unitPrice: string }> };
-type Purchase = { id: number; invoiceNo: string; supplierName?: string | null; total: string; status: string; createdAt: string };
-type Expense = { id: number; title: string; amount: string; categoryName?: string | null; date: string; createdAt: string };
-type Credit = { id: number; type: string; partyName: string; partyType: string; amount: string; remainingAmount: string; status: string; dueDate?: string | null; createdAt: string };
+type Sale = { id: number; userId: number; invoiceNo: string; customerName?: string | null; total: string; paymentMethod: string; status: string; createdAt: string; items?: Array<{ productName: string; qty: number; unitPrice: string }> };
+type Purchase = { id: number; userId: number; invoiceNo: string; supplierName?: string | null; total: string; status: string; createdAt: string };
+type Expense = { id: number; userId: number; title: string; amount: string; categoryName?: string | null; date: string; createdAt: string };
+type Credit = { id: number; userId: number; type: string; partyName: string; partyType: string; amount: string; remainingAmount: string; status: string; dueDate?: string | null; createdAt: string };
 type Product = { id: number; name: string; unitPrice: string; unit: string };
 type Supplier = { id: number; name: string };
 type Customer = { id: number; name: string };
@@ -75,6 +76,62 @@ export default function TransactionsScreen() {
   const createExpense = useCreateExpense();
   const createCredit = useCreateCredit();
   const payCreditMutation = usePayCredit();
+  const deleteExpenseMutation = useDeleteExpense();
+
+  const isAdmin = user?.role === "admin";
+  const canDelete = (entryUserId: number) => isAdmin || entryUserId === user?.id;
+
+  const handleDeleteSale = (item: Sale) => {
+    if (!canDelete(item.userId)) return;
+    Alert.alert("Delete Sale", `Delete sale ${item.invoiceNo}? This cannot be undone.`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try {
+          await customFetch<void>(`/api/sales/${item.id}`, { method: "DELETE" });
+          queryClient.invalidateQueries();
+        } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete"); }
+      }},
+    ]);
+  };
+
+  const handleDeletePurchase = (item: Purchase) => {
+    if (!canDelete(item.userId)) return;
+    Alert.alert("Delete Purchase", `Delete purchase ${item.invoiceNo}?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try {
+          await customFetch<void>(`/api/purchases/${item.id}`, { method: "DELETE" });
+          queryClient.invalidateQueries();
+        } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete"); }
+      }},
+    ]);
+  };
+
+  const handleDeleteExpense = (item: Expense) => {
+    if (!canDelete(item.userId)) return;
+    Alert.alert("Delete Expense", `Delete "${item.title}"?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try {
+          await deleteExpenseMutation.mutateAsync({ id: item.id });
+          queryClient.invalidateQueries();
+        } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete"); }
+      }},
+    ]);
+  };
+
+  const handleDeleteCredit = (item: Credit) => {
+    if (!canDelete(item.userId)) return;
+    Alert.alert("Delete Credit", `Delete credit for ${item.partyName}?`, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try {
+          await customFetch<void>(`/api/credits/${item.id}`, { method: "DELETE" });
+          queryClient.invalidateQueries();
+        } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed to delete"); }
+      }},
+    ]);
+  };
 
   const [purForm, setPurForm] = useState({ supplierId: "", accountId: "", productId: "", qty: "", unitCost: "", discount: "0", notes: "" });
   const [expForm, setExpForm] = useState({ title: "", amount: "", categoryId: "", accountId: "", date: new Date().toISOString().split("T")[0]!, notes: "" });
@@ -171,6 +228,12 @@ export default function TransactionsScreen() {
     } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
   };
 
+  const DeleteBtn = ({ onPress }: { onPress: () => void }) => (
+    <TouchableOpacity style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: "center", justifyContent: "center" }} onPress={onPress}>
+      <Feather name="trash-2" size={13} color={colors.danger} />
+    </TouchableOpacity>
+  );
+
   const renderSale = ({ item }: { item: Sale }) => {
     const sc = statusColor(item.status);
     return (
@@ -178,13 +241,16 @@ export default function TransactionsScreen() {
         <View style={listStyles.cardHeader}>
           <View style={listStyles.cardLeft}>
             <View style={[listStyles.iconBox, { backgroundColor: colors.saleBg }]}><Feather name="shopping-cart" size={16} color={colors.sale} /></View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.invoiceNo}</Text>
               <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.customerName ?? "Walk-in"} • {item.paymentMethod}</Text>
             </View>
           </View>
           <View style={{ alignItems: "flex-end", gap: 4 }}>
-            <Text style={[listStyles.cardAmount, { color: colors.sale }]}>${parseFloat(item.total).toFixed(2)}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[listStyles.cardAmount, { color: colors.sale }]}>${parseFloat(item.total).toFixed(2)}</Text>
+              {canDelete(item.userId) && <DeleteBtn onPress={() => handleDeleteSale(item)} />}
+            </View>
             <Badge label={item.status} color={sc.color} bg={sc.bg} />
           </View>
         </View>
@@ -200,13 +266,16 @@ export default function TransactionsScreen() {
         <View style={listStyles.cardHeader}>
           <View style={listStyles.cardLeft}>
             <View style={[listStyles.iconBox, { backgroundColor: colors.purchaseBg }]}><Feather name="shopping-bag" size={16} color={colors.purchase} /></View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.invoiceNo}</Text>
               <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.supplierName ?? "No supplier"}</Text>
             </View>
           </View>
           <View style={{ alignItems: "flex-end", gap: 4 }}>
-            <Text style={[listStyles.cardAmount, { color: colors.purchase }]}>${parseFloat(item.total).toFixed(2)}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[listStyles.cardAmount, { color: colors.purchase }]}>${parseFloat(item.total).toFixed(2)}</Text>
+              {canDelete(item.userId) && <DeleteBtn onPress={() => handleDeletePurchase(item)} />}
+            </View>
             <Badge label={item.status} color={sc.color} bg={sc.bg} />
           </View>
         </View>
@@ -220,12 +289,17 @@ export default function TransactionsScreen() {
       <View style={listStyles.cardHeader}>
         <View style={listStyles.cardLeft}>
           <View style={[listStyles.iconBox, { backgroundColor: colors.expenseBg }]}><Feather name="arrow-down-circle" size={16} color={colors.expense} /></View>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.title}</Text>
             <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.categoryName ?? "Uncategorized"} • {item.date}</Text>
           </View>
         </View>
-        <Text style={[listStyles.cardAmount, { color: colors.expense }]}>${parseFloat(item.amount).toFixed(2)}</Text>
+        <View style={{ alignItems: "flex-end", gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={[listStyles.cardAmount, { color: colors.expense }]}>${parseFloat(item.amount).toFixed(2)}</Text>
+            {canDelete(item.userId) && <DeleteBtn onPress={() => handleDeleteExpense(item)} />}
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -237,13 +311,16 @@ export default function TransactionsScreen() {
         <View style={listStyles.cardHeader}>
           <View style={listStyles.cardLeft}>
             <View style={[listStyles.iconBox, { backgroundColor: colors.creditBg }]}><Feather name="clock" size={16} color={colors.credit} /></View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.partyName}</Text>
               <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.type === "receivable" ? "To receive" : "To pay"} • {item.partyType}</Text>
             </View>
           </View>
           <View style={{ alignItems: "flex-end", gap: 4 }}>
-            <Text style={[listStyles.cardAmount, { color: colors.credit }]}>${parseFloat(item.remainingAmount).toFixed(2)}</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Text style={[listStyles.cardAmount, { color: colors.credit }]}>${parseFloat(item.remainingAmount).toFixed(2)}</Text>
+              {canDelete(item.userId) && <DeleteBtn onPress={() => handleDeleteCredit(item)} />}
+            </View>
             <Badge label={item.status} color={sc.color} bg={sc.bg} />
           </View>
         </View>

@@ -3,6 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { db, creditsTable, customersTable, suppliersTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { canModify } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -70,6 +71,17 @@ router.post("/credits/:id/pay", requireAuth, async (req, res): Promise<void> => 
   const partyName = await getPartyName(updated!.partyId, updated!.partyType);
   await logAudit(req.userId, "payment", "credit", id, `Paid ${payAmount}${accountId ? ` via account #${accountId}` : ""}`);
   res.json({ ...updated!, partyName, createdAt: updated!.createdAt.toISOString() });
+});
+
+router.delete("/credits/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  const [existing] = await db.select({ userId: creditsTable.userId }).from(creditsTable).where(eq(creditsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!canModify(req, res, existing.userId)) return;
+
+  await db.delete(creditsTable).where(eq(creditsTable.id, id));
+  await logAudit(req.userId, "delete", "credit", id);
+  res.sendStatus(204);
 });
 
 export default router;
