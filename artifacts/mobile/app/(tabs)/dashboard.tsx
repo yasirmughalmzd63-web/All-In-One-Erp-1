@@ -1,9 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   Platform,
   RefreshControl,
   ScrollView,
@@ -13,14 +12,32 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useQuery } from "@tanstack/react-query";
+import { customFetch } from "@workspace/api-client-react";
 
-import { useGetDashboard } from "@workspace/api-client-react";
 import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
+
+type Period = "today" | "yesterday" | "weekly" | "monthly";
+
+const PERIODS: { key: Period; label: string }[] = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "weekly", label: "This Week" },
+  { key: "monthly", label: "This Month" },
+];
+
+const PERIOD_LABELS: Record<Period, string> = {
+  today: "Today's Activity",
+  yesterday: "Yesterday's Activity",
+  weekly: "This Week's Activity",
+  monthly: "This Month's Activity",
+};
 
 type Sale = { id: number; invoiceNo: string; customerName?: string | null; total: string; paymentMethod: string; createdAt: string };
 type Account = { id: number; name: string; balance: string; currency: string };
 type DashboardData = {
+  period: string;
   todaySales: string; todaySalesCount: number; todayPurchases: string; todayExpenses: string;
   totalCustomers: number; totalProducts: number; totalSuppliers: number;
   pendingCredits: string; pendingCreditsCount: number;
@@ -54,21 +71,45 @@ export default function DashboardScreen() {
   const { user } = useAuth();
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
-  const { data: raw, isLoading, refetch, isFetching } = useGetDashboard();
-  const dash = raw as unknown as DashboardData | undefined;
+  const [period, setPeriod] = useState<Period>("today");
+
+  const { data: dash, isLoading, refetch, isFetching } = useQuery<DashboardData>({
+    queryKey: ["dashboard", period],
+    queryFn: () => customFetch<DashboardData>(`/api/dashboard?period=${period}`),
+  });
 
   const fmt = (v?: string) => v ? `$${parseFloat(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00";
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <View>
-          <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0] ?? "User"} 👋</Text>
-          <Text style={styles.headerSub}>Business Dashboard</Text>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.greeting}>Hello, {user?.name?.split(" ")[0] ?? "User"} 👋</Text>
+            <Text style={styles.headerSub}>Business Dashboard</Text>
+          </View>
+          <View style={[styles.roleBadge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
+            <Text style={styles.roleText}>{user?.role?.toUpperCase()}</Text>
+          </View>
         </View>
-        <View style={[styles.roleBadge, { backgroundColor: "rgba(255,255,255,0.2)" }]}>
-          <Text style={styles.roleText}>{user?.role?.toUpperCase()}</Text>
-        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+          {PERIODS.map(p => {
+            const active = p.key === period;
+            return (
+              <TouchableOpacity
+                key={p.key}
+                style={[styles.pill, active ? styles.pillActive : styles.pillInactive]}
+                onPress={() => setPeriod(p.key)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.pillText, active ? styles.pillTextActive : styles.pillTextInactive]}>
+                  {p.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </LinearGradient>
 
       <ScrollView
@@ -84,9 +125,9 @@ export default function DashboardScreen() {
         ) : dash ? (
           <>
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Today's Activity</Text>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>{PERIOD_LABELS[period]}</Text>
               <View style={styles.statsGrid}>
-                <StatCard title="Sales" value={fmt(dash.todaySales)} sub={`${dash.todaySalesCount} transactions`} color={colors.sale} bg={colors.saleBg} icon="trending-up" />
+                <StatCard title="Sales" value={fmt(dash.todaySales)} sub={`${dash.todaySalesCount} transaction${dash.todaySalesCount !== 1 ? "s" : ""}`} color={colors.sale} bg={colors.saleBg} icon="trending-up" />
                 <StatCard title="Purchases" value={fmt(dash.todayPurchases)} color={colors.purchase} bg={colors.purchaseBg} icon="shopping-bag" />
               </View>
               <View style={[styles.statsGrid, { marginTop: 10 }]}>
@@ -135,7 +176,9 @@ export default function DashboardScreen() {
 
             {(dash.recentSales ?? []).length > 0 && (
               <View>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Sales</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>
+                  {period === "today" || period === "yesterday" ? "Sales" : `Sales — ${PERIOD_LABELS[period]}`}
+                </Text>
                 <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   {dash.recentSales.map((sale, idx, arr) => (
                     <View key={sale.id} style={[styles.summaryRow, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}>
@@ -155,6 +198,13 @@ export default function DashboardScreen() {
                 </View>
               </View>
             )}
+
+            {(dash.recentSales ?? []).length === 0 && (
+              <View style={[styles.emptyBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Feather name="inbox" size={32} color={colors.mutedForeground} />
+                <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No sales {period === "today" ? "today" : period === "yesterday" ? "yesterday" : "this period"}</Text>
+              </View>
+            )}
           </>
         ) : (
           <View style={{ alignItems: "center", padding: 40 }}>
@@ -169,11 +219,19 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingHorizontal: 20, paddingBottom: 20 },
+  header: { paddingHorizontal: 20, paddingBottom: 14 },
+  headerTop: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 },
   greeting: { fontFamily: "Inter_700Bold", fontSize: 22, color: "#FFFFFF" },
   headerSub: { fontFamily: "Inter_400Regular", fontSize: 13, color: "rgba(255,255,255,0.75)", marginTop: 2 },
   roleBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   roleText: { fontFamily: "Inter_700Bold", fontSize: 11, color: "#FFFFFF", letterSpacing: 1 },
+  pillRow: { flexDirection: "row", gap: 8, paddingBottom: 2 },
+  pill: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5 },
+  pillActive: { backgroundColor: "#FFFFFF", borderColor: "#FFFFFF" },
+  pillInactive: { backgroundColor: "rgba(255,255,255,0.12)", borderColor: "rgba(255,255,255,0.3)" },
+  pillText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  pillTextActive: { color: "#1E40AF" },
+  pillTextInactive: { color: "rgba(255,255,255,0.9)" },
   sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 16, marginBottom: 10 },
   statsGrid: { flexDirection: "row", gap: 10 },
   summaryCard: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
@@ -181,4 +239,6 @@ const styles = StyleSheet.create({
   summaryIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   summaryLabel: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 14 },
   summaryValue: { fontFamily: "Inter_700Bold", fontSize: 15 },
+  emptyBox: { borderRadius: 14, borderWidth: 1, alignItems: "center", paddingVertical: 36, gap: 10 },
+  emptyText: { fontFamily: "Inter_500Medium", fontSize: 14 },
 });
