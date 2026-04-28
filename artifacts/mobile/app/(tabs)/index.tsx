@@ -84,6 +84,7 @@ export default function POSScreen() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [copiedQty, setCopiedQty] = useState(false);
+  const [copyError, setCopyError] = useState(false);
   const [showProductModal, setShowProductModal] = useState(false);
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
@@ -247,7 +248,11 @@ export default function POSScreen() {
       }
       setCopiedQty(true);
       setTimeout(() => setCopiedQty(false), 2000);
-    } catch { Alert.alert("Copy QTY", `QTY: ${qty}`); }
+    } catch {
+      setCopyError(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      setTimeout(() => setCopyError(false), 2000);
+    }
   };
 
   const handleCompleteSale = async () => {
@@ -385,13 +390,10 @@ export default function POSScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
         {/* ── Balance tiles ──────────────────────────────────────────── */}
-        <View style={[styles.balanceGrid, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <BalanceTile label="BANK" icon="briefcase" value={bankBal} color={colors.primary} bg="#EFF6FF" colors={colors} />
-          <View style={[styles.balSep, { backgroundColor: colors.border }]} />
-          <BalanceTile label="STOCK" icon="package" value={stockVal} color="#D97706" bg="#FFF7ED" colors={colors} />
-          <View style={[styles.balSep, { backgroundColor: colors.border }]} />
-          <BalanceTile label="CREDIT IN" icon="trending-up" value={creditIn} color="#7C3AED" bg="#F3E8FF" colors={colors} />
-          <View style={[styles.balSep, { backgroundColor: colors.border }]} />
+        <View style={styles.balanceGrid}>
+          <BalanceTile label="BANK" icon="briefcase" value={bankBal} color={colors.primary} bg="#EFF6FF" colors={colors} borderColor={colors.border} />
+          <BalanceTile label="STOCK" icon="package" value={stockVal} color="#D97706" bg="#FFF7ED" colors={colors} borderColor={colors.border} />
+          <BalanceTile label="CREDIT IN" icon="trending-up" value={creditIn} color="#7C3AED" bg="#F3E8FF" colors={colors} borderColor={colors.border} />
           <BalanceTile
             label="OUTSTANDING"
             icon="alert-triangle"
@@ -399,6 +401,7 @@ export default function POSScreen() {
             color={outstanding !== null && outstanding > 0 ? colors.danger : colors.success}
             bg={outstanding !== null && outstanding > 0 ? "#FEF2F2" : "#ECFDF5"}
             colors={colors}
+            borderColor={outstanding !== null && outstanding > 0 ? colors.danger : colors.success}
           />
         </View>
 
@@ -520,13 +523,20 @@ export default function POSScreen() {
                 </Text>
                 <TouchableOpacity
                   style={[styles.copyBtn, {
-                    backgroundColor: copiedQty ? colors.saleBg : colors.secondary,
-                    borderColor: copiedQty ? colors.success : colors.border,
-                    paddingHorizontal: 8, paddingVertical: 6,
+                    backgroundColor: copyError ? "#FEF2F2" : copiedQty ? colors.saleBg : colors.secondary,
+                    borderColor: copyError ? colors.danger : copiedQty ? colors.success : colors.border,
+                    paddingHorizontal: 14, paddingVertical: 10, gap: 5,
                   }]}
                   onPress={handleCopyQty} disabled={qty <= 0}
                 >
-                  <Feather name={copiedQty ? "check" : "copy"} size={13} color={copiedQty ? colors.success : colors.primary} />
+                  <Feather
+                    name={copyError ? "alert-circle" : copiedQty ? "check" : "copy"}
+                    size={16}
+                    color={copyError ? colors.danger : copiedQty ? colors.success : colors.primary}
+                  />
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: copyError ? colors.danger : copiedQty ? colors.success : colors.primary }}>
+                    {copyError ? "Error!" : copiedQty ? "Copied" : "Copy"}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -740,16 +750,16 @@ export default function POSScreen() {
 }
 
 function BalanceTile({
-  label, icon, value, color, bg, colors,
+  label, icon, value, color, bg, colors, borderColor,
 }: {
   label: string; icon: string; value: number | null;
-  color: string; bg: string;
+  color: string; bg: string; borderColor: string;
   colors: ReturnType<typeof import("@/hooks/useColors").useColors>;
 }) {
   return (
-    <View style={[styles.balanceTile]}>
+    <View style={[styles.balanceTile, { backgroundColor: colors.card, borderColor }]}>
       <View style={[styles.balanceIconWrap, { backgroundColor: bg }]}>
-        <Feather name={icon as "briefcase"} size={14} color={color} />
+        <Feather name={icon as "briefcase"} size={15} color={color} />
       </View>
       <Text style={[styles.balanceLabel, { color: colors.mutedForeground }]}>{label}</Text>
       <Text style={[styles.balanceValue, { color: value !== null ? color : colors.mutedForeground }]} numberOfLines={1}>
@@ -775,12 +785,12 @@ const styles = StyleSheet.create({
   locationBannerLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8 },
   locationBannerName: { fontFamily: "Inter_700Bold", fontSize: 14, marginTop: 1 },
   // Balance tiles
-  balanceGrid: { marginHorizontal: 14, marginTop: 12, borderRadius: 16, borderWidth: 1, flexDirection: "row", alignItems: "stretch" },
-  balanceTile: { flex: 1, alignItems: "center", paddingVertical: 12, paddingHorizontal: 4 },
-  balanceTileFirst: { borderLeftWidth: 0 },
-  balanceIconWrap: { width: 30, height: 30, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 5 },
-  balanceLabel: { fontFamily: "Inter_500Medium", fontSize: 8, letterSpacing: 0.5, textAlign: "center", marginBottom: 3 },
-  balanceValue: { fontFamily: "Inter_700Bold", fontSize: 12, textAlign: "center" },
+  balanceGrid: { marginHorizontal: 14, marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  balanceTile: { width: "47%", alignItems: "center", paddingVertical: 12, paddingHorizontal: 4, borderRadius: 14, borderWidth: 1.5 },
+  balanceTileFirst: {},
+  balanceIconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  balanceLabel: { fontFamily: "Inter_600SemiBold", fontSize: 9, letterSpacing: 0.6, textAlign: "center", marginBottom: 3 },
+  balanceValue: { fontFamily: "Inter_700Bold", fontSize: 14, textAlign: "center" },
   balSep: { width: 1, marginVertical: 12 },
   // Product
   productCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
