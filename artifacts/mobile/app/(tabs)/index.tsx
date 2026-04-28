@@ -338,10 +338,19 @@ export default function POSScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>COINS SALE</Text>
-          <Text style={styles.headerSub}>Point of Sale</Text>
+        {/* Logo + title */}
+        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={styles.logoCircle}>
+            <Feather name="circle" size={9} color="#1E40AF" style={{ position: "absolute", opacity: 0.25 }} />
+            <Text style={styles.logoText}>₵</Text>
+          </View>
+          <View>
+            <Text style={styles.headerTitle}>COINS SALE</Text>
+            <Text style={styles.headerSub}>Point of Sale</Text>
+          </View>
         </View>
+
+        {/* Right: dollar badge + user badge */}
         <View style={styles.headerRight}>
           {dollarBalance !== null && dollarBalance.usd !== 0 && (
             <View style={styles.dollarBadge}>
@@ -352,9 +361,12 @@ export default function POSScreen() {
               </View>
             </View>
           )}
-          <View style={styles.userBadge}>
-            <Feather name="user" size={12} color={colors.primary} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.primary }}>{user?.name?.split(" ")[0] ?? "—"}</Text>
+          <View style={{ alignItems: "flex-end", gap: 3 }}>
+            <View style={styles.userBadge}>
+              <Feather name="user" size={12} color={colors.primary} />
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.primary }}>{user?.name?.split(" ")[0] ?? "—"}</Text>
+            </View>
+            <Text style={styles.madeBy}>by Yasir Mughal</Text>
           </View>
         </View>
       </LinearGradient>
@@ -851,7 +863,10 @@ const styles = StyleSheet.create({
   header: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 14 },
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFFFFF", letterSpacing: 1 },
   headerSub: { fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.7)" },
-  headerRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  headerRight: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
+  logoCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
+  logoText: { fontFamily: "Inter_700Bold", fontSize: 22, color: "#1E40AF", lineHeight: 28 },
+  madeBy: { fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.55)", letterSpacing: 0.3 },
   dollarBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   dollarUsd: { fontFamily: "Inter_700Bold", fontSize: 11, color: "#0891B2", lineHeight: 14 },
   dollarPkr: { fontFamily: "Inter_400Regular", fontSize: 10, color: "#475569", lineHeight: 13 },
