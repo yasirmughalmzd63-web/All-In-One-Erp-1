@@ -118,10 +118,6 @@ export default function LoginScreen() {
             </>
           )}
         </TouchableOpacity>
-
-        <View style={styles.hintBox}>
-          <Text style={styles.hintText}>Default: admin / admin123</Text>
-        </View>
       </View>
 
       <View style={[styles.footer, { paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 16 }]}>
