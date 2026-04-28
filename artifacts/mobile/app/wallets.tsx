@@ -48,6 +48,8 @@ const emptyTopupForm = {
   amountUsd: "",
   perCoinUsdRate: "",
   exchangeRatePkr: "",
+  salePricePkr: "",
+  wholesalePricePkr: "",
   notes: "",
   date: new Date().toISOString().split("T")[0]!,
 };
@@ -148,6 +150,8 @@ export default function WalletsScreen() {
           amountUsd: topupForm.amountUsd,
           perCoinUsdRate: topupForm.perCoinUsdRate,
           exchangeRatePkr: topupForm.exchangeRatePkr,
+          salePricePkr: topupForm.salePricePkr || null,
+          wholesalePricePkr: topupForm.wholesalePricePkr || null,
           date: topupForm.date,
           notes: topupForm.notes || null,
         }),
@@ -436,7 +440,55 @@ export default function WalletsScreen() {
                   Stock cost: ₨{topupPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   {topupQty > 0 ? ` (₨${(topupPkr / topupQty).toFixed(2)} / coin)` : ""}
                 </Text>
+                {topupForm.productId ? (() => {
+                  const p = products.find(x => String(x.id) === topupForm.productId);
+                  return p ? (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                      Goes to inventory · stock {p.stock} → {p.stock + topupQty}
+                    </Text>
+                  ) : null;
+                })() : null}
               </View>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>SET COIN SALE PRICE (OPTIONAL)</Text>
+              {(() => {
+                const p = topupForm.productId ? products.find(x => String(x.id) === topupForm.productId) : null;
+                const curRetail = p ? parseFloat(p.unitPrice || "0") : 0;
+                const curWhole = p ? parseFloat(p.wholesalePrice || "0") : 0;
+                return (
+                  <>
+                    <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginBottom: 4 }}>
+                          RETAIL ₨/coin {curRetail > 0 ? `(now ₨${curRetail.toFixed(2)})` : ""}
+                        </Text>
+                        <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                          value={topupForm.salePricePkr} onChangeText={v => setTopupForm(f => ({ ...f, salePricePkr: v }))}
+                          keyboardType="decimal-pad" placeholder={curRetail > 0 ? curRetail.toFixed(2) : "Leave blank"} placeholderTextColor={colors.mutedForeground} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginBottom: 4 }}>
+                          WHOLESALE ₨/coin {curWhole > 0 ? `(now ₨${curWhole.toFixed(2)})` : ""}
+                        </Text>
+                        <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                          value={topupForm.wholesalePricePkr} onChangeText={v => setTopupForm(f => ({ ...f, wholesalePricePkr: v }))}
+                          keyboardType="decimal-pad" placeholder={curWhole > 0 ? curWhole.toFixed(2) : "Leave blank"} placeholderTextColor={colors.mutedForeground} />
+                      </View>
+                    </View>
+                    {topupForm.salePricePkr && topupQty > 0 ? (
+                      <View style={[styles.totalBox, { backgroundColor: "#DCFCE7", borderColor: "#16A34A", marginBottom: 12 }]}>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>Estimated profit</Text>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#15803D" }}>
+                          ₨{((parseFloat(topupForm.salePricePkr) - (topupPkr / topupQty)) * topupQty).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground }}>
+                          if all {topupQty} coins sell @ ₨{parseFloat(topupForm.salePricePkr).toFixed(2)}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </>
+                );
+              })()}
 
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DATE</Text>
               <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}

@@ -90,9 +90,10 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 });
 
 router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void> => {
-  const { productId, amountUsd, perCoinUsdRate, exchangeRatePkr, date, notes } = req.body as {
+  const { productId, amountUsd, perCoinUsdRate, exchangeRatePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
     productId?: number; amountUsd?: string; perCoinUsdRate?: string;
-    exchangeRatePkr?: string; date?: string; notes?: string | null;
+    exchangeRatePkr?: string; salePricePkr?: string | null; wholesalePricePkr?: string | null;
+    date?: string; notes?: string | null;
   };
   if (!productId || !amountUsd || !perCoinUsdRate || !exchangeRatePkr || !date) {
     res.status(400).json({ error: "productId, amountUsd, perCoinUsdRate, exchangeRatePkr, date required" });
@@ -118,8 +119,19 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
   const newStock = oldStock + qty;
   const weightedCost = newStock > 0 ? (oldStock * oldCost + qty * newCostPerCoin) / newStock : newCostPerCoin;
 
+  const updates: Record<string, string | number> = {
+    stock: newStock,
+    costPrice: fmt(weightedCost),
+  };
+  if (salePricePkr && parseFloat(salePricePkr) > 0) {
+    updates.unitPrice = fmt(parseFloat(salePricePkr));
+  }
+  if (wholesalePricePkr && parseFloat(wholesalePricePkr) > 0) {
+    updates.wholesalePrice = fmt(parseFloat(wholesalePricePkr));
+  }
+
   await db.update(productsTable)
-    .set({ stock: newStock, costPrice: fmt(weightedCost) })
+    .set(updates)
     .where(eq(productsTable.id, productId));
 
   const [row] = await db.insert(dollarWalletTable).values({
