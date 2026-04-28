@@ -341,7 +341,6 @@ export default function POSScreen() {
         {/* Logo + title */}
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
           <View style={styles.logoCircle}>
-            <Feather name="circle" size={9} color="#1E40AF" style={{ position: "absolute", opacity: 0.25 }} />
             <Text style={styles.logoText}>₵</Text>
           </View>
           <View>
@@ -861,8 +860,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFFFFF", letterSpacing: 1 },
   headerSub: { fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.7)" },
   headerRight: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
-  logoCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOpacity: 0.18, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
-  logoText: { fontFamily: "Inter_700Bold", fontSize: 22, color: "#1E40AF", lineHeight: 28 },
+  logoCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center", borderWidth: 2.5, borderColor: "rgba(255,255,255,0.6)", shadowColor: "#1E3A8A", shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, elevation: 6 },
+  logoText: { fontFamily: "Inter_700Bold", fontSize: 24, color: "#1E40AF", lineHeight: 30, marginTop: -1 },
   madeBy: { fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.55)", letterSpacing: 0.3 },
   dollarBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20 },
   dollarUsd: { fontFamily: "Inter_700Bold", fontSize: 11, color: "#0891B2", lineHeight: 14 },
