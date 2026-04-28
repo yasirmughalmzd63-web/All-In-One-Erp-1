@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, Platform,
   RefreshControl, ScrollView, StyleSheet, Text, TextInput,
@@ -13,43 +13,56 @@ import { useAuth } from "@/context/AuthContext";
 
 type Snapshot = {
   stockValue: string; bankBalance: string; creditReceivable: string;
-  creditsReceived: string; transfersIn: string; transfersOut: string;
-  openingBalance: string; expectedBalance: string;
+  creditsReceived: string; openingBalance: string; expectedBalance: string;
 };
 
-type CashCount = {
-  id: number; date: string; stockValue: string; bankBalance: string;
-  creditReceivable: string; creditsReceived: string; transfersIn: string;
-  transfersOut: string; openingBalance: string; expectedBalance: string;
-  physicalBalance: string; difference: string; notes: string | null; createdAt: string;
+type AuditEntry = {
+  id: number; date: string;
+  stockValue: string; bankBalance: string; creditReceivable: string;
+  expectedBalance: string; physicalBalance: string; difference: string;
+  diffType: string; status: string; reason: string | null; notes: string | null;
+  createdAt: string;
 };
 
-const fmt = (v: string) => parseFloat(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt = (v: string | number) => {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
 
-export default function CashCountScreen() {
+const fmtShort = (v: string | number) => {
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
+  return fmt(n.toString());
+};
+
+export default function AuditScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [history, setHistory] = useState<CashCount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [physicalBalance, setPhysicalBalance] = useState("");
-  const [transfersIn, setTransfersIn] = useState("0");
-  const [transfersOut, setTransfersOut] = useState("0");
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [snapshot, setSnapshot]         = useState<Snapshot | null>(null);
+  const [history, setHistory]           = useState<AuditEntry[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [refreshing, setRefreshing]     = useState(false);
+  const [showModal, setShowModal]       = useState(false);
+  const [showResolve, setShowResolve]   = useState<AuditEntry | null>(null);
+  const [physicalBalance, setPhysical]  = useState("");
+  const [transfersIn, setTransIn]       = useState("0");
+  const [transfersOut, setTransOut]     = useState("0");
+  const [reason, setReason]             = useState("");
+  const [notes, setNotes]               = useState("");
+  const [resolveReason, setResolveReason] = useState("");
+  const [saving, setSaving]             = useState(false);
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
     try {
       const [snap, hist] = await Promise.all([
         customFetch<Snapshot>("/api/cash-counts/snapshot"),
-        customFetch<CashCount[]>("/api/cash-counts"),
+        customFetch<AuditEntry[]>("/api/cash-counts"),
       ]);
       setSnapshot(snap);
       setHistory(hist);
@@ -64,214 +77,434 @@ export default function CashCountScreen() {
     ? (parseFloat(snapshot.expectedBalance) + parseFloat(transfersIn || "0") - parseFloat(transfersOut || "0")).toFixed(2)
     : "0.00";
 
-  const difference = physicalBalance
+  const difference  = physicalBalance
     ? (parseFloat(physicalBalance || "0") - parseFloat(adjustedExpected)).toFixed(2)
     : "0.00";
+  const diffNum     = parseFloat(difference);
+  const diffType    = Math.abs(diffNum) < 0.01 ? "balanced" : diffNum > 0 ? "excess" : "short";
 
-  const diffColor = parseFloat(difference) >= 0 ? colors.sale : colors.danger;
+  // Summary stats
+  const totalShort   = history.filter(e => e.diffType === "short").reduce((s, e) => s + Math.abs(parseFloat(e.difference)), 0);
+  const totalExcess  = history.filter(e => e.diffType === "excess").reduce((s, e) => s + parseFloat(e.difference), 0);
+  const pendingCount = history.filter(e => e.status === "pending").length;
+  const pendingShort = history.filter(e => e.status === "pending" && e.diffType === "short").reduce((s, e) => s + Math.abs(parseFloat(e.difference)), 0);
+
+  // Group by date
+  const grouped = useMemo(() => {
+    const map = new Map<string, AuditEntry[]>();
+    for (const e of history) {
+      const list = map.get(e.date) ?? [];
+      list.push(e);
+      map.set(e.date, list);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [history]);
 
   const handleSave = async () => {
     if (!physicalBalance) { Alert.alert("Error", "Enter physical balance"); return; }
     setSaving(true);
     try {
-      await customFetch<CashCount>("/api/cash-counts", {
+      await customFetch<AuditEntry>("/api/cash-counts", {
         method: "POST",
         body: JSON.stringify({
-          date: new Date().toISOString().split("T")[0],
-          stockValue: snapshot?.stockValue ?? "0",
-          bankBalance: snapshot?.bankBalance ?? "0",
+          date:             new Date().toISOString().split("T")[0],
+          stockValue:       snapshot?.stockValue   ?? "0",
+          bankBalance:      snapshot?.bankBalance  ?? "0",
           creditReceivable: snapshot?.creditReceivable ?? "0",
-          creditsReceived: snapshot?.creditsReceived ?? "0",
-          transfersIn: parseFloat(transfersIn || "0").toFixed(8),
-          transfersOut: parseFloat(transfersOut || "0").toFixed(8),
-          openingBalance: snapshot?.openingBalance ?? "0",
-          expectedBalance: adjustedExpected,
-          physicalBalance: parseFloat(physicalBalance).toFixed(8),
-          notes: notes || null,
+          creditsReceived:  snapshot?.creditsReceived  ?? "0",
+          transfersIn:      parseFloat(transfersIn  || "0").toFixed(8),
+          transfersOut:     parseFloat(transfersOut || "0").toFixed(8),
+          openingBalance:   snapshot?.openingBalance  ?? "0",
+          expectedBalance:  adjustedExpected,
+          physicalBalance:  parseFloat(physicalBalance).toFixed(8),
+          reason:  reason  || null,
+          notes:   notes   || null,
         }),
       });
       setShowModal(false);
-      setPhysicalBalance("");
-      setTransfersIn("0");
-      setTransfersOut("0");
-      setNotes("");
+      setPhysical(""); setTransIn("0"); setTransOut("0"); setReason(""); setNotes("");
       load();
     } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
     setSaving(false);
   };
 
-  const handleDelete = (item: CashCount) => {
+  const handleResolve = async () => {
+    if (!showResolve) return;
+    try {
+      await customFetch(`/api/cash-counts/${showResolve.id}/resolve`, {
+        method: "PATCH",
+        body: JSON.stringify({ reason: resolveReason || null }),
+      });
+      setShowResolve(null);
+      setResolveReason("");
+      load();
+    } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
+  };
+
+  const handleDelete = (item: AuditEntry) => {
     if (!isAdmin) return;
-    Alert.alert("Delete", `Delete cash count for ${item.date}?`, [
+    Alert.alert("Delete", `Delete audit for ${item.date}?`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
-        try {
-          await customFetch<void>(`/api/cash-counts/${item.id}`, { method: "DELETE" });
-          load();
-        } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
+        try { await customFetch<void>(`/api/cash-counts/${item.id}`, { method: "DELETE" }); load(); }
+        catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
       }},
     ]);
   };
 
-  const StatRow = ({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) => (
-    <View style={[styles.statRow, { borderBottomColor: colors.border }]}>
-      <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <View style={{ alignItems: "flex-end" }}>
-        <Text style={[styles.statValue, { color: color ?? colors.text }]}>₨{fmt(value)}</Text>
-        {sub && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{sub}</Text>}
-      </View>
-    </View>
-  );
+  const diffMeta = (type: string, status: string): { label: string; color: string; bg: string; icon: string } => {
+    if (type === "short")    return { label: "SHORT",    color: "#DC2626", bg: "#FEF2F2", icon: "trending-down"  };
+    if (type === "excess")   return { label: "EXCESS",   color: "#16A34A", bg: "#DCFCE7", icon: "trending-up"    };
+    if (status === "pending") return { label: "BALANCED", color: "#2563EB", bg: "#EFF6FF", icon: "check-circle"   };
+    return                          { label: "BALANCED", color: "#16A34A", bg: "#DCFCE7", icon: "check-circle"   };
+  };
 
-  const renderHistory = ({ item }: { item: CashCount }) => {
-    const diff = parseFloat(item.difference);
+  const statusMeta = (status: string, diffType: string): { label: string; color: string; bg: string } => {
+    if (status === "resolved") return { label: "Resolved", color: "#16A34A", bg: "#DCFCE7" };
+    if (diffType === "balanced") return { label: "OK",     color: "#16A34A", bg: "#DCFCE7" };
+    return                            { label: "Pending",  color: "#D97706", bg: "#FFF7ED" };
+  };
+
+  const renderEntry = (e: AuditEntry) => {
+    const diff    = parseFloat(e.difference);
+    const dm      = diffMeta(e.diffType, e.status);
+    const sm      = statusMeta(e.status, e.diffType);
+    const canResolve = e.status === "pending" && e.diffType !== "balanced";
     return (
-      <View style={[styles.histCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <View style={styles.histHeader}>
-          <View>
-            <Text style={[styles.histDate, { color: colors.text }]}>{item.date}</Text>
-            <Text style={[styles.histTime, { color: colors.mutedForeground }]}>{new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
+      <View key={e.id} style={[styles.entryCard, { backgroundColor: colors.card, borderColor: e.status === "pending" && e.diffType !== "balanced" ? dm.color + "55" : colors.border }]}>
+        {/* Top */}
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
+          <View style={[styles.iconBox, { backgroundColor: dm.bg }]}>
+            <Feather name={dm.icon as never} size={16} color={dm.color} />
           </View>
-          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-            <View style={[styles.diffBadge, { backgroundColor: diff >= 0 ? "#DCFCE7" : "#FEF2F2" }]}>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: diff >= 0 ? "#16A34A" : "#DC2626" }}>
-                {diff >= 0 ? "+" : ""}₨{fmt(item.difference)}
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <View style={[styles.badge, { backgroundColor: dm.bg }]}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: dm.color, letterSpacing: 0.5 }}>{dm.label}</Text>
+              </View>
+              <View style={[styles.badge, { backgroundColor: sm.bg }]}>
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: sm.color }}>{sm.label}</Text>
+              </View>
+            </View>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>
+                {new Date(e.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+              </Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: dm.color }}>
+                {diff >= 0 ? "+" : ""}₨{fmtShort(Math.abs(diff).toString())}
               </Text>
             </View>
-            {isAdmin && (
-              <TouchableOpacity style={[styles.delBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(item)}>
-                <Feather name="trash-2" size={12} color={colors.danger} />
-              </TouchableOpacity>
-            )}
+          </View>
+          {isAdmin && (
+            <TouchableOpacity style={[styles.delBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(e)}>
+              <Feather name="trash-2" size={11} color={colors.danger} />
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Stats mini row */}
+        <View style={{ flexDirection: "row", gap: 12, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.mutedForeground, letterSpacing: 0.4 }}>EXPECTED</Text>
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text }}>₨{fmtShort(e.expectedBalance)}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.mutedForeground, letterSpacing: 0.4 }}>PHYSICAL</Text>
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text }}>₨{fmtShort(e.physicalBalance)}</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.mutedForeground, letterSpacing: 0.4 }}>DIFFERENCE</Text>
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: dm.color }}>
+              {diff >= 0 ? "+" : ""}₨{fmtShort(e.difference)}
+            </Text>
           </View>
         </View>
-        <View style={{ flexDirection: "row", gap: 12, marginTop: 8 }}>
-          <View>
-            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground }}>Expected</Text>
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }}>₨{fmt(item.expectedBalance)}</Text>
+
+        {/* Reason if exists */}
+        {e.reason && (
+          <View style={{ marginTop: 8, backgroundColor: "#FFFBEB", borderRadius: 8, padding: 8, flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
+            <Feather name="message-circle" size={12} color="#D97706" style={{ marginTop: 1 }} />
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#92400E", flex: 1 }}>Reason: {e.reason}</Text>
           </View>
-          <View>
-            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground }}>Physical</Text>
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }}>₨{fmt(item.physicalBalance)}</Text>
-          </View>
-        </View>
-        {item.notes && <Text style={[styles.noteText, { color: colors.mutedForeground }]}>{item.notes}</Text>}
+        )}
+        {e.notes && !e.reason && (
+          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 6, fontStyle: "italic" }}>"{e.notes}"</Text>
+        )}
+
+        {/* Resolve button for pending differences */}
+        {canResolve && (
+          <TouchableOpacity
+            style={{ marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#FFF7ED", borderRadius: 8, paddingVertical: 9, borderWidth: 1, borderColor: "#FED7AA" }}
+            onPress={() => { setShowResolve(e); setResolveReason(""); }}
+          >
+            <Feather name="check-circle" size={13} color="#D97706" />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#D97706" }}>Mark as Resolved</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
 
+  const diffTypeColor = diffType === "short" ? colors.danger : diffType === "excess" ? colors.success : colors.primary;
+  const diffTypeBg    = diffType === "short" ? "#FEF2F2"   : diffType === "excess" ? "#DCFCE7"   : colors.secondary;
+  const diffTypeLabel = diffType === "short" ? "SHORT (shortage)" : diffType === "excess" ? "EXCESS (surplus)" : "BALANCED";
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient colors={["#7C3AED", "#6D28D9"]} style={[styles.header, { paddingTop: topPad + 8 }]}>
-        <Text style={styles.headerTitle}>Cash Count</Text>
-        <Text style={styles.headerSub}>Balance sheet reconciliation</Text>
+        <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" }}>
+          <View>
+            <Text style={styles.headerTitle}>Audit</Text>
+            <Text style={styles.headerSub}>Daily cash reconciliation log</Text>
+          </View>
+          <TouchableOpacity style={styles.newBtn} onPress={() => setShowModal(true)}>
+            <Feather name="plus" size={16} color="#FFF" />
+            <Text style={styles.newBtnText}>New Entry</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Summary chips */}
+        <View style={{ flexDirection: "row", gap: 8, marginTop: 16 }}>
+          <View style={styles.chip}>
+            <Feather name="trending-down" size={12} color="#FCA5A5" />
+            <Text style={styles.chipLabel}>Total Short</Text>
+            <Text style={styles.chipVal}>₨{fmtShort(totalShort.toString())}</Text>
+          </View>
+          <View style={styles.chip}>
+            <Feather name="trending-up" size={12} color="#86EFAC" />
+            <Text style={styles.chipLabel}>Total Excess</Text>
+            <Text style={styles.chipVal}>₨{fmtShort(totalExcess.toString())}</Text>
+          </View>
+          <View style={[styles.chip, pendingCount > 0 && { borderColor: "#FCD34D", borderWidth: 1 }]}>
+            <Feather name="clock" size={12} color={pendingCount > 0 ? "#FCD34D" : "rgba(255,255,255,0.6)"} />
+            <Text style={styles.chipLabel}>Pending</Text>
+            <Text style={[styles.chipVal, pendingCount > 0 && { color: "#FCD34D" }]}>{pendingCount}</Text>
+          </View>
+        </View>
       </LinearGradient>
 
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
       ) : (
         <FlatList
-          data={history}
-          keyExtractor={i => String(i.id)}
-          renderItem={renderHistory}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
+          data={grouped}
+          keyExtractor={([date]) => date}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-          ListHeaderComponent={snapshot ? (
-            <View style={[styles.snapshotCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <Text style={[styles.snapshotTitle, { color: colors.text }]}>Current Balance Snapshot</Text>
-              <StatRow label="Stock Value" value={snapshot.stockValue} sub="Inventory at cost" color="#0284C7" />
-              <StatRow label="Bank / Accounts" value={snapshot.bankBalance} sub="All accounts total" color="#2563EB" />
-              <StatRow label="Credit Receivable" value={snapshot.creditReceivable} sub="Outstanding receivables" color="#7C3AED" />
-              <StatRow label="Credits Received" value={snapshot.creditsReceived} sub="Payments collected" color="#16A34A" />
-              <View style={[styles.totalRow, { backgroundColor: colors.secondary }]}>
-                <Text style={[styles.totalLabel, { color: colors.text }]}>Opening Balance</Text>
-                <Text style={[styles.totalValue, { color: "#7C3AED" }]}>₨{fmt(snapshot.openingBalance)}</Text>
+          ListHeaderComponent={
+            /* ── Pending short amount ──────────────────────────────────── */
+            pendingShort > 0 ? (
+              <View style={{ backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#FECACA", flexDirection: "row", alignItems: "center", gap: 12 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
+                  <Feather name="alert-triangle" size={18} color="#DC2626" />
+                </View>
+                <View>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#DC2626" }}>Outstanding Shortage</Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#991B1B", marginTop: 2 }}>
+                    ₨{fmt(pendingShort.toString())} unresolved across {pendingCount} audit{pendingCount !== 1 ? "s" : ""}
+                  </Text>
+                </View>
               </View>
-              <View style={[styles.totalRow, { backgroundColor: "#F0FDF4" }]}>
-                <Text style={[styles.totalLabel, { color: colors.text }]}>Expected Balance</Text>
-                <Text style={[styles.totalValue, { color: "#16A34A" }]}>₨{fmt(snapshot.expectedBalance)}</Text>
-              </View>
-              <TouchableOpacity style={[styles.countBtn, { backgroundColor: "#7C3AED" }]} onPress={() => setShowModal(true)}>
-                <Feather name="check-circle" size={16} color="#FFF" />
-                <Text style={styles.countBtnText}>Start Cash Count</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
+            ) : null
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="archive" size={36} color={colors.mutedForeground} />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No cash counts recorded yet</Text>
+              <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                <Feather name="clipboard" size={32} color="#7C3AED" />
+              </View>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: colors.text }}>No audit entries yet</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground, marginTop: 4, textAlign: "center" }}>Tap "New Entry" to start your first daily cash audit</Text>
             </View>
           }
+          renderItem={({ item: [date, entries] }) => (
+            <View style={{ marginBottom: 18 }}>
+              {/* Date header */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                <View style={{ backgroundColor: "#7C3AED", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#FFF" }}>
+                    {new Date(date + "T12:00:00").toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short", year: "numeric" })}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>
+                  {entries.length} audit{entries.length !== 1 ? "s" : ""}
+                </Text>
+              </View>
+              {/* Entries */}
+              <View style={{ gap: 8 }}>
+                {entries.map(e => renderEntry(e))}
+              </View>
+            </View>
+          )}
         />
       )}
 
+      {/* ── New Entry Modal ─────────────────────────────────────────────── */}
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
-          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "90%" }}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Cash Count Entry</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "93%" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <View>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>New Audit Entry</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 1 }}>
+                  {new Date().toLocaleDateString(undefined, { weekday: "long", day: "2-digit", month: "long" })}
+                </Text>
+              </View>
+              <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={() => setShowModal(false)}>
+                <Feather name="x" size={18} color={colors.mutedForeground} />
+              </TouchableOpacity>
             </View>
-            <ScrollView style={{ padding: 20 }}>
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+
+              {/* Live snapshot info boxes */}
               {snapshot && (
-                <>
-                  <View style={[styles.infoBox, { backgroundColor: colors.secondary }]}>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>Stock Value</Text>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>₨{fmt(snapshot.stockValue)}</Text>
+                <View style={{ gap: 8, marginBottom: 16 }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.mutedForeground, letterSpacing: 0.5, marginBottom: 4 }}>CURRENT SNAPSHOT</Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 10, padding: 10, alignItems: "center" }}>
+                      <Feather name="briefcase" size={13} color="#2563EB" />
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#2563EB", marginTop: 3 }}>₨{fmtShort(snapshot.bankBalance)}</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "#93C5FD" }}>BANK</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: "#ECFDF5", borderRadius: 10, padding: 10, alignItems: "center" }}>
+                      <Feather name="package" size={13} color="#059669" />
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#059669", marginTop: 3 }}>₨{fmtShort(snapshot.stockValue)}</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "#6EE7B7" }}>STOCK</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: "#EDE9FE", borderRadius: 10, padding: 10, alignItems: "center" }}>
+                      <Feather name="credit-card" size={13} color="#7C3AED" />
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#7C3AED", marginTop: 3 }}>₨{fmtShort(snapshot.creditReceivable)}</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "#C4B5FD" }}>CREDIT</Text>
+                    </View>
                   </View>
-                  <View style={[styles.infoBox, { backgroundColor: colors.secondary }]}>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>Bank / Account Total</Text>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>₨{fmt(snapshot.bankBalance)}</Text>
+
+                  {/* Expected */}
+                  <View style={{ backgroundColor: "#EDE9FE", borderRadius: 12, padding: 14, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#5B21B6" }}>Expected Balance</Text>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#7C3AED" }}>₨{parseFloat(adjustedExpected).toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
                   </View>
-                  <View style={[styles.infoBox, { backgroundColor: colors.secondary }]}>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>Credit Receivable</Text>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>₨{fmt(snapshot.creditReceivable)}</Text>
-                  </View>
-                </>
+                </View>
               )}
 
-              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TRANSFERS IN (to company)</Text>
-              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
-                value={transfersIn} onChangeText={setTransfersIn}
-                placeholder="0" keyboardType="numeric" placeholderTextColor={colors.mutedForeground} />
-
-              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TRANSFERS OUT (from company)</Text>
-              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 16 }]}
-                value={transfersOut} onChangeText={setTransfersOut}
-                placeholder="0" keyboardType="numeric" placeholderTextColor={colors.mutedForeground} />
-
-              <View style={[styles.expectedBox, { backgroundColor: "#EDE9FE" }]}>
-                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: "#5B21B6" }}>Expected Balance</Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: "#7C3AED" }}>₨{parseFloat(adjustedExpected).toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+              {/* Transfers */}
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TRANSFERS IN</Text>
+                  <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.success + "88", color: colors.text }]}
+                    value={transfersIn} onChangeText={setTransIn} placeholder="0" keyboardType="numeric" placeholderTextColor={colors.mutedForeground} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TRANSFERS OUT</Text>
+                  <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.danger + "88", color: colors.text }]}
+                    value={transfersOut} onChangeText={setTransOut} placeholder="0" keyboardType="numeric" placeholderTextColor={colors.mutedForeground} />
+                </View>
               </View>
 
+              {/* Physical balance */}
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PHYSICAL BALANCE (actual count)</Text>
-              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
-                value={physicalBalance} onChangeText={setPhysicalBalance}
-                placeholder="Enter physical count..." keyboardType="numeric" placeholderTextColor={colors.mutedForeground} />
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.input, borderColor: colors.primary, color: colors.text, marginBottom: 14, fontFamily: "Inter_700Bold", fontSize: 18 }]}
+                value={physicalBalance} onChangeText={setPhysical}
+                placeholder="Enter actual cash count..." keyboardType="numeric"
+                placeholderTextColor={colors.mutedForeground}
+              />
 
+              {/* Live difference indicator */}
               {physicalBalance ? (
-                <View style={[styles.diffBox, { backgroundColor: parseFloat(difference) >= 0 ? "#DCFCE7" : "#FEF2F2" }]}>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: diffColor }}>Difference (Physical − Expected)</Text>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 24, color: diffColor }}>
-                    {parseFloat(difference) >= 0 ? "+" : ""}₨{parseFloat(difference).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                <View style={[styles.diffBox, { backgroundColor: diffTypeBg, borderWidth: 1.5, borderColor: diffTypeColor + "55" }]}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <Feather name={diffType === "short" ? "trending-down" : diffType === "excess" ? "trending-up" : "check-circle"} size={18} color={diffTypeColor} />
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: diffTypeColor }}>{diffTypeLabel}</Text>
+                  </View>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: diffTypeColor }}>
+                    {diffNum >= 0 ? "+" : ""}₨{parseFloat(difference).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                   </Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: diffColor, textAlign: "center" }}>
-                    {parseFloat(difference) >= 0 ? "Cash surplus" : "Cash shortage"}
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: diffTypeColor + "CC", marginTop: 2, textAlign: "center" }}>
+                    Physical ₨{fmtShort(physicalBalance)} − Expected ₨{fmtShort(adjustedExpected)}
                   </Text>
                 </View>
               ) : null}
 
-              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>NOTES</Text>
-              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 24 }]}
-                value={notes} onChangeText={setNotes}
-                placeholder="Notes..." placeholderTextColor={colors.mutedForeground} />
+              {/* Reason for difference */}
+              {(diffType === "short" || diffType === "excess") && physicalBalance && (
+                <>
+                  <Text style={[styles.formLabel, { color: diffTypeColor }]}>REASON FOR {diffType.toUpperCase()}</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.input, borderColor: diffTypeColor, color: colors.text, marginBottom: 14 }]}
+                    value={reason}
+                    onChangeText={setReason}
+                    placeholder={diffType === "short" ? "e.g. payment not entered, theft, error..." : "e.g. advance received, extra returned..."}
+                    placeholderTextColor={colors.mutedForeground}
+                  />
+                </>
+              )}
 
-              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: "#7C3AED", opacity: saving ? 0.6 : 1 }]} onPress={handleSave} disabled={saving}>
-                <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save Cash Count"}</Text>
+              {/* Notes */}
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>NOTES (optional)</Text>
+              <TextInput
+                style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 24 }]}
+                value={notes} onChangeText={setNotes}
+                placeholder="Additional notes..." placeholderTextColor={colors.mutedForeground}
+              />
+
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: "#7C3AED", opacity: saving ? 0.6 : 1 }]}
+                onPress={handleSave} disabled={saving}
+              >
+                <Feather name="check" size={18} color="#FFF" />
+                <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save Audit Entry"}</Text>
               </TouchableOpacity>
+              <View style={{ height: 40 }} />
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Resolve Modal ───────────────────────────────────────────────── */}
+      <Modal visible={!!showResolve} animationType="slide" transparent onRequestClose={() => setShowResolve(null)}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}>
+            {showResolve && (
+              <>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Resolve Audit</Text>
+                  <TouchableOpacity onPress={() => setShowResolve(null)}>
+                    <Feather name="x" size={22} color={colors.mutedForeground} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ backgroundColor: showResolve.diffType === "short" ? "#FEF2F2" : "#DCFCE7", borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Feather name={showResolve.diffType === "short" ? "trending-down" : "trending-up"} size={18} color={showResolve.diffType === "short" ? "#DC2626" : "#16A34A"} />
+                  <View>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: showResolve.diffType === "short" ? "#DC2626" : "#16A34A" }}>
+                      {showResolve.diffType === "short" ? "Cash Short" : "Cash Excess"}: ₨{fmt(Math.abs(parseFloat(showResolve.difference)).toString())}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>{showResolve.date}</Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.formLabel, { color: colors.mutedForeground, marginBottom: 6 }]}>REASON / EXPLANATION</Text>
+                <TextInput
+                  style={[styles.input, { backgroundColor: colors.input, borderColor: "#D97706", color: colors.text, marginBottom: 20 }]}
+                  value={resolveReason}
+                  onChangeText={setResolveReason}
+                  placeholder="Explain how this was resolved..."
+                  placeholderTextColor={colors.mutedForeground}
+                  multiline
+                />
+
+                <TouchableOpacity
+                  style={{ backgroundColor: "#16A34A", paddingVertical: 16, borderRadius: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 8 }}
+                  onPress={handleResolve}
+                >
+                  <Feather name="check-circle" size={18} color="#FFF" />
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" }}>Mark as Resolved</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ alignItems: "center", paddingVertical: 10, marginBottom: 16 }} onPress={() => setShowResolve(null)}>
+                  <Text style={{ fontFamily: "Inter_500Medium", color: colors.mutedForeground }}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -282,32 +515,21 @@ export default function CashCountScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingBottom: 20 },
-  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 22, color: "#FFF", marginBottom: 2 },
-  headerSub: { fontFamily: "Inter_400Regular", fontSize: 13, color: "rgba(255,255,255,0.8)" },
-  snapshotCard: { borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 16 },
-  snapshotTitle: { fontFamily: "Inter_700Bold", fontSize: 16, marginBottom: 12 },
-  statRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 10, borderBottomWidth: 1 },
-  statLabel: { fontFamily: "Inter_400Regular", fontSize: 13 },
-  statValue: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12, borderRadius: 10, marginTop: 8 },
-  totalLabel: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
-  totalValue: { fontFamily: "Inter_700Bold", fontSize: 16 },
-  countBtn: { flexDirection: "row", alignItems: "center", gap: 8, justifyContent: "center", borderRadius: 12, padding: 14, marginTop: 16 },
-  countBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF" },
-  histCard: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 10 },
-  histHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  histDate: { fontFamily: "Inter_700Bold", fontSize: 15 },
-  histTime: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 2 },
-  diffBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
-  delBtn: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  noteText: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 6, fontStyle: "italic" },
-  empty: { alignItems: "center", paddingVertical: 40, gap: 10 },
-  emptyText: { fontFamily: "Inter_400Regular", fontSize: 14 },
+  headerTitle: { fontFamily: "Inter_700Bold", fontSize: 24, color: "#FFF", marginBottom: 2 },
+  headerSub: { fontFamily: "Inter_400Regular", fontSize: 13, color: "rgba(255,255,255,0.75)" },
+  newBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8 },
+  newBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" },
+  chip: { flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8, alignItems: "center", gap: 3 },
+  chipLabel: { fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.65)", letterSpacing: 0.4 },
+  chipVal: { fontFamily: "Inter_700Bold", fontSize: 13, color: "#FFF" },
+  entryCard: { borderRadius: 14, borderWidth: 1.5, padding: 14 },
+  iconBox: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  delBtn: { width: 26, height: 26, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+  empty: { alignItems: "center", paddingVertical: 50, gap: 6 },
   formLabel: { fontFamily: "Inter_600SemiBold", fontSize: 11, letterSpacing: 0.5, marginBottom: 6 },
-  input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontFamily: "Inter_400Regular", fontSize: 14 },
-  infoBox: { flexDirection: "row", justifyContent: "space-between", padding: 12, borderRadius: 10, marginBottom: 8 },
-  expectedBox: { borderRadius: 12, padding: 16, marginBottom: 16, alignItems: "center", gap: 4 },
-  diffBox: { borderRadius: 12, padding: 16, marginBottom: 16, alignItems: "center", gap: 4 },
-  saveBtn: { borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 8 },
+  input: { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontFamily: "Inter_400Regular", fontSize: 14 },
+  diffBox: { borderRadius: 14, padding: 16, marginBottom: 14, alignItems: "center", gap: 2 },
+  saveBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 14, padding: 16, marginBottom: 8 },
   saveBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" },
 });
