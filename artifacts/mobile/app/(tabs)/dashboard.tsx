@@ -31,6 +31,22 @@ const PERIOD_LABELS: Record<Period, string> = {
 };
 
 type Account = { id: number; name: string; balance: string; currency: string };
+type InventoryLoc = {
+  locationId: number | null;
+  locationName: string;
+  qty: number;
+  value: string;
+  productCount: number;
+};
+type TotalsBreakdown = {
+  cash: string;
+  stock: string;
+  credit: string;
+  creditReceivable: string;
+  creditPayable: string;
+  other: string;
+  total: string;
+};
 type DashboardData = {
   period: string;
   todaySales: string; todaySalesCount: number; todayPurchases: string; todayExpenses: string;
@@ -45,6 +61,9 @@ type DashboardData = {
   stockTransferredQty: number; stockTransferredValue: string; stockTransferredCount: number;
   dollarReceivedUsd: string; dollarExchangedPkr: string; dollarAvgRate: string; dollarReceivedCount: number;
   accountBalances: Account[];
+  inventoryByLocation: InventoryLoc[];
+  totalsBreakdown: TotalsBreakdown;
+  scope: { isAdmin: boolean; userId: number | null; locationId: number | null; role: string | null };
 };
 
 // PKR formatting (₨)
@@ -134,6 +153,48 @@ const dualStyles = StyleSheet.create({
   colValue: { fontFamily: "Inter_700Bold", fontSize: 18, lineHeight: 22 },
   divider: { width: 1, alignSelf: "stretch" },
   footer: { fontFamily: "Inter_400Regular", fontSize: 11, color: "#94A3B8", marginTop: -4 },
+});
+
+function BreakdownRow({ label, icon, color, value, sub }: {
+  label: string;
+  icon: keyof typeof Feather.glyphMap;
+  color: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <View style={breakdownStyles.row}>
+      <View style={[breakdownStyles.iconBox, { backgroundColor: color + "22" }]}>
+        <Feather name={icon} size={14} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={breakdownStyles.label}>{label}</Text>
+        {sub ? <Text style={breakdownStyles.sub}>{sub}</Text> : null}
+      </View>
+      <Text style={[breakdownStyles.value, { color }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
+    </View>
+  );
+}
+
+const breakdownStyles = StyleSheet.create({
+  card: { borderRadius: 14, borderWidth: 1, overflow: "hidden", paddingVertical: 4 },
+  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
+  iconBox: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  label: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#334155" },
+  sub: { fontFamily: "Inter_400Regular", fontSize: 10, color: "#94A3B8", marginTop: 2 },
+  value: { fontFamily: "Inter_700Bold", fontSize: 15, maxWidth: 130 },
+  totalRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 14, gap: 12, borderTopWidth: 1.5, marginTop: 4 },
+  totalLabel: { flex: 1, fontFamily: "Inter_700Bold", fontSize: 14 },
+  totalValue: { fontFamily: "Inter_700Bold", fontSize: 18, maxWidth: 150 },
+});
+
+const locStyles = StyleSheet.create({
+  row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
+  iconBox: { width: 32, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  locName: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  locSub: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 2 },
+  locQty: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  locValue: { fontFamily: "Inter_500Medium", fontSize: 12, marginTop: 2 },
 });
 
 function DollarFlowCard({ usd, pkr, rate, count, color, bg }: {
@@ -255,20 +316,89 @@ export default function DashboardScreen() {
               />
             </View>
 
-            {/* 2. Product Qty + Stock Value */}
+            {/* 2. Inventory in Hand — Per Location breakdown */}
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Inventory in Hand</Text>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Inventory in Hand</Text>
+                <View style={[styles.scopeBadge, { backgroundColor: dash.scope.isAdmin ? colors.primary + "15" : colors.purchase + "15" }]}>
+                  <Feather name={dash.scope.isAdmin ? "globe" : "user"} size={11} color={dash.scope.isAdmin ? colors.primary : colors.purchase} />
+                  <Text style={[styles.scopeBadgeText, { color: dash.scope.isAdmin ? colors.primary : colors.purchase }]}>
+                    {dash.scope.isAdmin ? "All Locations" : "Your Location"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Per-location breakdown list */}
+              <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 10 }]}>
+                {(dash.inventoryByLocation ?? []).length === 0 ? (
+                  <View style={{ padding: 20, alignItems: "center" }}>
+                    <Feather name="package" size={28} color={colors.mutedForeground} />
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.mutedForeground, marginTop: 8 }}>
+                      No inventory yet
+                    </Text>
+                  </View>
+                ) : (
+                  dash.inventoryByLocation.map((loc, idx, arr) => (
+                    <View
+                      key={String(loc.locationId ?? "unassigned")}
+                      style={[locStyles.row, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}
+                    >
+                      <View style={[locStyles.iconBox, { backgroundColor: colors.purchase + "18" }]}>
+                        <Feather name="map-pin" size={14} color={colors.purchase} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[locStyles.locName, { color: colors.text }]} numberOfLines={1}>{loc.locationName}</Text>
+                        <Text style={[locStyles.locSub, { color: colors.mutedForeground }]}>
+                          {loc.productCount} product{loc.productCount !== 1 ? "s" : ""}
+                        </Text>
+                      </View>
+                      <View style={{ alignItems: "flex-end" }}>
+                        <Text style={[locStyles.locQty, { color: colors.purchase }]}>{fmtNum(loc.qty)} pcs</Text>
+                        <Text style={[locStyles.locValue, { color: colors.text }]}>{fmtPKRk(loc.value)}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              {/* Grand totals row */}
               <DualMetricCard
                 icon="package"
-                title="Product Qty & Stock Value"
+                title="Inventory Total"
                 primaryLabel="Total Qty"
                 primaryValue={fmtNum(dash.totalProductsQty)}
-                secondaryLabel="Stock Value"
+                secondaryLabel="Total Value"
                 secondaryValue={fmtPKRk(dash.totalStockValue)}
-                footer={`${dash.totalProducts} product${dash.totalProducts !== 1 ? "s" : ""} active`}
+                footer={`${dash.totalProducts} product${dash.totalProducts !== 1 ? "s" : ""} • ${(dash.inventoryByLocation ?? []).length} location${(dash.inventoryByLocation ?? []).length !== 1 ? "s" : ""}`}
                 color={colors.purchase}
                 bg={colors.purchaseBg}
               />
+            </View>
+
+            {/* 2.5 Net Worth Breakdown — Cash / Stock / Credit / Other → Total */}
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Net Worth Breakdown</Text>
+              <View style={[breakdownStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <BreakdownRow label="Cash" icon="dollar-sign" color={colors.success} value={fmtPKRk(dash.totalsBreakdown?.cash)} />
+                <BreakdownRow label="Stock" icon="package" color={colors.purchase} value={fmtPKRk(dash.totalsBreakdown?.stock)} />
+                <BreakdownRow
+                  label="Credit (Net)"
+                  icon="repeat"
+                  color={colors.credit}
+                  value={fmtPKRk(dash.totalsBreakdown?.credit)}
+                  sub={`+${fmtPKRk(dash.totalsBreakdown?.creditReceivable)} − ${fmtPKRk(dash.totalsBreakdown?.creditPayable)}`}
+                />
+                <BreakdownRow label="Other Accounts" icon="credit-card" color={colors.expense} value={fmtPKRk(dash.totalsBreakdown?.other)} />
+                <View style={[breakdownStyles.totalRow, { borderTopColor: colors.border }]}>
+                  <View style={[breakdownStyles.iconBox, { backgroundColor: colors.primary + "22" }]}>
+                    <Feather name="trending-up" size={16} color={colors.primary} />
+                  </View>
+                  <Text style={[breakdownStyles.totalLabel, { color: colors.text }]}>Grand Total</Text>
+                  <Text style={[breakdownStyles.totalValue, { color: colors.primary }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {fmtPKRk(dash.totalsBreakdown?.total)}
+                  </Text>
+                </View>
+              </View>
             </View>
 
             {/* 3. Received Stock (period) */}
@@ -376,6 +506,9 @@ const styles = StyleSheet.create({
   pillTextActive: { color: "#1E40AF" },
   pillTextInactive: { color: "rgba(255,255,255,0.9)" },
   sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15, marginBottom: 10 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  scopeBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  scopeBadgeText: { fontFamily: "Inter_700Bold", fontSize: 10, letterSpacing: 0.5 },
   summaryCard: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
   summaryRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
   summaryIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
