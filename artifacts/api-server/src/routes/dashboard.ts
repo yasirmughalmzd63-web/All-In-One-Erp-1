@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { desc, eq, gte, and, lt, or, inArray } from "drizzle-orm";
+import { desc, eq, gte, and, lt, lte, gt, or, inArray, sql } from "drizzle-orm";
 import {
   db,
   salesTable,
+  saleItemsTable,
   purchasesTable,
   purchaseItemsTable,
   expensesTable,
@@ -287,6 +288,200 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
       createdAt: s.createdAt.toISOString(),
     })),
     accountBalances: accounts.map(a => ({ ...a, createdAt: a.createdAt.toISOString() })),
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inventory Ledger — Opening / Received / Sold / Balance per product over a
+// date range. Role-scoped: cashier sees own location only.
+//
+// Query params (all optional):
+//   startDate=YYYY-MM-DD  endDate=YYYY-MM-DD  locationId=N  productId=N
+// Defaults: when BOTH dates are absent => all-time. When one is provided,
+// the other defaults to today's bound (start-of-today / end-of-today).
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/inventory/ledger", requireAuth, async (req, res): Promise<void> => {
+  const startStr = typeof req.query.startDate === "string" ? req.query.startDate : null;
+  const endStr   = typeof req.query.endDate   === "string" ? req.query.endDate   : null;
+  const queryLocId  = typeof req.query.locationId === "string" ? parseInt(req.query.locationId) : null;
+  const queryProdId = typeof req.query.productId  === "string" ? parseInt(req.query.productId)  : null;
+
+  const isAdmin = req.userRole === "admin" || req.userRole === "manager";
+
+  // Strict scoping for non-admins: must have an assigned location, otherwise
+  // refuse to leak cross-location data.
+  if (!isAdmin && (req.userLocationId === null || req.userLocationId === undefined)) {
+    res.status(403).json({ error: "User has no assigned app/location; ledger access denied." });
+    return;
+  }
+  const filterLocationId = isAdmin ? queryLocId : (req.userLocationId ?? null);
+
+  // Date range
+  // - both absent  => all-time (epoch .. far-future)
+  // - one present  => other defaults to today's matching bound
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const todayEnd   = new Date(now); todayEnd.setHours(23, 59, 59, 999);
+
+  let start: Date;
+  let end:   Date;
+  if (!startStr && !endStr) {
+    start = new Date(0);
+    end   = new Date(now.getFullYear() + 100, 0, 1);
+  } else {
+    start = startStr ? new Date(`${startStr}T00:00:00.000`) : todayStart;
+    end   = endStr   ? new Date(`${endStr}T23:59:59.999`)   : todayEnd;
+  }
+
+  // Products in scope
+  const productConds = [eq(productsTable.isActive, true)];
+  if (filterLocationId) productConds.push(eq(productsTable.locationId, filterLocationId));
+  if (queryProdId)      productConds.push(eq(productsTable.id, queryProdId));
+
+  const products = await db.select({
+    id: productsTable.id,
+    name: productsTable.name,
+    sku: productsTable.sku,
+    stock: productsTable.stock,
+    unitPrice: productsTable.unitPrice,
+    costPrice: productsTable.costPrice,
+    locationId: productsTable.locationId,
+  }).from(productsTable).where(and(...productConds));
+  const productIds = products.map(p => p.id);
+
+  // Locations (for naming)
+  const locations = await db.select({ id: locationsTable.id, name: locationsTable.name })
+    .from(locationsTable);
+  const locNameById = new Map(locations.map(l => [l.id, l.name]));
+
+  // Aggregations: in-range and after-end-date
+  // Sales in range
+  const salesInRange = productIds.length === 0 ? [] : await db.select({
+    productId: saleItemsTable.productId,
+    qty: sql<string>`coalesce(sum(${saleItemsTable.qty}), 0)`,
+    value: sql<string>`coalesce(sum(cast(${saleItemsTable.total} as numeric)), 0)`,
+  }).from(saleItemsTable)
+    .innerJoin(salesTable, eq(saleItemsTable.saleId, salesTable.id))
+    .where(and(
+      inArray(saleItemsTable.productId, productIds),
+      gte(salesTable.createdAt, start),
+      lte(salesTable.createdAt, end),
+    ))
+    .groupBy(saleItemsTable.productId);
+
+  // Purchases in range
+  const purchasesInRange = productIds.length === 0 ? [] : await db.select({
+    productId: purchaseItemsTable.productId,
+    qty: sql<string>`coalesce(sum(${purchaseItemsTable.qty}), 0)`,
+    value: sql<string>`coalesce(sum(cast(${purchaseItemsTable.total} as numeric)), 0)`,
+  }).from(purchaseItemsTable)
+    .innerJoin(purchasesTable, eq(purchaseItemsTable.purchaseId, purchasesTable.id))
+    .where(and(
+      inArray(purchaseItemsTable.productId, productIds),
+      gte(purchasesTable.createdAt, start),
+      lte(purchasesTable.createdAt, end),
+    ))
+    .groupBy(purchaseItemsTable.productId);
+
+  // Sales AFTER end (to walk current stock back to balance@end)
+  const salesAfterEnd = productIds.length === 0 ? [] : await db.select({
+    productId: saleItemsTable.productId,
+    qty: sql<string>`coalesce(sum(${saleItemsTable.qty}), 0)`,
+  }).from(saleItemsTable)
+    .innerJoin(salesTable, eq(saleItemsTable.saleId, salesTable.id))
+    .where(and(
+      inArray(saleItemsTable.productId, productIds),
+      gt(salesTable.createdAt, end),
+    ))
+    .groupBy(saleItemsTable.productId);
+
+  // Purchases AFTER end
+  const purchasesAfterEnd = productIds.length === 0 ? [] : await db.select({
+    productId: purchaseItemsTable.productId,
+    qty: sql<string>`coalesce(sum(${purchaseItemsTable.qty}), 0)`,
+  }).from(purchaseItemsTable)
+    .innerJoin(purchasesTable, eq(purchaseItemsTable.purchaseId, purchasesTable.id))
+    .where(and(
+      inArray(purchaseItemsTable.productId, productIds),
+      gt(purchasesTable.createdAt, end),
+    ))
+    .groupBy(purchaseItemsTable.productId);
+
+  const salesInMap        = new Map(salesInRange.map(r => [r.productId, { qty: parseInt(r.qty), value: parseFloat(r.value) }]));
+  const purchasesInMap    = new Map(purchasesInRange.map(r => [r.productId, { qty: parseInt(r.qty), value: parseFloat(r.value) }]));
+  const salesAfterMap     = new Map(salesAfterEnd.map(r => [r.productId, parseInt(r.qty)]));
+  const purchasesAfterMap = new Map(purchasesAfterEnd.map(r => [r.productId, parseInt(r.qty)]));
+
+  // Build rows
+  const rows = products.map(p => {
+    const recv  = purchasesInMap.get(p.id)    ?? { qty: 0, value: 0 };
+    const sold  = salesInMap.get(p.id)        ?? { qty: 0, value: 0 };
+    const recAf = purchasesAfterMap.get(p.id) ?? 0;
+    const solAf = salesAfterMap.get(p.id)     ?? 0;
+
+    // balanceAtEnd = currentStock - purchasesAfterEnd + salesAfterEnd
+    const balanceAtEnd = (p.stock ?? 0) - recAf + solAf;
+    const opening      = balanceAtEnd - recv.qty + sold.qty;
+
+    const unitPrice = parseFloat(p.unitPrice ?? "0");
+    const costPrice = parseFloat(p.costPrice ?? "0");
+    const stockValueAtCost  = balanceAtEnd * costPrice;
+    const stockValueAtPrice = balanceAtEnd * unitPrice;
+
+    return {
+      productId:    p.id,
+      productName:  p.name,
+      sku:          p.sku,
+      locationId:   p.locationId,
+      locationName: p.locationId ? (locNameById.get(p.locationId) ?? null) : null,
+      currentStock: p.stock ?? 0,
+      opening,
+      received:        recv.qty,
+      receivedValue:   recv.value.toFixed(8),
+      sold:            sold.qty,
+      soldValue:       sold.value.toFixed(8),
+      balance:         balanceAtEnd,
+      unitPrice:       unitPrice.toFixed(8),
+      costPrice:       costPrice.toFixed(8),
+      stockValueAtCost:  stockValueAtCost.toFixed(8),
+      stockValueAtPrice: stockValueAtPrice.toFixed(8),
+    };
+  });
+
+  // Totals
+  const totals = rows.reduce((acc, r) => ({
+    opening:           acc.opening  + r.opening,
+    received:          acc.received + r.received,
+    receivedValue:     acc.receivedValue + parseFloat(r.receivedValue),
+    sold:              acc.sold + r.sold,
+    soldValue:         acc.soldValue + parseFloat(r.soldValue),
+    balance:           acc.balance + r.balance,
+    stockValueAtCost:  acc.stockValueAtCost  + parseFloat(r.stockValueAtCost),
+    stockValueAtPrice: acc.stockValueAtPrice + parseFloat(r.stockValueAtPrice),
+  }), {
+    opening: 0, received: 0, receivedValue: 0, sold: 0, soldValue: 0,
+    balance: 0, stockValueAtCost: 0, stockValueAtPrice: 0,
+  });
+
+  res.json({
+    startDate: start.toISOString(),
+    endDate:   end.toISOString(),
+    scope: {
+      isAdmin,
+      locationId: filterLocationId,
+      role: req.userRole ?? null,
+    },
+    rows: rows.sort((a, b) => (a.locationName ?? "").localeCompare(b.locationName ?? "") || a.productName.localeCompare(b.productName)),
+    totals: {
+      opening:           totals.opening,
+      received:          totals.received,
+      receivedValue:     totals.receivedValue.toFixed(8),
+      sold:              totals.sold,
+      soldValue:         totals.soldValue.toFixed(8),
+      balance:           totals.balance,
+      stockValueAtCost:  totals.stockValueAtCost.toFixed(8),
+      stockValueAtPrice: totals.stockValueAtPrice.toFixed(8),
+    },
   });
 });
 
