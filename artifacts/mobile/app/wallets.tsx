@@ -174,6 +174,17 @@ export default function WalletsScreen() {
       Alert.alert("Error", "Coin, dollar wallet, USD amount, coins per USD, PKR rate and date are required");
       return;
     }
+    const selWallet = dollarWallets.find(x => String(x.id) === topupForm.walletId);
+    const needUsd = parseFloat(topupForm.amountUsd);
+    if (!selWallet || parseFloat(selWallet.balance) < needUsd) {
+      Alert.alert(
+        "Insufficient dollars",
+        selWallet
+          ? `${selWallet.name} only has $${parseFloat(selWallet.balance).toFixed(2)} but you need $${needUsd.toFixed(2)}.\n\nBuy more USD into this wallet first.`
+          : "Pick a dollar wallet first."
+      );
+      return;
+    }
     setSaving(true);
     try {
       const res = await customFetch<{ qty: number; newStock: number }>("/api/dollar-wallet/topup", {
@@ -709,9 +720,39 @@ export default function WalletsScreen() {
               <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 20 }]}
                 value={topupForm.notes} onChangeText={v => setTopupForm(f => ({ ...f, notes: v }))} placeholder="e.g. Hayuki batch from Binance" placeholderTextColor={colors.mutedForeground} multiline />
 
-              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: "#9333EA", opacity: saving ? 0.6 : 1 }]} disabled={saving} onPress={handleTopup}>
-                <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Top-up Coins"}</Text>
-              </TouchableOpacity>
+              {(() => {
+                const selW = dollarWallets.find(x => String(x.id) === topupForm.walletId);
+                const need = parseFloat(topupForm.amountUsd || "0");
+                const have = selW ? parseFloat(selW.balance) : 0;
+                const blocked = !selW || (need > 0 && have < need);
+                const showWarn = topupForm.walletId && need > 0 && have < need;
+                return (
+                  <>
+                    {showWarn ? (
+                      <View style={{ backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: "#DC2626", flexDirection: "row", alignItems: "center", gap: 10 }}>
+                        <Feather name="alert-triangle" size={20} color="#991B1B" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#991B1B" }}>
+                            Not enough dollars in {selW!.name}
+                          </Text>
+                          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#7F1D1D", marginTop: 2 }}>
+                            Have ${have.toFixed(2)} · Need ${need.toFixed(2)} · Short ${(need - have).toFixed(2)}.
+                            Buy USD into this wallet first.
+                          </Text>
+                        </View>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      style={[styles.saveBtn, { backgroundColor: blocked ? "#9CA3AF" : "#9333EA", opacity: saving ? 0.6 : 1 }]}
+                      disabled={saving || blocked}
+                      onPress={handleTopup}>
+                      <Text style={styles.saveBtnText}>
+                        {saving ? "Saving..." : blocked ? (selW ? `Insufficient $${have.toFixed(2)}` : "Pick a wallet") : "Top-up Coins"}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                );
+              })()}
             </ScrollView>
           </View>
         </View>
