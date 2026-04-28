@@ -6,12 +6,13 @@ import {
 } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useListCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from "@workspace/api-client-react";
+import { useListCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, useListLocations } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 
-type Customer = { id: number; name: string; phone?: string | null; email?: string | null; address?: string | null; creditBalance: string };
-const emptyForm = { name: "", phone: "", email: "", address: "", openingCreditBalance: "", openingCreditType: "receivable" as "receivable" | "payable" };
+type Customer = { id: number; name: string; phone?: string | null; email?: string | null; address?: string | null; creditBalance: string; locationId?: number | null };
+type Location = { id: number; name: string };
+const emptyForm = { name: "", phone: "", email: "", address: "", locationId: "", openingCreditBalance: "", openingCreditType: "receivable" as "receivable" | "payable" };
 
 export default function CustomersScreen() {
   const colors = useColors();
@@ -24,19 +25,27 @@ export default function CustomersScreen() {
   const [form, setForm] = useState(emptyForm);
 
   const { data: raw, isLoading, refetch } = useListCustomers();
+  const { data: locationsRaw } = useListLocations();
   const createMut = useCreateCustomer();
   const updateMut = useUpdateCustomer();
   const deleteMut = useDeleteCustomer();
 
   const items = (raw ?? []) as unknown as Customer[];
+  const locations = (locationsRaw ?? []) as unknown as Location[];
   const filtered = items.filter(i =>
     i.name.toLowerCase().includes(search.toLowerCase()) || (i.phone ?? "").includes(search)
   );
 
-  const openAdd = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };
+  const locationName = (id?: number | null) => locations.find(l => l.id === id)?.name;
+
+  const openAdd = () => {
+    setEditItem(null);
+    setForm({ ...emptyForm, locationId: user?.locationId ? String(user.locationId) : "" });
+    setShowModal(true);
+  };
   const openEdit = (c: Customer) => {
     setEditItem(c);
-    setForm({ name: c.name, phone: c.phone ?? "", email: c.email ?? "", address: c.address ?? "", openingCreditBalance: "", openingCreditType: "receivable" });
+    setForm({ name: c.name, phone: c.phone ?? "", email: c.email ?? "", address: c.address ?? "", locationId: c.locationId ? String(c.locationId) : "", openingCreditBalance: "", openingCreditType: "receivable" });
     setShowModal(true);
   };
 
@@ -47,6 +56,7 @@ export default function CustomersScreen() {
       phone: form.phone || null,
       email: form.email || null,
       address: form.address || null,
+      locationId: form.locationId ? parseInt(form.locationId) : null,
     };
     if (!editItem && form.openingCreditBalance) {
       const bal = parseFloat(form.openingCreditBalance);
@@ -91,6 +101,7 @@ export default function CustomersScreen() {
           value={search}
           onChangeText={setSearch}
         />
+        {search ? <TouchableOpacity onPress={() => setSearch("")}><Feather name="x" size={15} color={colors.mutedForeground} /></TouchableOpacity> : null}
       </View>
 
       {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={colors.primary} /> : (
@@ -99,6 +110,7 @@ export default function CustomersScreen() {
           keyExtractor={i => String(i.id)}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}
+          ListHeaderComponent={filtered.length > 0 ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 4 }}>{filtered.length} customer{filtered.length !== 1 ? "s" : ""}</Text> : null}
           ListEmptyComponent={
             <View style={{ alignItems: "center", padding: 40 }}>
               <Feather name="users" size={40} color={colors.mutedForeground} />
@@ -113,10 +125,28 @@ export default function CustomersScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cardName, { color: colors.text }]}>{c.name}</Text>
-                  {c.phone && <Text style={[styles.cardSub, { color: colors.mutedForeground }]}><Feather name="phone" size={11} /> {c.phone}</Text>}
-                  {c.email && <Text style={[styles.cardSub, { color: colors.mutedForeground }]}><Feather name="mail" size={11} /> {c.email}</Text>}
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                    {locationName(c.locationId) && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#EFF6FF", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+                        <Feather name="map-pin" size={9} color="#2563EB" />
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#2563EB" }}>{locationName(c.locationId)}</Text>
+                      </View>
+                    )}
+                    {c.phone && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                        <Feather name="phone" size={10} color={colors.mutedForeground} />
+                        <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>{c.phone}</Text>
+                      </View>
+                    )}
+                    {c.email && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                        <Feather name="mail" size={10} color={colors.mutedForeground} />
+                        <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>{c.email}</Text>
+                      </View>
+                    )}
+                  </View>
                   {parseFloat(c.creditBalance) > 0 && (
-                    <Text style={[styles.cardSub, { color: colors.credit }]}>Credit: ${parseFloat(c.creditBalance).toFixed(2)}</Text>
+                    <Text style={[styles.cardSub, { color: colors.credit, marginTop: 4 }]}>Credit: ${parseFloat(c.creditBalance).toFixed(2)}</Text>
                   )}
                 </View>
                 <View style={{ gap: 8 }}>
@@ -160,6 +190,39 @@ export default function CustomersScreen() {
                   </View>
                 ))}
 
+              {/* Location selector */}
+              {locations.length > 0 && (
+                <View style={{ marginBottom: 14 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <Feather name="map-pin" size={12} color={colors.primary} />
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground }}>Location</Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        style={[styles.locChip, { backgroundColor: form.locationId === "" ? colors.input : colors.input, borderColor: form.locationId === "" ? colors.primary : colors.border, opacity: form.locationId === "" ? 1 : 0.7 }]}
+                        onPress={() => setForm(f => ({ ...f, locationId: "" }))}
+                      >
+                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === "" ? colors.primary : colors.mutedForeground }}>No Location</Text>
+                      </TouchableOpacity>
+                      {locations.map(l => (
+                        <TouchableOpacity
+                          key={l.id}
+                          style={[styles.locChip, {
+                            backgroundColor: form.locationId === String(l.id) ? colors.primary : colors.input,
+                            borderColor: form.locationId === String(l.id) ? colors.primary : colors.border,
+                          }]}
+                          onPress={() => setForm(f => ({ ...f, locationId: String(l.id) }))}
+                        >
+                          <Feather name="map-pin" size={11} color={form.locationId === String(l.id) ? "#FFF" : colors.primary} />
+                          <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === String(l.id) ? "#FFF" : colors.text }}>{l.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+
               {!editItem && (
                 <View style={[styles.creditSection, { borderColor: colors.credit + "55", backgroundColor: colors.creditBg }]}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -188,11 +251,7 @@ export default function CustomersScreen() {
                         }]}
                         onPress={() => setForm(f => ({ ...f, openingCreditType: t }))}
                       >
-                        <Feather
-                          name={t === "receivable" ? "arrow-down-left" : "arrow-up-right"}
-                          size={14}
-                          color={form.openingCreditType === t ? "#FFF" : colors.mutedForeground}
-                        />
+                        <Feather name={t === "receivable" ? "arrow-down-left" : "arrow-up-right"} size={14} color={form.openingCreditType === t ? "#FFF" : colors.mutedForeground} />
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: form.openingCreditType === t ? "#FFF" : colors.mutedForeground }}>
                           {t === "receivable" ? "Receivable (to receive)" : "Payable (to pay)"}
                         </Text>
@@ -226,10 +285,11 @@ const styles = StyleSheet.create({
   cardMain: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
   avatar: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center" },
   avatarText: { fontFamily: "Inter_700Bold", fontSize: 18 },
-  cardName: { fontFamily: "Inter_700Bold", fontSize: 15, marginBottom: 4 },
-  cardSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 2 },
+  cardName: { fontFamily: "Inter_700Bold", fontSize: 15, marginBottom: 2 },
+  cardSub: { fontFamily: "Inter_400Regular", fontSize: 12 },
   actionBtn: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   fab: { position: "absolute", bottom: 24, right: 20, width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
   creditSection: { borderRadius: 14, borderWidth: 1.5, padding: 16, marginBottom: 16 },
   typeBtn: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5 },
+  locChip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5 },
 });
