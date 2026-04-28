@@ -3,6 +3,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { db, locationsTable, productsTable, stockTransfersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { requireAdminOrManager } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -43,7 +44,8 @@ router.delete("/locations/:id", requireAuth, async (req, res): Promise<void> => 
 
 // ── Stock Transfers ─────────────────────────────────────────────────────────
 
-router.get("/locations/stock-transfers", requireAuth, async (_req, res): Promise<void> => {
+router.get("/locations/stock-transfers", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdminOrManager(req, res)) return;
   const rows = await db
     .select({
       id: stockTransfersTable.id,
@@ -71,6 +73,7 @@ router.get("/locations/stock-transfers", requireAuth, async (_req, res): Promise
 });
 
 router.post("/locations/stock-transfer", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdminOrManager(req, res)) return;
   const { fromLocationId, toLocationId, fromProductId, toProductId, qty, notes } =
     req.body as { fromLocationId?: number; toLocationId?: number; fromProductId?: number; toProductId?: number; qty?: number; notes?: string };
 

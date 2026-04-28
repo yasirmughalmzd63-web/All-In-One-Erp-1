@@ -12,3 +12,17 @@ export function requireAdmin(req: Request, res: Response): boolean {
   res.status(403).json({ error: "Admin access required." });
   return false;
 }
+
+export function requireAdminOrManager(req: Request, res: Response): boolean {
+  if (req.userRole === "admin" || req.userRole === "manager") return true;
+  res.status(403).json({ error: "Admin or Manager access required." });
+  return false;
+}
+
+export function isAdmin(req: Request): boolean {
+  return req.userRole === "admin";
+}
+
+export function isAdminOrManager(req: Request): boolean {
+  return req.userRole === "admin" || req.userRole === "manager";
+}

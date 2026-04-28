@@ -142,11 +142,15 @@ export default function POSScreen() {
     }
   }, [activeProducts.length]);
 
+  // Lock non-admin to their assigned location immediately when locations load
   React.useEffect(() => {
-    if (allowedLocations.length === 1 && !selectedLocation) {
+    if (!isAdmin && user?.locationId) {
+      const assigned = locations.find(l => l.id === user.locationId);
+      if (assigned) setSelectedLocation(assigned);
+    } else if (isAdmin && allowedLocations.length === 1 && !selectedLocation) {
       setSelectedLocation(allowedLocations[0]!);
     }
-  }, [allowedLocations.length]);
+  }, [locations.length, user?.locationId, isAdmin]);
 
   const parsedAmount = parseFloat(amount) || 0;
   const activePrice = selectedProduct

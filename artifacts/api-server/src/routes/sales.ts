@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db, salesTable, saleItemsTable, productsTable, customersTable, locationsTable, accountsTable, usersTable, creditsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
-import { canModify } from "../lib/permissions.js";
+import { canModify, isAdmin } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -13,7 +13,11 @@ function genInvoiceNo(): string {
   return "SAL-" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
 }
 
-router.get("/sales", requireAuth, async (_req, res): Promise<void> => {
+router.get("/sales", requireAuth, async (req, res): Promise<void> => {
+  const locationFilter = !isAdmin(req) && req.userLocationId != null
+    ? eq(salesTable.locationId, req.userLocationId)
+    : undefined;
+
   const sales = await db.select({
     id: salesTable.id,
     invoiceNo: salesTable.invoiceNo,
@@ -38,6 +42,7 @@ router.get("/sales", requireAuth, async (_req, res): Promise<void> => {
     .leftJoin(customersTable, eq(salesTable.customerId, customersTable.id))
     .leftJoin(locationsTable, eq(salesTable.locationId, locationsTable.id))
     .leftJoin(accountsTable, eq(salesTable.accountId, accountsTable.id))
+    .where(locationFilter)
     .orderBy(desc(salesTable.createdAt))
     .limit(100);
 
@@ -146,13 +151,34 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
-  // Rules 3, 4, 5: Stock validation for every item
+  // Location enforcement: non-admin users can only sell from their assigned location
+  const effectiveLocationId = !isAdmin(req) && req.userLocationId != null
+    ? req.userLocationId
+    : (locationId ?? null);
+
+  // Validate account belongs to user's location for non-admin
+  if (!isAdmin(req) && req.userLocationId != null && accountId) {
+    const [account] = await db.select({ locationId: accountsTable.locationId }).from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (account && account.locationId != null && account.locationId !== req.userLocationId) {
+      res.status(403).json({ error: "You can only use accounts assigned to your location." });
+      return;
+    }
+  }
+
+  // Rules 3, 4, 5: Stock validation for every item + location check
   for (const item of items) {
-    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock })
+    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock, locationId: productsTable.locationId })
       .from(productsTable).where(eq(productsTable.id, item.productId));
     if (!product) {
       res.status(422).json({ error: `Product not found (id ${item.productId}).` });
       return;
+    }
+    // Non-admin: product must belong to user's location
+    if (!isAdmin(req) && req.userLocationId != null) {
+      if (product.locationId !== req.userLocationId) {
+        res.status(403).json({ error: `"${product.name}" is not available at your location.` });
+        return;
+      }
     }
     if ((product.stock ?? 0) <= 0) {
       res.status(422).json({ error: `"${product.name}" is out of stock.` });
@@ -196,7 +222,7 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
   const [sale] = await db.insert(salesTable).values({
     invoiceNo,
     customerId: customerId ?? null,
-    locationId: locationId ?? null,
+    locationId: effectiveLocationId,
     accountId: accountId ?? null,
     userId,
     subtotal: fmt(subtotal),

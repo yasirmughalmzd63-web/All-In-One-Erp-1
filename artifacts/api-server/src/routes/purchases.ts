@@ -1,9 +1,9 @@
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db, purchasesTable, purchaseItemsTable, productsTable, suppliersTable, locationsTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
-import { canModify } from "../lib/permissions.js";
+import { canModify, isAdmin } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -15,7 +15,11 @@ function genInvoiceNo(): string {
   return "PUR-" + Date.now().toString().slice(-8) + Math.floor(Math.random() * 1000).toString().padStart(3, "0");
 }
 
-router.get("/purchases", requireAuth, async (_req, res): Promise<void> => {
+router.get("/purchases", requireAuth, async (req, res): Promise<void> => {
+  const locationFilter = !isAdmin(req) && req.userLocationId != null
+    ? eq(purchasesTable.locationId, req.userLocationId)
+    : undefined;
+
   const rows = await db.select({
     id: purchasesTable.id,
     invoiceNo: purchasesTable.invoiceNo,
@@ -33,6 +37,7 @@ router.get("/purchases", requireAuth, async (_req, res): Promise<void> => {
     createdAt: purchasesTable.createdAt,
   }).from(purchasesTable)
     .leftJoin(suppliersTable, eq(purchasesTable.supplierId, suppliersTable.id))
+    .where(locationFilter)
     .orderBy(desc(purchasesTable.createdAt))
     .limit(100);
 
@@ -75,6 +80,20 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
   };
   if (!items?.length || !userId) { res.status(400).json({ error: "userId and items required" }); return; }
 
+  // Location enforcement for non-admin
+  const effectiveLocationId = !isAdmin(req) && req.userLocationId != null
+    ? req.userLocationId
+    : (locationId ?? null);
+
+  // Validate account belongs to user's location for non-admin
+  if (!isAdmin(req) && req.userLocationId != null && accountId) {
+    const [account] = await db.select({ locationId: accountsTable.locationId }).from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (account && account.locationId != null && account.locationId !== req.userLocationId) {
+      res.status(403).json({ error: "You can only use accounts assigned to your location." });
+      return;
+    }
+  }
+
   let subtotal = 0;
   const itemsWithTotal = items.map(item => {
     const lineTotal = parseFloat(item.unitCost) * item.qty;
@@ -88,7 +107,7 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
 
   const invoiceNo = genInvoiceNo();
   const [purchase] = await db.insert(purchasesTable).values({
-    invoiceNo, supplierId: supplierId ?? null, locationId: locationId ?? null, accountId: accountId ?? null,
+    invoiceNo, supplierId: supplierId ?? null, locationId: effectiveLocationId, accountId: accountId ?? null,
     userId, subtotal: formatAmount(subtotal), discount: formatAmount(discountAmt), total: formatAmount(total),
     amountPaid: formatAmount(paid), status: "completed", notes: notes ?? null,
   }).returning();

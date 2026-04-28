@@ -1,13 +1,17 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, productsTable, categoriesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
-import { requireAdmin } from "../lib/permissions.js";
+import { requireAdmin, isAdmin } from "../lib/permissions.js";
 
 const router = Router();
 
 router.get("/products", requireAuth, async (req, res): Promise<void> => {
+  const locationFilter = !isAdmin(req) && req.userLocationId != null
+    ? eq(productsTable.locationId, req.userLocationId)
+    : undefined;
+
   const rows = await db.select({
     id: productsTable.id,
     name: productsTable.name,
@@ -24,6 +28,7 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
     createdAt: productsTable.createdAt,
   }).from(productsTable)
     .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
+    .where(locationFilter)
     .orderBy(productsTable.name);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
@@ -47,9 +52,9 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (!requireAdmin(req, res)) return;
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive } = req.body as {
+  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive, locationId } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
-    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean;
+    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean; locationId?: number | null;
   };
   const updates: Record<string, unknown> = {};
   if (name != null) updates.name = name;
@@ -61,6 +66,7 @@ router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (stock != null) updates.stock = stock;
   if (unit != null) updates.unit = unit;
   if (isActive != null) updates.isActive = isActive;
+  if (locationId !== undefined) updates.locationId = locationId;
   const [row] = await db.update(productsTable).set(updates).where(eq(productsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Product not found" }); return; }
   await logAudit(req.userId, "update", "product", id);

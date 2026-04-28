@@ -3,12 +3,12 @@ import { eq, desc } from "drizzle-orm";
 import { db, expensesTable, categoriesTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
-import { canModify } from "../lib/permissions.js";
+import { canModify, isAdmin } from "../lib/permissions.js";
 
 const router = Router();
 
-router.get("/expenses", requireAuth, async (_req, res): Promise<void> => {
-  const rows = await db.select({
+router.get("/expenses", requireAuth, async (req, res): Promise<void> => {
+  const query = db.select({
     id: expensesTable.id,
     title: expensesTable.title,
     amount: expensesTable.amount,
@@ -22,8 +22,12 @@ router.get("/expenses", requireAuth, async (_req, res): Promise<void> => {
     createdAt: expensesTable.createdAt,
   }).from(expensesTable)
     .leftJoin(categoriesTable, eq(expensesTable.categoryId, categoriesTable.id))
-    .leftJoin(accountsTable, eq(expensesTable.accountId, accountsTable.id))
-    .orderBy(desc(expensesTable.createdAt));
+    .leftJoin(accountsTable, eq(expensesTable.accountId, accountsTable.id));
+
+  const rows = !isAdmin(req)
+    ? await query.where(eq(expensesTable.userId, req.userId!)).orderBy(desc(expensesTable.createdAt))
+    : await query.orderBy(desc(expensesTable.createdAt));
+
   res.json(rows.map(r => ({ ...r, categoryName: r.categoryName ?? null, accountName: r.accountName ?? null, createdAt: r.createdAt.toISOString() })));
 });
 

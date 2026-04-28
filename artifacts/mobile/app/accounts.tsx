@@ -6,18 +6,20 @@ import {
 } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useListAccounts, useCreateAccount, useUpdateAccount, useDeleteAccount, customFetch } from "@workspace/api-client-react";
+import { useListAccounts, useListLocations, useCreateAccount, useUpdateAccount, useDeleteAccount, customFetch } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { useAuth, getAllowedAccountIds } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
-type Account = { id: number; name: string; type: string; balance: string; currency: string; isActive: boolean };
+type Account = { id: number; name: string; type: string; balance: string; currency: string; locationId?: number | null; isActive: boolean };
+type Location = { id: number; name: string };
 const ACCOUNT_TYPES = ["cash", "bank", "mobile", "other"];
-const emptyForm = { name: "", type: "cash", currency: "USD", balance: "0" };
+const emptyForm = { name: "", type: "cash", currency: "USD", balance: "0", locationId: "" };
 
 export default function AccountsScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isAdminOrManager = user?.role === "admin" || user?.role === "manager";
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -27,23 +29,39 @@ export default function AccountsScreen() {
   const [transferring, setTransferring] = useState(false);
 
   const { data: raw, isLoading, refetch } = useListAccounts();
+  const { data: locationsRaw } = useListLocations();
   const createMut = useCreateAccount();
   const updateMut = useUpdateAccount();
   const deleteMut = useDeleteAccount();
-  const allItems = (raw ?? []) as unknown as Account[];
-  const allowedAccountIds = getAllowedAccountIds(user);
-  const items = isAdmin ? allItems : allItems.filter(a => allowedAccountIds === null || allowedAccountIds.has(a.id));
+
+  // API already filters by userLocationId for non-admin
+  const items = (raw ?? []) as unknown as Account[];
+  const locations = (locationsRaw ?? []) as unknown as Location[];
   const total = items.reduce((sum, a) => sum + parseFloat(a.balance), 0);
 
+  const getLocationName = (id?: number | null) => locations.find(l => l.id === id)?.name;
+
   const openAdd = () => { setEditItem(null); setForm(emptyForm); setShowModal(true); };
-  const openEdit = (a: Account) => { setEditItem(a); setForm({ name: a.name, type: a.type, currency: a.currency, balance: a.balance }); setShowModal(true); };
+  const openEdit = (a: Account) => {
+    setEditItem(a);
+    setForm({ name: a.name, type: a.type, currency: a.currency, balance: a.balance, locationId: a.locationId ? String(a.locationId) : "" });
+    setShowModal(true);
+  };
 
   const handleSubmit = async () => {
     if (!form.name.trim()) { Alert.alert("Error", "Name required"); return; }
     try {
-      const data = { name: form.name.trim(), type: form.type, currency: form.currency };
-      if (editItem) { await (updateMut as unknown as { mutateAsync: (a: { id: number; data: unknown }) => Promise<unknown> }).mutateAsync({ id: editItem.id, data }); }
-      else { await (createMut as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({ data: { ...data, balance: parseFloat(form.balance || "0").toFixed(8) } }); }
+      const data: Record<string, unknown> = {
+        name: form.name.trim(), type: form.type, currency: form.currency,
+        locationId: form.locationId ? parseInt(form.locationId) : null,
+      };
+      if (editItem) {
+        await (updateMut as unknown as { mutateAsync: (a: { id: number; data: unknown }) => Promise<unknown> }).mutateAsync({ id: editItem.id, data });
+      } else {
+        await (createMut as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({
+          data: { ...data, balance: parseFloat(form.balance || "0").toFixed(8) },
+        });
+      }
       queryClient.invalidateQueries();
       setShowModal(false);
     } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
@@ -52,7 +70,9 @@ export default function AccountsScreen() {
   const handleDelete = (a: Account) => {
     Alert.alert("Delete", `Delete "${a.name}"?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: a.id }); queryClient.invalidateQueries(); } catch {} } },
+      { text: "Delete", style: "destructive", onPress: async () => {
+        try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: a.id }); queryClient.invalidateQueries(); } catch {}
+      }},
     ]);
   };
 
@@ -118,10 +138,12 @@ export default function AccountsScreen() {
       <View style={[styles.totalCard, { backgroundColor: colors.primary }]}>
         <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>TOTAL BALANCE</Text>
         <Text style={{ fontFamily: "Inter_700Bold", fontSize: 28, color: "#FFFFFF", marginTop: 4 }}>${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
-        <TouchableOpacity style={styles.transferBtn} onPress={() => setShowTransferModal(true)}>
-          <Feather name="arrow-right-circle" size={16} color="#FFF" />
-          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" }}>Transfer Between Accounts</Text>
-        </TouchableOpacity>
+        {isAdminOrManager && (
+          <TouchableOpacity style={styles.transferBtn} onPress={() => setShowTransferModal(true)}>
+            <Feather name="arrow-right-circle" size={16} color="#FFF" />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" }}>Transfer Between Accounts</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={colors.primary} /> : (
@@ -131,30 +153,40 @@ export default function AccountsScreen() {
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}
           ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="credit-card" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No accounts</Text></View>}
-          renderItem={({ item: a }) => (
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                <View style={[styles.iconBox, { backgroundColor: colors.secondary }]}><Feather name={typeIcon(a.type)} size={20} color={colors.primary} /></View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>{a.name}</Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>{a.type} • {a.currency}</Text>
-                </View>
-                <View style={{ alignItems: "flex-end", gap: 8 }}>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: parseFloat(a.balance) >= 0 ? colors.success : colors.danger }}>
-                    {a.currency} {parseFloat(a.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </Text>
-                  {isAdmin && <View style={{ flexDirection: "row", gap: 6 }}>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(a)}>
-                      <Feather name="edit-2" size={13} color={colors.primary} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(a)}>
-                      <Feather name="trash-2" size={13} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>}
+          renderItem={({ item: a }) => {
+            const locName = getLocationName(a.locationId);
+            return (
+              <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <View style={[styles.iconBox, { backgroundColor: colors.secondary }]}><Feather name={typeIcon(a.type)} size={20} color={colors.primary} /></View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>{a.name}</Text>
+                    <View style={{ flexDirection: "row", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>{a.type} • {a.currency}</Text>
+                      {locName && (
+                        <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                          <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.primary }}>{locName}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                  <View style={{ alignItems: "flex-end", gap: 8 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: parseFloat(a.balance) >= 0 ? colors.success : colors.danger }}>
+                      {a.currency} {parseFloat(a.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </Text>
+                    {isAdmin && <View style={{ flexDirection: "row", gap: 6 }}>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(a)}>
+                        <Feather name="edit-2" size={13} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(a)}>
+                        <Feather name="trash-2" size={13} color={colors.danger} />
+                      </TouchableOpacity>
+                    </View>}
+                  </View>
                 </View>
               </View>
-            </View>
-          )}
+            );
+          }}
         />
       )}
 
@@ -162,6 +194,7 @@ export default function AccountsScreen() {
         <Feather name="plus" size={24} color="#FFFFFF" />
       </TouchableOpacity>}
 
+      {/* Create / Edit Account Modal */}
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
@@ -169,9 +202,10 @@ export default function AccountsScreen() {
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit Account" : "New Account"}</Text>
               <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
             </View>
-            <View style={{ padding: 20 }}>
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Name *</Text>
               <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.input }]} value={form.name} onChangeText={v => setForm(f => ({ ...f, name: v }))} />
+
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>Account Type</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
                 {ACCOUNT_TYPES.map(t => (
@@ -180,8 +214,31 @@ export default function AccountsScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Currency</Text>
               <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.input, marginBottom: 12 }]} value={form.currency} onChangeText={v => setForm(f => ({ ...f, currency: v }))} autoCapitalize="characters" />
+
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>Assigned Location</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.chip, { backgroundColor: !form.locationId ? colors.primary : colors.input, borderColor: !form.locationId ? colors.primary : colors.border }]}
+                    onPress={() => setForm(f => ({ ...f, locationId: "" }))}
+                  >
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: !form.locationId ? "#FFF" : colors.mutedForeground }}>None</Text>
+                  </TouchableOpacity>
+                  {locations.map(l => (
+                    <TouchableOpacity
+                      key={l.id}
+                      style={[styles.chip, { backgroundColor: form.locationId === String(l.id) ? colors.primary : colors.input, borderColor: form.locationId === String(l.id) ? colors.primary : colors.border }]}
+                      onPress={() => setForm(f => ({ ...f, locationId: String(l.id) }))}
+                    >
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: form.locationId === String(l.id) ? "#FFF" : colors.text }}>{l.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+
               {!editItem && (
                 <>
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Initial Balance</Text>
@@ -191,11 +248,12 @@ export default function AccountsScreen() {
               <TouchableOpacity style={{ backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 14, alignItems: "center", marginTop: 8, marginBottom: 40 }} onPress={handleSubmit}>
                 <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>{editItem ? "Update" : "Create"} Account</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
 
+      {/* Transfer Modal */}
       <Modal visible={showTransferModal} animationType="slide" transparent onRequestClose={() => setShowTransferModal(false)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "80%" }}>
@@ -209,29 +267,11 @@ export default function AccountsScreen() {
                 <Feather name="arrow-down" size={18} color={colors.primary} />
               </View>
               <AccountPicker label="To Account" selected={transfer.toId} onSelect={v => setTransfer(t => ({ ...t, toId: v }))} exclude={transfer.fromId} />
-
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Amount *</Text>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.input, marginBottom: 12 }]}
-                value={transfer.amount}
-                onChangeText={v => setTransfer(t => ({ ...t, amount: v }))}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={colors.mutedForeground}
-              />
+              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.input, marginBottom: 12 }]} value={transfer.amount} onChangeText={v => setTransfer(t => ({ ...t, amount: v }))} keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} />
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Notes (optional)</Text>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.input, marginBottom: 20 }]}
-                value={transfer.notes}
-                onChangeText={v => setTransfer(t => ({ ...t, notes: v }))}
-                placeholder="Optional note"
-                placeholderTextColor={colors.mutedForeground}
-              />
-              <TouchableOpacity
-                style={{ backgroundColor: transferring ? colors.mutedForeground : colors.primary, paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 40 }}
-                onPress={handleTransfer}
-                disabled={transferring}
-              >
+              <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.input, marginBottom: 20 }]} value={transfer.notes} onChangeText={v => setTransfer(t => ({ ...t, notes: v }))} placeholder="Optional note" placeholderTextColor={colors.mutedForeground} />
+              <TouchableOpacity style={{ backgroundColor: transferring ? colors.mutedForeground : colors.primary, paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 40 }} onPress={handleTransfer} disabled={transferring}>
                 <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>{transferring ? "Processing..." : "Confirm Transfer"}</Text>
               </TouchableOpacity>
             </ScrollView>

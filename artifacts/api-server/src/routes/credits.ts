@@ -3,7 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { db, creditsTable, customersTable, suppliersTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
-import { canModify } from "../lib/permissions.js";
+import { canModify, isAdmin } from "../lib/permissions.js";
 
 const router = Router();
 
@@ -17,8 +17,10 @@ async function getPartyName(partyId: number, partyType: string): Promise<string>
   }
 }
 
-router.get("/credits", requireAuth, async (_req, res): Promise<void> => {
-  const rows = await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
+router.get("/credits", requireAuth, async (req, res): Promise<void> => {
+  const rows = !isAdmin(req)
+    ? await db.select().from(creditsTable).where(eq(creditsTable.userId, req.userId!)).orderBy(desc(creditsTable.createdAt))
+    : await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
   const result = await Promise.all(rows.map(async (row) => {
     const partyName = await getPartyName(row.partyId, row.partyType);
     return { ...row, partyName, createdAt: row.createdAt.toISOString() };
