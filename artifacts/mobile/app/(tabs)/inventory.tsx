@@ -29,6 +29,13 @@ const emptyForm = {
   unitPrice: "", wholesalePrice: "", costPrice: "", stock: "0", unit: "pcs",
 };
 
+function fmtPKR(n: number): string {
+  if (!isFinite(n)) return "₨0";
+  if (Math.abs(n) >= 1_000_000) return `₨${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000)     return `₨${(n / 1_000).toFixed(1)}K`;
+  return `₨${n.toFixed(2)}`;
+}
+
 function PriceChip({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
   return (
     <View style={[chipStyles.wrap, { backgroundColor: bg }]}>
@@ -132,7 +139,8 @@ export default function InventoryScreen() {
     ]);
   };
 
-  const totalStockValue = products.reduce((sum, p) => sum + p.stock * parseFloat(p.unitPrice), 0);
+  const totalStockValueRetail = products.reduce((sum, p) => sum + p.stock * parseFloat(p.unitPrice || "0"), 0);
+  const totalStockValueCost   = products.reduce((sum, p) => sum + p.stock * parseFloat(p.costPrice || "0"), 0);
 
   const stockColor = (s: number) => s > 10 ? colors.success : s > 0 ? colors.expense : colors.danger;
   const stockBg = (s: number) => s > 10 ? colors.saleBg : s > 0 ? colors.expenseBg : colors.dangerBg;
@@ -158,7 +166,9 @@ export default function InventoryScreen() {
       <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8 }]}>
         <View>
           <Text style={styles.headerTitle}>Inventory</Text>
-          <Text style={styles.headerSub}>{products.length} products · ${totalStockValue.toLocaleString(undefined, { maximumFractionDigits: 0 })} total value</Text>
+          <Text style={styles.headerSub}>
+            {products.length} products · {fmtPKR(totalStockValueRetail)} retail · {fmtPKR(totalStockValueCost)} cost
+          </Text>
         </View>
         {isAdmin && <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
           <Feather name="plus" size={18} color="#FFF" />
@@ -224,6 +234,12 @@ export default function InventoryScreen() {
                         <Feather name="layers" size={10} color={stockColor(p.stock)} />
                         <Text style={[styles.stockText, { color: stockColor(p.stock) }]}>{p.stock} {p.unit}</Text>
                       </View>
+                      <View style={[styles.stockBadge, { backgroundColor: colors.saleBg }]}>
+                        <Feather name="tag" size={10} color={colors.success} />
+                        <Text style={[styles.stockText, { color: colors.success }]}>
+                          Value {fmtPKR(p.stock * parseFloat(p.unitPrice || "0"))}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   {isAdmin && <View style={{ flexDirection: "row", gap: 6 }}>
@@ -236,9 +252,9 @@ export default function InventoryScreen() {
                   </View>}
                 </View>
                 <View style={{ flexDirection: "row", gap: 8 }}>
-                  <PriceChip label="COST" value={`$${parseFloat(p.costPrice).toFixed(2)}`} color={colors.mutedForeground} bg={colors.input} />
-                  <PriceChip label="RETAIL" value={`$${parseFloat(p.unitPrice).toFixed(2)}`} color={colors.primary} bg={colors.secondary} />
-                  <PriceChip label="WHOLESALE" value={`$${parseFloat(p.wholesalePrice).toFixed(2)}`} color={colors.purchase} bg={colors.purchaseBg} />
+                  <PriceChip label="COST" value={`₨${parseFloat(p.costPrice).toFixed(2)}`} color={colors.mutedForeground} bg={colors.input} />
+                  <PriceChip label="RETAIL" value={`₨${parseFloat(p.unitPrice).toFixed(2)}`} color={colors.primary} bg={colors.secondary} />
+                  <PriceChip label="WHOLESALE" value={`₨${parseFloat(p.wholesalePrice).toFixed(2)}`} color={colors.purchase} bg={colors.purchaseBg} />
                 </View>
               </View>
             </View>
