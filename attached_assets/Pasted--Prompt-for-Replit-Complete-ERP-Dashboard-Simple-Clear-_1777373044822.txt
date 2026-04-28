@@ -1,0 +1,132 @@
+**Prompt for Replit — Complete ERP Dashboard (Simple & Clear)**
+
+Create a complete ERP dashboard for a multi-user, multi-location inventory and accounting system.
+
+The dashboard must show daily sales, daily purchases (stock received), and current inventory status with full reporting.
+
+1. DAILY SALES REPORT
+   The system must show daily sales with the following details:
+
+* Date
+* User Name
+* Product / Coin Name
+* Quantity
+* Rate
+* Total Value
+* Payment Method
+* Location
+
+The system must also calculate:
+
+* Total Sales Quantity
+* Total Sales Value
+* User-wise Sales
+* Product-wise Sales
+
+2. PURCHASE / STOCK RECEIVED REPORT
+
+The system must show daily stock received (purchases) with:
+
+* Date
+* User Name
+* Supplier Name
+* Product / Coin Name
+* Quantity
+* Rate
+* Total Value
+* Location
+
+The system must calculate:
+
+* Total Purchase Quantity
+* Total Purchase Value
+* User-wise Purchase
+* Product-wise Purchase
+
+3. INVENTORY / STOCK DASHBOARD
+
+The system must show current inventory status with:
+
+* Product / Coin Name
+* Opening Stock
+* Stock Received
+* Stock Sold
+* Balance Stock
+* Stock Value
+
+The system must automatically update stock after every sale or purchase.
+
+4. USER-WISE REPORT
+
+The system must show performance of each user:
+
+* User Name
+* Total Sales Quantity
+* Total Sales Value
+* Stock Received
+* Stock Sold
+* Cash Collected
+* Pending Amount
+
+5. PRODUCT / COIN-WISE REPORT
+
+The system must show product-wise summary:
+
+* Product / Coin Name
+* Total Purchased
+* Total Sold
+* Current Stock
+* Stock Value
+
+6. ACCOUNTING DASHBOARD
+
+The system must manage multiple accounts:
+
+* Cash
+* Bank
+* EasyPaisa
+* JazzCash
+
+The system must show:
+
+* Account Balance
+* Cash Received
+* Cash Paid
+* Pending Amount
+
+7. FILTERS REQUIRED ON ALL REPORTS
+
+Add filters:
+
+* Date Range
+* User
+* Location
+* Product
+* Account
+
+8. VALIDATION RULES
+
+* Do not allow sale if stock is zero
+* Do not allow transaction without payment
+* Stock must update automatically
+* Each user can only see their own location data
+
+9. DASHBOARD SUMMARY (TOP CARDS)
+
+Show:
+
+* Total Sales Today
+* Total Purchase Today
+* Total Stock Value
+* Total Cash Balance
+* Total Pending Amount
+
+10. EXPORT OPTIONS
+
+Every report must support:
+
+* Export to Excel
+* Export to PDF
+* Print
+
+Build the dashboard using clean UI, fast loading, and real-time data updates.
