@@ -88,7 +88,7 @@ export default function DailyReportScreen() {
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
             <Feather name="arrow-left" size={20} color="#FFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Daily Report</Text>
+          <Text style={styles.headerTitle}>Topup</Text>
         </LinearGradient>
         <ActivityIndicator style={{ marginTop: 60 }} color={colors.primary} size="large" />
       </View>
@@ -114,7 +114,7 @@ export default function DailyReportScreen() {
             <Feather name="arrow-left" size={20} color="#FFF" />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>Daily Report</Text>
+            <Text style={styles.headerTitle}>Topup</Text>
             <Text style={styles.headerSub}>{fmtDate(report.date)}</Text>
           </View>
           <TouchableOpacity style={styles.refreshBtn} onPress={() => load(true)}>
