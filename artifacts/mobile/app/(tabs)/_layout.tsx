@@ -42,33 +42,38 @@ function ClassicTabLayout() {
   const isIOS = Platform.OS === "ios";
   const isWeb = Platform.OS === "web";
 
+  const TAB_BG   = "#FCE7F3";
+  const TAB_ACTIVE   = "#2563EB";
+  const TAB_INACTIVE = "#F472B6";
+  const TAB_BORDER   = "#F9A8D4";
+
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarActiveTintColor: TAB_ACTIVE,
+        tabBarInactiveTintColor: TAB_INACTIVE,
         headerShown: false,
         tabBarStyle: {
           position: "absolute",
-          backgroundColor: isIOS ? "transparent" : colors.card,
-          borderTopWidth: 1,
-          borderTopColor: colors.border,
-          elevation: 8,
+          backgroundColor: isIOS ? "transparent" : TAB_BG,
+          borderTopWidth: 1.5,
+          borderTopColor: TAB_BORDER,
+          elevation: 12,
           ...(isWeb ? { height: 84 } : {}),
         },
         tabBarLabelStyle: {
-          fontFamily: "Inter_500Medium",
+          fontFamily: "Inter_600SemiBold",
           fontSize: 11,
         },
         tabBarBackground: () =>
           isIOS ? (
             <BlurView
-              intensity={100}
-              tint={isDark ? "dark" : "light"}
-              style={StyleSheet.absoluteFill}
+              intensity={80}
+              tint="light"
+              style={[StyleSheet.absoluteFill, { backgroundColor: TAB_BG + "CC" }]}
             />
           ) : isWeb ? (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.card }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: TAB_BG }]} />
           ) : null,
       }}
     >
