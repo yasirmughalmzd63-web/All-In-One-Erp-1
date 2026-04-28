@@ -25,11 +25,11 @@ function NativeTabLayout() {
         <Label>Transactions</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="inventory">
-        <Icon sf={{ default: "cube.box", selected: "cube.box.fill" }} />
+        <Icon sf={{ default: "shippingbox", selected: "shippingbox.fill" }} />
         <Label>Stock</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="more">
-        <Icon sf={{ default: "grid", selected: "grid.fill" }} />
+        <Icon sf={{ default: "square.grid.2x2", selected: "square.grid.2x2.fill" }} />
         <Label>More</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
