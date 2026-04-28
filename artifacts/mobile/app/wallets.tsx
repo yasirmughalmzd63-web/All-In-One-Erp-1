@@ -52,10 +52,12 @@ const emptyBuyForm = {
 const emptyTopupForm = {
   productId: "",
   walletId: "",
+  partyType: "supplier" as "supplier" | "customer",
+  partyId: "",
   amountUsd: "",
-  coinsPerUsd: "",
-  exchangeRatePkr: "",
-  costPricePkr: "",
+  coinsPerUsd: "6000",
+  exchangeRatePkr: "333.33",
+  costPricePkr: "0.0556",
   salePricePkr: "",
   wholesalePricePkr: "",
   notes: "",
@@ -174,6 +176,10 @@ export default function WalletsScreen() {
       Alert.alert("Error", "Coin, dollar wallet, USD amount, coins per USD, PKR rate and date are required");
       return;
     }
+    if (!topupForm.partyId) {
+      Alert.alert("Pick party", "Choose which supplier or customer is selling you the coins.");
+      return;
+    }
     const selWallet = dollarWallets.find(x => String(x.id) === topupForm.walletId);
     const needUsd = parseFloat(topupForm.amountUsd);
     if (!selWallet || parseFloat(selWallet.balance) < needUsd) {
@@ -192,6 +198,8 @@ export default function WalletsScreen() {
         body: JSON.stringify({
           productId: parseInt(topupForm.productId, 10),
           walletId: parseInt(topupForm.walletId, 10),
+          partyType: topupForm.partyType,
+          partyId: parseInt(topupForm.partyId, 10),
           amountUsd: topupForm.amountUsd,
           coinsPerUsd: topupForm.coinsPerUsd,
           exchangeRatePkr: topupForm.exchangeRatePkr,
@@ -531,6 +539,46 @@ export default function WalletsScreen() {
               <TouchableOpacity onPress={() => setShowTopupModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <Text style={[styles.formLabel, { color: colors.mutedForeground, marginBottom: 0, flex: 1 }]}>PARTY (WHO SELLS YOU COINS)</Text>
+                <TouchableOpacity onPress={() => setTopupForm(f => ({ ...f, coinsPerUsd: "6000", exchangeRatePkr: "333.33", costPricePkr: "0.0556" }))}
+                  style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FEF3C7", borderColor: "#F59E0B", borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 }}>
+                  <Feather name="zap" size={11} color="#92400E" />
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#92400E" }}>AUTO 6000/USD · 18/PKR</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+                {(["supplier", "customer"] as const).map(t => {
+                  const sel = topupForm.partyType === t;
+                  return (
+                    <TouchableOpacity key={t} onPress={() => setTopupForm(f => ({ ...f, partyType: t, partyId: "" }))}
+                      style={{ flex: 1, backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : colors.border, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>
+                        {t === "supplier" ? "Supplier" : "Customer"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(topupForm.partyType === "supplier" ? suppliers : customers).map(p => {
+                    const sel = topupForm.partyId === String(p.id);
+                    return (
+                      <TouchableOpacity key={p.id} onPress={() => setTopupForm(f => ({ ...f, partyId: String(p.id) }))}
+                        style={[styles.acctChip, { backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : colors.border }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{p.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {(topupForm.partyType === "supplier" ? suppliers : customers).length === 0 ? (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, padding: 8 }}>
+                      No {topupForm.partyType}s yet
+                    </Text>
+                  ) : null}
+                </View>
+              </ScrollView>
+
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DOLLAR WALLET (USD COMES OUT OF)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                 <View style={{ flexDirection: "row", gap: 8 }}>

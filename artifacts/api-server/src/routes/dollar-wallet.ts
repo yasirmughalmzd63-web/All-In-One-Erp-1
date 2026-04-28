@@ -142,13 +142,18 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 });
 
 router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void> => {
-  const { productId, walletId, amountUsd, perCoinUsdRate, coinsPerUsd, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
-    productId?: number; walletId?: number; amountUsd?: string; perCoinUsdRate?: string; coinsPerUsd?: string;
+  const { productId, walletId, partyType, partyId, amountUsd, perCoinUsdRate, coinsPerUsd, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
+    productId?: number; walletId?: number; partyType?: "supplier" | "customer"; partyId?: number;
+    amountUsd?: string; perCoinUsdRate?: string; coinsPerUsd?: string;
     exchangeRatePkr?: string; costPricePkr?: string | null; salePricePkr?: string | null; wholesalePricePkr?: string | null;
     date?: string; notes?: string | null;
   };
   if (!productId || !walletId || !amountUsd || (!perCoinUsdRate && !coinsPerUsd) || !exchangeRatePkr || !date) {
     res.status(400).json({ error: "productId, walletId, amountUsd, perCoinUsdRate or coinsPerUsd, exchangeRatePkr, date required" });
+    return;
+  }
+  if (!partyType || !partyId || (partyType !== "supplier" && partyType !== "customer")) {
+    res.status(400).json({ error: "partyType (supplier|customer) and partyId are required" });
     return;
   }
   const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId), eq(walletsTable.currency, "USD")));
@@ -175,6 +180,17 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
 
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) { res.status(404).json({ error: "Coin product not found" }); return; }
+
+  let partyName = "";
+  if (partyType === "supplier") {
+    const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, partyId));
+    if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+    partyName = s.name;
+  } else {
+    const [c] = await db.select().from(customersTable).where(eq(customersTable.id, partyId));
+    if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
+    partyName = c.name;
+  }
 
   const oldStock = product.stock ?? 0;
   const oldCost = parseFloat(product.costPrice || "0");
@@ -214,9 +230,11 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
         amountUsd: fmt(usd),
         rate: fmt(fx),
         totalPkr: fmt(totalPkr),
-        partyName: product.name,
+        partyName: `${partyName} → ${product.name}`,
         walletId,
-        notes: notes ? `${notes} · ${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin · from ${wallet.name}` : `${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin · from ${wallet.name}`,
+        partyType,
+        partyId,
+        notes: notes ? `${notes} · ${qty} ${product.unit} from ${partyType} ${partyName} @ ${perCoin.toFixed(8)} USD/coin · paid from ${wallet.name}` : `${qty} ${product.unit} from ${partyType} ${partyName} @ ${perCoin.toFixed(8)} USD/coin · paid from ${wallet.name}`,
         date,
         userId: String(req.userId),
       }).returning();
