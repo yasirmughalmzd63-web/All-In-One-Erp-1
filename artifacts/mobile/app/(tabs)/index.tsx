@@ -384,7 +384,7 @@ export default function POSScreen() {
             {isAdmin ? "ACTIVE LOCATION" : "YOUR LOCATION"}
           </Text>
           <Text style={[styles.locationBannerName, { color: selectedLocation ? "#065F46" : colors.mutedForeground }]}>
-            {selectedLocation?.name ?? (isAdmin ? "Tap to select location" : "No location assigned")}
+            {selectedLocation?.name ?? (isAdmin ? "Select App" : "No location assigned")}
           </Text>
         </View>
         {isAdmin && <Feather name="chevron-down" size={16} color={selectedLocation ? "#059669" : colors.mutedForeground} />}
