@@ -28,7 +28,13 @@ const MANAGEMENT_ITEMS: MenuItem[] = [
 
 const REPORTS_ITEMS: MenuItem[] = [
   { label: "Topup",         icon: "activity",    route: "/daily-report", color: "#0F172A", bg: "#F1F5F9", desc: "Stock, bank & credit in PKR/$", module: "dashboard" },
+  { label: "Profit & Loss", icon: "trending-up", route: "/profit-loss",  color: "#059669", bg: "#ECFDF5", desc: "Sales − COGS − Expenses",       module: "dashboard" },
+  { label: "Balance Sheet", icon: "layers",      route: "/balance-sheet", color: "#1E40AF", bg: "#EFF6FF", desc: "Assets / Liabilities / Equity", module: "dashboard" },
   { label: "Inventory Ledger", icon: "package",  route: "/inventory-ledger", color: "#059669", bg: "#ECFDF5", desc: "Opening / Received / Sold / Balance", module: "products" },
+  { label: "Product Profit", icon: "award",      route: "/product-profit", color: "#7C3AED", bg: "#F3E8FF", desc: "Per-coin revenue & profit",     module: "products" },
+  { label: "App Summary",   icon: "map",         route: "/location-summary", color: "#0891B2", bg: "#ECFEFF", desc: "Per-app sales & profit",        module: "dashboard" },
+  { label: "Cash Flow",     icon: "trending-up", route: "/cash-flow",    color: "#0369A1", bg: "#E0F2FE", desc: "Per-account credits & debits",  module: "accounts" },
+  { label: "Audit Checks",  icon: "alert-triangle", route: "/audit-checks", color: "#DC2626", bg: "#FEF2F2", desc: "Negative stock, unpaid sales", module: "audit" },
   { label: "User Report",  icon: "bar-chart-2", route: "/user-report",  color: "#7C3AED", bg: "#F3E8FF", desc: "Stock issued & cash per user",  module: "users", adminOnly: true },
   { label: "Dollar Wallet", icon: "pocket",     route: "/wallets",      color: "#0369A1", bg: "#E0F2FE", desc: "USD ledger & exchange",         module: "currency" },
   { label: "Audit Log",    icon: "shield",      route: "/audit",        color: "#475569", bg: "#F8FAFC", desc: "Activity history",              module: "audit" },
