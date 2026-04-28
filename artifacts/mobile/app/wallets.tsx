@@ -48,6 +48,7 @@ const emptyTopupForm = {
   amountUsd: "",
   perCoinUsdRate: "",
   exchangeRatePkr: "",
+  costPricePkr: "",
   salePricePkr: "",
   wholesalePricePkr: "",
   notes: "",
@@ -150,6 +151,7 @@ export default function WalletsScreen() {
           amountUsd: topupForm.amountUsd,
           perCoinUsdRate: topupForm.perCoinUsdRate,
           exchangeRatePkr: topupForm.exchangeRatePkr,
+          costPricePkr: topupForm.costPricePkr || null,
           salePricePkr: topupForm.salePricePkr || null,
           wholesalePricePkr: topupForm.wholesalePricePkr || null,
           date: topupForm.date,
@@ -450,17 +452,29 @@ export default function WalletsScreen() {
                 })() : null}
               </View>
 
-              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>SET COIN SALE PRICE (OPTIONAL)</Text>
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>COIN PRICES (PKR PER COIN)</Text>
               {(() => {
                 const p = topupForm.productId ? products.find(x => String(x.id) === topupForm.productId) : null;
+                const curCost = p ? parseFloat(p.costPrice || "0") : 0;
                 const curRetail = p ? parseFloat(p.unitPrice || "0") : 0;
                 const curWhole = p ? parseFloat(p.wholesalePrice || "0") : 0;
+                const autoCost = topupQty > 0 ? topupPkr / topupQty : 0;
+                const effectiveCost = topupForm.costPricePkr ? parseFloat(topupForm.costPricePkr) : autoCost;
+                const sale = topupForm.salePricePkr ? parseFloat(topupForm.salePricePkr) : 0;
                 return (
                   <>
-                    <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
+                    <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginBottom: 4 }}>
-                          RETAIL ₨/coin {curRetail > 0 ? `(now ₨${curRetail.toFixed(2)})` : ""}
+                          COST {curCost > 0 ? `(₨${curCost.toFixed(2)})` : ""}
+                        </Text>
+                        <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                          value={topupForm.costPricePkr} onChangeText={v => setTopupForm(f => ({ ...f, costPricePkr: v }))}
+                          keyboardType="decimal-pad" placeholder={autoCost > 0 ? `auto ${autoCost.toFixed(2)}` : "auto"} placeholderTextColor={colors.mutedForeground} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginBottom: 4 }}>
+                          SALE {curRetail > 0 ? `(₨${curRetail.toFixed(2)})` : ""}
                         </Text>
                         <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
                           value={topupForm.salePricePkr} onChangeText={v => setTopupForm(f => ({ ...f, salePricePkr: v }))}
@@ -468,24 +482,39 @@ export default function WalletsScreen() {
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginBottom: 4 }}>
-                          WHOLESALE ₨/coin {curWhole > 0 ? `(now ₨${curWhole.toFixed(2)})` : ""}
+                          WHOLESALE {curWhole > 0 ? `(₨${curWhole.toFixed(2)})` : ""}
                         </Text>
                         <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
                           value={topupForm.wholesalePricePkr} onChangeText={v => setTopupForm(f => ({ ...f, wholesalePricePkr: v }))}
                           keyboardType="decimal-pad" placeholder={curWhole > 0 ? curWhole.toFixed(2) : "Leave blank"} placeholderTextColor={colors.mutedForeground} />
                       </View>
                     </View>
-                    {topupForm.salePricePkr && topupQty > 0 ? (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground, marginBottom: 12, fontStyle: "italic" }}>
+                      Cost auto-set from purchase (₨{autoCost.toFixed(2)}/coin). Override above if needed.
+                    </Text>
+                    {sale > 0 && topupQty > 0 ? (
                       <View style={[styles.totalBox, { backgroundColor: "#DCFCE7", borderColor: "#16A34A", marginBottom: 12 }]}>
                         <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>Estimated profit</Text>
                         <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#15803D" }}>
-                          ₨{((parseFloat(topupForm.salePricePkr) - (topupPkr / topupQty)) * topupQty).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          ₨{((sale - effectiveCost) * topupQty).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </Text>
                         <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground }}>
-                          if all {topupQty} coins sell @ ₨{parseFloat(topupForm.salePricePkr).toFixed(2)}
+                          if all {topupQty} coins sell @ ₨{sale.toFixed(2)} (cost ₨{effectiveCost.toFixed(2)})
                         </Text>
                       </View>
                     ) : null}
+                    <View style={[styles.totalBox, { backgroundColor: "#FEF3C7", borderColor: "#F59E0B", marginBottom: 12 }]}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#92400E", letterSpacing: 0.5 }}>WHEN YOU CONFIRM</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#78350F", marginTop: 4, textAlign: "center" }}>
+                        ${topupForm.amountUsd || "0"} debited from USD wallet (bal ${totalUsd.toFixed(2)} → ${(totalUsd - parseFloat(topupForm.amountUsd || "0")).toFixed(2)})
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#78350F", textAlign: "center" }}>
+                        +{topupQty} coins added to {p ? p.name : "product"} stock
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#78350F", textAlign: "center" }}>
+                        Inventory value +₨{(effectiveCost * topupQty).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </Text>
+                    </View>
                   </>
                 );
               })()}

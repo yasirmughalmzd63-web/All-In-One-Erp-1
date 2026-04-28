@@ -90,9 +90,9 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 });
 
 router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void> => {
-  const { productId, amountUsd, perCoinUsdRate, exchangeRatePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
+  const { productId, amountUsd, perCoinUsdRate, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
     productId?: number; amountUsd?: string; perCoinUsdRate?: string;
-    exchangeRatePkr?: string; salePricePkr?: string | null; wholesalePricePkr?: string | null;
+    exchangeRatePkr?: string; costPricePkr?: string | null; salePricePkr?: string | null; wholesalePricePkr?: string | null;
     date?: string; notes?: string | null;
   };
   if (!productId || !amountUsd || !perCoinUsdRate || !exchangeRatePkr || !date) {
@@ -119,9 +119,11 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
   const newStock = oldStock + qty;
   const weightedCost = newStock > 0 ? (oldStock * oldCost + qty * newCostPerCoin) / newStock : newCostPerCoin;
 
+  const overrideCost = costPricePkr && parseFloat(costPricePkr) > 0 ? parseFloat(costPricePkr) : null;
+  const finalCostPerCoin = overrideCost ?? weightedCost;
   const updates: Record<string, string | number> = {
     stock: newStock,
-    costPrice: fmt(weightedCost),
+    costPrice: fmt(finalCostPerCoin),
   };
   if (salePricePkr && parseFloat(salePricePkr) > 0) {
     updates.unitPrice = fmt(parseFloat(salePricePkr));
