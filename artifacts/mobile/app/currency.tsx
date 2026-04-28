@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
@@ -55,8 +54,7 @@ export default function CurrencyScreen() {
     try {
       const data = await customFetch<CurrencyTx[]>("/api/currencies");
       setTransactions(data);
-    } catch {}
-    setLoading(false);
+    } catch (e) {}  setLoading(false);
     setRefreshing(false);
   };
 
@@ -114,7 +112,7 @@ export default function CurrencyScreen() {
       <View style={styles.cardRow}>
         <View style={styles.cardLeft}>
           <View style={[styles.iconBox, { backgroundColor: item.type === "purchase" ? "#EFF6FF" : "#ECFDF5" }]}>
-            <Feather name={item.type === "purchase" ? "arrow-down-circle" : "arrow-up-circle"} size={16} color={item.type === "purchase" ? "#2563EB" : "#16A34A"} />
+            
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>
@@ -131,7 +129,7 @@ export default function CurrencyScreen() {
           </Text>
           {isAdmin && (
             <TouchableOpacity style={[styles.delBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(item)}>
-              <Feather name="trash-2" size={13} color={colors.danger} />
+              
             </TouchableOpacity>
           )}
         </View>
@@ -171,7 +169,7 @@ export default function CurrencyScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="dollar-sign" size={40} color={colors.mutedForeground} />
+              
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No currency transactions</Text>
             </View>
           }
@@ -179,7 +177,7 @@ export default function CurrencyScreen() {
       )}
 
       <TouchableOpacity style={[styles.fab, { backgroundColor: "#0891B2" }]} onPress={() => setShowModal(true)}>
-        <Feather name="plus" size={24} color="#FFF" />
+        
       </TouchableOpacity>
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
@@ -187,7 +185,7 @@ export default function CurrencyScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "90%" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>New Currency Transaction</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }}>
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>TRANSACTION TYPE</Text>

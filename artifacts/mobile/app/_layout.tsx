@@ -10,7 +10,7 @@ import { setBaseUrl } from "@workspace/api-client-react";
 import { Redirect, Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -66,24 +66,6 @@ function RootLayoutNav() {
   );
 }
 
-const styles = StyleSheet.create({
-  watermark: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    alignItems: "center",
-    paddingBottom: 4,
-    pointerEvents: "none",
-  },
-  watermarkText: {
-    fontFamily: "Inter_400Regular",
-    fontSize: 9,
-    color: "rgba(100,116,139,0.55)",
-    letterSpacing: 0.3,
-  },
-});
-
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -107,12 +89,7 @@ export default function RootLayout() {
           <AuthProvider>
             <GestureHandlerRootView style={{ flex: 1 }}>
               <KeyboardProvider>
-                <View style={{ flex: 1 }}>
-                  <RootLayoutNav />
-                  <View style={styles.watermark} pointerEvents="none">
-                    <Text style={styles.watermarkText}>Developer: Yasir Mughal  ·  03129792677</Text>
-                  </View>
-                </View>
+                <RootLayoutNav />
               </KeyboardProvider>
             </GestureHandlerRootView>
           </AuthProvider>

@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
 import {
@@ -88,12 +87,12 @@ const fmtUSD = (v?: string) => {
 const fmtNum = (n?: number) => (n ?? 0).toLocaleString();
 
 function HeroCard({ icon, label, value, sub, color, bg }: {
-  icon: keyof typeof Feather.glyphMap; label: string; value: string; sub?: string; color: string; bg: string;
+  icon: string; label: string; value: string; sub?: string; color: string; bg: string;
 }) {
   return (
     <View style={[heroStyles.card, { backgroundColor: bg, borderColor: color + "44" }]}>
       <View style={[heroStyles.iconBox, { backgroundColor: color + "22" }]}>
-        <Feather name={icon} size={22} color={color} />
+        
       </View>
       <Text style={[heroStyles.value, { color }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
       <Text style={heroStyles.label}>{label}</Text>
@@ -111,7 +110,7 @@ const heroStyles = StyleSheet.create({
 });
 
 function DualMetricCard({ icon, title, primaryLabel, primaryValue, secondaryLabel, secondaryValue, footer, color, bg }: {
-  icon: keyof typeof Feather.glyphMap;
+  icon: string;
   title: string;
   primaryLabel: string; primaryValue: string;
   secondaryLabel: string; secondaryValue: string;
@@ -122,7 +121,7 @@ function DualMetricCard({ icon, title, primaryLabel, primaryValue, secondaryLabe
     <View style={[dualStyles.card, { backgroundColor: bg, borderColor: color + "44" }]}>
       <View style={dualStyles.header}>
         <View style={[dualStyles.iconBox, { backgroundColor: color + "22" }]}>
-          <Feather name={icon} size={18} color={color} />
+          
         </View>
         <Text style={[dualStyles.title, { color: color }]}>{title}</Text>
       </View>
@@ -157,7 +156,7 @@ const dualStyles = StyleSheet.create({
 
 function BreakdownRow({ label, icon, color, value, sub }: {
   label: string;
-  icon: keyof typeof Feather.glyphMap;
+  icon: string;
   color: string;
   value: string;
   sub?: string;
@@ -165,7 +164,7 @@ function BreakdownRow({ label, icon, color, value, sub }: {
   return (
     <View style={breakdownStyles.row}>
       <View style={[breakdownStyles.iconBox, { backgroundColor: color + "22" }]}>
-        <Feather name={icon} size={14} color={color} />
+        
       </View>
       <View style={{ flex: 1 }}>
         <Text style={breakdownStyles.label}>{label}</Text>
@@ -218,7 +217,7 @@ function DollarFlowCard({ usd, pkr, rate, count, color, bg }: {
     <View style={[dollarStyles.card, { backgroundColor: bg, borderColor: color + "44" }]}>
       <View style={dollarStyles.header}>
         <View style={[dollarStyles.iconBox, { backgroundColor: color + "22" }]}>
-          <Feather name="dollar-sign" size={18} color={color} />
+          
         </View>
         <Text style={[dollarStyles.title, { color }]}>Dollar → Coins Exchange</Text>
       </View>
@@ -229,7 +228,7 @@ function DollarFlowCard({ usd, pkr, rate, count, color, bg }: {
           <Text style={[dollarStyles.flowValue, { color }]} numberOfLines={1} adjustsFontSizeToFit>{fmtUSD(usd)}</Text>
         </View>
         <View style={[dollarStyles.arrow, { backgroundColor: color + "22" }]}>
-          <Feather name="arrow-right" size={16} color={color} />
+          
         </View>
         <View style={dollarStyles.flowBox}>
           <Text style={dollarStyles.flowLabel}>Rate</Text>
@@ -238,7 +237,7 @@ function DollarFlowCard({ usd, pkr, rate, count, color, bg }: {
           </Text>
         </View>
         <View style={[dollarStyles.arrow, { backgroundColor: color + "22" }]}>
-          <Feather name="arrow-right" size={16} color={color} />
+          
         </View>
         <View style={dollarStyles.flowBox}>
           <Text style={dollarStyles.flowLabel}>Coins (PKR)</Text>
@@ -335,7 +334,7 @@ export default function DashboardScreen() {
               <View style={styles.sectionHeaderRow}>
                 <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Inventory in Hand</Text>
                 <View style={[styles.scopeBadge, { backgroundColor: dash.scope.isAdmin ? colors.primary + "15" : colors.purchase + "15" }]}>
-                  <Feather name={dash.scope.isAdmin ? "globe" : "user"} size={11} color={dash.scope.isAdmin ? colors.primary : colors.purchase} />
+                  
                   <Text style={[styles.scopeBadgeText, { color: dash.scope.isAdmin ? colors.primary : colors.purchase }]}>
                     {dash.scope.isAdmin ? "All Apps" : "Your App"}
                   </Text>
@@ -346,7 +345,7 @@ export default function DashboardScreen() {
               <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 10 }]}>
                 {(dash.inventoryByLocation ?? []).length === 0 ? (
                   <View style={{ padding: 20, alignItems: "center" }}>
-                    <Feather name="package" size={28} color={colors.mutedForeground} />
+                    
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.mutedForeground, marginTop: 8 }}>
                       No inventory yet
                     </Text>
@@ -358,7 +357,7 @@ export default function DashboardScreen() {
                       style={[locStyles.row, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}
                     >
                       <View style={[locStyles.iconBox, { backgroundColor: colors.purchase + "18" }]}>
-                        <Feather name="map-pin" size={14} color={colors.purchase} />
+                        
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[locStyles.locName, { color: colors.text }]} numberOfLines={1}>{loc.locationName}</Text>
@@ -405,7 +404,7 @@ export default function DashboardScreen() {
                 <BreakdownRow label="Other Accounts" icon="credit-card" color={colors.expense} value={fmtPKRk(dash.totalsBreakdown?.other)} />
                 <View style={[breakdownStyles.totalRow, { borderTopColor: colors.border }]}>
                   <View style={[breakdownStyles.iconBox, { backgroundColor: colors.primary + "22" }]}>
-                    <Feather name="trending-up" size={16} color={colors.primary} />
+                    
                   </View>
                   <Text style={[breakdownStyles.totalLabel, { color: colors.text }]}>Grand Total</Text>
                   <Text style={[breakdownStyles.totalValue, { color: colors.primary }]} numberOfLines={1} adjustsFontSizeToFit>
@@ -427,7 +426,7 @@ export default function DashboardScreen() {
                     <View style={outstandingStyles.row}>
                       <View style={outstandingStyles.col}>
                         <View style={outstandingStyles.iconWrap}>
-                          <Feather name="dollar-sign" size={14} color="#FFFFFF" />
+                          
                         </View>
                         <Text style={outstandingStyles.label}>Cash Left</Text>
                         <Text style={outstandingStyles.value} numberOfLines={1} adjustsFontSizeToFit>
@@ -437,7 +436,7 @@ export default function DashboardScreen() {
                       <View style={outstandingStyles.divider} />
                       <View style={outstandingStyles.col}>
                         <View style={outstandingStyles.iconWrap}>
-                          <Feather name="package" size={14} color="#FFFFFF" />
+                          
                         </View>
                         <Text style={outstandingStyles.label}>Stock Left</Text>
                         <Text style={outstandingStyles.value} numberOfLines={1} adjustsFontSizeToFit>
@@ -525,7 +524,7 @@ export default function DashboardScreen() {
                   {dash.accountBalances.map((acc, idx, arr) => (
                     <View key={acc.id} style={[styles.summaryRow, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}>
                       <View style={[styles.summaryIcon, { backgroundColor: colors.primary + "15" }]}>
-                        <Feather name="credit-card" size={16} color={colors.primary} />
+                        
                       </View>
                       <Text style={[styles.summaryLabel, { color: colors.text }]}>{acc.name}</Text>
                       <Text style={[styles.summaryValue, { color: parseFloat(acc.balance) >= 0 ? colors.success : colors.danger }]}>
@@ -539,7 +538,7 @@ export default function DashboardScreen() {
           </>
         ) : (
           <View style={{ alignItems: "center", padding: 40 }}>
-            <Feather name="alert-circle" size={40} color={colors.mutedForeground} />
+            
             <Text style={{ fontFamily: "Inter_500Medium", color: colors.mutedForeground, marginTop: 12 }}>No data available</Text>
           </View>
         )}

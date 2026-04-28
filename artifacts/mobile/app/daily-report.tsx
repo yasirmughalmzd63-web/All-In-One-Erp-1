@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState, useCallback } from "react";
@@ -74,8 +73,7 @@ export default function DailyReportScreen() {
     try {
       const data = await customFetch<Report>("/api/reports/daily-snapshot");
       setReport(data);
-    } catch {}
-    setLoading(false);
+    } catch (e) {}  setLoading(false);
     setRefresh(false);
   }, []);
 
@@ -86,7 +84,7 @@ export default function DailyReportScreen() {
       <View style={{ flex: 1, backgroundColor: colors.background }}>
         <LinearGradient colors={["#0F172A", "#1E293B"]} style={[styles.header, { paddingTop: topPad + 8 }]}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={20} color="#FFF" />
+            
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Topup</Text>
         </LinearGradient>
@@ -111,14 +109,14 @@ export default function DailyReportScreen() {
       <LinearGradient colors={["#0F172A", "#1E293B"]} style={[styles.header, { paddingTop: topPad + 8 }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 }}>
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={20} color="#FFF" />
+            
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Topup</Text>
             <Text style={styles.headerSub}>{fmtDate(report.date)}</Text>
           </View>
           <TouchableOpacity style={styles.refreshBtn} onPress={() => load(true)}>
-            <Feather name="refresh-cw" size={16} color="#FFF" />
+            
           </TouchableOpacity>
         </View>
 
@@ -146,7 +144,7 @@ export default function DailyReportScreen() {
             { label: "CREDIT", pkr: totals.creditPKR, usd: totals.creditUSD, icon: "clock",     color: "#F59E0B" },
           ].map(col => (
             <View key={col.label} style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.07)", borderRadius: 12, padding: 10, alignItems: "center", gap: 3 }}>
-              <Feather name={col.icon as never} size={13} color={col.color} />
+              
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "rgba(255,255,255,0.5)", letterSpacing: 0.5 }}>{col.label}</Text>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#FFF" }}>{fmtPKR(col.pkr)}</Text>
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: col.color }}>{fmtUSD(col.usd)}</Text>
@@ -167,7 +165,7 @@ export default function DailyReportScreen() {
             style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 12, borderBottomWidth: 2, borderBottomColor: section === tab.key ? colors.primary : "transparent" }}
             onPress={() => setSection(tab.key)}
           >
-            <Feather name={tab.icon as never} size={13} color={section === tab.key ? colors.primary : colors.mutedForeground} />
+            
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: section === tab.key ? colors.primary : colors.mutedForeground }}>{tab.label}</Text>
           </TouchableOpacity>
         ))}
@@ -193,7 +191,7 @@ export default function DailyReportScreen() {
                 <View key={row.label} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: colors.border }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: row.color + "18", alignItems: "center", justifyContent: "center" }}>
-                      <Feather name={row.icon as never} size={14} color={row.color} />
+                      
                     </View>
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.text }}>{row.label}</Text>
                   </View>
@@ -215,7 +213,7 @@ export default function DailyReportScreen() {
               ].map(row => (
                 <View key={row.label} style={{ backgroundColor: row.bg, borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }}>
                   <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: row.color + "22", alignItems: "center", justifyContent: "center" }}>
-                    <Feather name={row.icon as never} size={18} color={row.color} />
+                    
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: row.color + "CC", letterSpacing: 0.3 }}>{row.label}</Text>
@@ -231,7 +229,7 @@ export default function DailyReportScreen() {
               {/* Grand total tile */}
               <View style={{ backgroundColor: "#0F172A", borderRadius: 14, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 }}>
                 <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "rgba(255,255,255,0.1)", alignItems: "center", justifyContent: "center" }}>
-                  <Feather name="layers" size={18} color="#FFF" />
+                  
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: "rgba(255,255,255,0.55)", letterSpacing: 0.4 }}>GRAND TOTAL</Text>
@@ -252,7 +250,7 @@ export default function DailyReportScreen() {
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{locations.length} ACTIVE APP{locations.length !== 1 ? "S" : ""}</Text>
             {locations.length === 0 ? (
               <View style={styles.empty}>
-                <Feather name="map-pin" size={36} color={colors.mutedForeground} />
+                
                 <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 8 }}>No apps found</Text>
               </View>
             ) : (
@@ -261,7 +259,7 @@ export default function DailyReportScreen() {
                   {/* App header */}
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
                     <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" }}>
-                      <Feather name="map-pin" size={16} color="#2563EB" />
+                      
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>{loc.name}</Text>
@@ -280,7 +278,7 @@ export default function DailyReportScreen() {
                     ].map(row => (
                       <View key={row.label} style={{ backgroundColor: row.bg, borderRadius: 10, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                          <Feather name={row.icon as never} size={14} color={row.color} />
+                          
                           <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: row.color, flex: 1 }}>{row.label}</Text>
                         </View>
                         <View style={{ alignItems: "flex-end" }}>
@@ -293,7 +291,7 @@ export default function DailyReportScreen() {
                     {/* Total row */}
                     <View style={{ backgroundColor: "#0F172A", borderRadius: 10, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                        <Feather name="layers" size={14} color="#FFF" />
+                        
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" }}>App Total</Text>
                       </View>
                       <View style={{ alignItems: "flex-end" }}>
@@ -311,7 +309,7 @@ export default function DailyReportScreen() {
               <View style={[styles.locCard, { backgroundColor: colors.card, borderColor: "#D97706" }]}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
                   <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: "#FFF7ED", alignItems: "center", justifyContent: "center" }}>
-                    <Feather name="alert-circle" size={16} color="#D97706" />
+                    
                   </View>
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>No App Assigned</Text>
                 </View>
@@ -356,7 +354,7 @@ export default function DailyReportScreen() {
 
             {visibleUsers.length === 0 ? (
               <View style={styles.empty}>
-                <Feather name="users" size={36} color={colors.mutedForeground} />
+                
                 <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 8 }}>No users found</Text>
               </View>
             ) : (

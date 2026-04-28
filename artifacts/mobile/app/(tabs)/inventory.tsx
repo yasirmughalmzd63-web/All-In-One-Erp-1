@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -173,13 +172,13 @@ export default function InventoryScreen() {
           </Text>
         </View>
         {isAdmin && <TouchableOpacity style={styles.addBtn} onPress={openAdd}>
-          <Feather name="plus" size={18} color="#FFF" />
+          
           <Text style={styles.addBtnText}>Add</Text>
         </TouchableOpacity>}
       </LinearGradient>
 
       <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Feather name="search" size={16} color={colors.mutedForeground} />
+        
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search by name or SKU..."
@@ -187,7 +186,7 @@ export default function InventoryScreen() {
           value={search}
           onChangeText={setSearch}
         />
-        {search ? <TouchableOpacity onPress={() => setSearch("")}><Feather name="x" size={16} color={colors.mutedForeground} /></TouchableOpacity> : null}
+        {search ? <TouchableOpacity onPress={() => setSearch("")}></TouchableOpacity> : null}
       </View>
 
       {isLoading ? (
@@ -204,7 +203,7 @@ export default function InventoryScreen() {
           ListEmptyComponent={
             <View style={{ alignItems: "center", padding: 50 }}>
               <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-                <Feather name="package" size={32} color={colors.primary} />
+                
               </View>
               <Text style={{ fontFamily: "Inter_700Bold", color: colors.text, fontSize: 17 }}>No products yet</Text>
               <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 6, fontSize: 13, textAlign: "center" }}>Tap "Add" to create your first product</Text>
@@ -228,16 +227,16 @@ export default function InventoryScreen() {
                       )}
                       {locationName(p.locationId) && (
                         <View style={{ backgroundColor: "#EFF6FF", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, flexDirection: "row", alignItems: "center", gap: 3 }}>
-                          <Feather name="map-pin" size={9} color="#2563EB" />
+                          
                           <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#2563EB" }}>{locationName(p.locationId)}</Text>
                         </View>
                       )}
                       <View style={[styles.stockBadge, { backgroundColor: stockBg(p.stock) }]}>
-                        <Feather name="layers" size={10} color={stockColor(p.stock)} />
+                        
                         <Text style={[styles.stockText, { color: stockColor(p.stock) }]}>{p.stock} {p.unit}</Text>
                       </View>
                       <View style={[styles.stockBadge, { backgroundColor: colors.saleBg }]}>
-                        <Feather name="tag" size={10} color={colors.success} />
+                        
                         <Text style={[styles.stockText, { color: colors.success }]}>
                           Value {fmtPKR(p.stock * parseFloat(p.unitPrice || "0"))}
                         </Text>
@@ -249,14 +248,14 @@ export default function InventoryScreen() {
                       style={[styles.actionBtn, { backgroundColor: "#F3E8FF" }]}
                       onPress={() => router.push({ pathname: "/wallets", params: { topup: String(p.id) } })}
                     >
-                      <Feather name="dollar-sign" size={13} color="#9333EA" />
+                      
                     </TouchableOpacity>
                     {isAdmin && <>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(p)}>
-                        <Feather name="edit-2" size={13} color={colors.primary} />
+                        
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(p)}>
-                        <Feather name="trash-2" size={13} color={colors.danger} />
+                        
                       </TouchableOpacity>
                     </>}
                   </View>
@@ -273,7 +272,7 @@ export default function InventoryScreen() {
       )}
 
       {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
-        <Feather name="plus" size={24} color="#FFFFFF" />
+        <Text style={{ color: "#FFF", fontSize: 32, fontFamily: "Inter_500Medium", lineHeight: 36 }}>+</Text>
       </TouchableOpacity>}
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
@@ -287,7 +286,7 @@ export default function InventoryScreen() {
                 </Text>
               </View>
               <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={() => setShowModal(false)}>
-                <Feather name="x" size={18} color={colors.mutedForeground} />
+                <Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
@@ -353,7 +352,7 @@ export default function InventoryScreen() {
               {locations.length > 0 && (
                 <View style={{ marginBottom: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                    <Feather name="map-pin" size={12} color={colors.primary} />
+                    
                     <Text style={[fStyles.label, { marginBottom: 0 }]}>App</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -378,7 +377,7 @@ export default function InventoryScreen() {
                           onPress={() => setForm(prev => ({ ...prev, locationId: String(l.id) }))}
                         >
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                            <Feather name="map-pin" size={11} color={form.locationId === String(l.id) ? "#FFF" : colors.primary} />
+                            
                             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: form.locationId === String(l.id) ? "#FFF" : colors.text }}>{l.name}</Text>
                           </View>
                         </TouchableOpacity>
@@ -389,7 +388,7 @@ export default function InventoryScreen() {
               )}
 
               <TouchableOpacity style={[fStyles.submitBtn, { backgroundColor: colors.primary, marginTop: 6 }]} onPress={handleSubmit}>
-                <Feather name={editProduct ? "check" : "plus"} size={18} color="#FFF" />
+                
                 <Text style={fStyles.submitText}>{editProduct ? "Update Product" : "Create Product"}</Text>
               </TouchableOpacity>
               <View style={{ height: 50 }} />

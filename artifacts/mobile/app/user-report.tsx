@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -41,8 +40,7 @@ export default function UserReportScreen() {
       const rows = await customFetch<UserReport[]>("/api/sales/user-report");
       // Non-admin users only see their own report row
       setData(isAdmin ? rows : rows.filter(r => r.userId === user?.id));
-    } catch {}
-    setLoading(false);
+    } catch (e) {}  setLoading(false);
     setRefreshing(false);
   };
 
@@ -101,7 +99,7 @@ export default function UserReportScreen() {
 
       {item.outstanding > 0 && (
         <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
-          <Feather name="alert-circle" size={12} color="#D97706" />
+          
           <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: "#D97706" }}>
             {fmt(item.outstanding)} uncollected from this user
           </Text>
@@ -114,7 +112,7 @@ export default function UserReportScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient colors={["#475569", "#334155"]} style={[styles.header, { paddingTop: topPad + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={20} color="#FFF" />
+          
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>{isAdmin ? "User Report" : "My Report"}</Text>
@@ -148,7 +146,7 @@ export default function UserReportScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 60, gap: 12 }}
           ListEmptyComponent={
             <View style={{ alignItems: "center", padding: 60 }}>
-              <Feather name="users" size={40} color={colors.mutedForeground} />
+              
               <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No user data yet</Text>
             </View>
           }

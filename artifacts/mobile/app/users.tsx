@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
@@ -71,8 +70,7 @@ export default function UsersScreen() {
     Alert.alert("Delete User", `Delete "${u.name}"?`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
-        try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: u.id }); queryClient.invalidateQueries(); } catch {}
-      }},
+        try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: u.id }); queryClient.invalidateQueries(); } catch (e) {} }},
     ]);
   };
 
@@ -90,7 +88,7 @@ export default function UsersScreen() {
           keyExtractor={i => String(i.id)}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}
-          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="users" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No users</Text></View>}
+          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No users</Text></View>}
           renderItem={({ item: u }) => {
             const [rc, rb] = roleColors[u.role] ?? [colors.mutedForeground, colors.muted];
             const locName = getLocationName(u.locationId);
@@ -106,15 +104,15 @@ export default function UsersScreen() {
                     <View style={{ flexDirection: "row", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                       <View style={[styles.badge, { backgroundColor: rb }]}><Text style={[styles.badgeText, { color: rc }]}>{u.role}</Text></View>
                       {locName
-                        ? <View style={[styles.badge, { backgroundColor: colors.secondary }]}><Feather name="map-pin" size={9} color={colors.primary} /><Text style={[styles.badgeText, { color: colors.primary }]}> {locName}</Text></View>
+                        ? <View style={[styles.badge, { backgroundColor: colors.secondary }]}><Text style={[styles.badgeText, { color: colors.primary }]}> {locName}</Text></View>
                         : u.role !== "admin" && <View style={[styles.badge, { backgroundColor: colors.dangerBg }]}><Text style={[styles.badgeText, { color: colors.danger }]}>No app</Text></View>
                       }
                       {!u.isActive && <View style={[styles.badge, { backgroundColor: colors.dangerBg }]}><Text style={[styles.badgeText, { color: colors.danger }]}>Inactive</Text></View>}
                     </View>
                   </View>
                   <View style={{ gap: 8 }}>
-                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(u)}><Feather name="edit-2" size={14} color={colors.primary} /></TouchableOpacity>}
-                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(u)}><Feather name="trash-2" size={14} color={colors.danger} /></TouchableOpacity>}
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(u)}></TouchableOpacity>}
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(u)}></TouchableOpacity>}
                   </View>
                 </View>
               </View>
@@ -124,7 +122,7 @@ export default function UsersScreen() {
       )}
 
       {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
-        <Feather name="plus" size={24} color="#FFFFFF" />
+        <Text style={{ color: "#FFF", fontSize: 32, fontFamily: "Inter_500Medium", lineHeight: 36 }}>+</Text>
       </TouchableOpacity>}
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
@@ -132,7 +130,7 @@ export default function UsersScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit User" : "New User"}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }}>
               {[["Full Name *", "name"], ["Username *", "username"], ["Password" + (editItem ? " (leave blank to keep)" : " *"), "password"]].map(([label, key]) => (

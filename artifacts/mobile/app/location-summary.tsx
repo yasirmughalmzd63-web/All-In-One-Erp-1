@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -74,9 +73,9 @@ export default function LocationSummaryScreen() {
     <View style={[styles.container, { paddingTop: topPad }]}>
       <LinearGradient colors={["#0891B2", "#0E7490"]} style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><Feather name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}></TouchableOpacity>
           <Text style={styles.title}>App Summary</Text>
-          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}><Feather name="refresh-cw" size={20} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}></TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>{range.label}</Text>
         <View style={styles.heroRow}>

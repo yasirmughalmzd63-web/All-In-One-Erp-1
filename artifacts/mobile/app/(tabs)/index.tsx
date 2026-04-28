@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState, useMemo } from "react";
@@ -41,7 +40,7 @@ function PickerModal<T extends { id: number; name: string }>({
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{title}</Text>
             <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
-              <Feather name="x" size={18} color={colors.mutedForeground} />
+              <Text style={{ color: colors.mutedForeground, fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
             </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={() => { onSelect(null); onClose(); }} style={{ padding: 16, borderBottomWidth: 1, borderBottomColor: colors.border }}>
@@ -351,7 +350,7 @@ export default function POSScreen() {
         activeOpacity={isAdmin ? 0.7 : 1}
       >
         <View style={[styles.locationIconWrap, { backgroundColor: selectedLocation ? "#D1FAE5" : colors.secondary }]}>
-          <Feather name="map-pin" size={14} color={selectedLocation ? "#059669" : colors.primary} />
+          
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.locationBannerLabel, { color: colors.mutedForeground }]}>
@@ -361,7 +360,7 @@ export default function POSScreen() {
             {selectedLocation?.name ?? (isAdmin ? "Select App" : "No app assigned")}
           </Text>
         </View>
-        {isAdmin && <Feather name="chevron-down" size={16} color={selectedLocation ? "#059669" : colors.mutedForeground} />}
+        {null}
         {!isAdmin && selectedLocation && (
           <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#065F46" }}>ASSIGNED</Text>
@@ -422,13 +421,13 @@ export default function POSScreen() {
                   </View>
                   {stockWarning === "out-of-stock" && (
                     <View style={[styles.alertRow, { backgroundColor: colors.dangerBg }]}>
-                      <Feather name="alert-triangle" size={11} color={colors.danger} />
+                      
                       <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
                     </View>
                   )}
                   {stockWarning === "exceeds-stock" && (
                     <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
-                      <Feather name="alert-circle" size={11} color="#D97706" />
+                      
                       <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct.stock}</Text>
                     </View>
                   )}
@@ -441,7 +440,7 @@ export default function POSScreen() {
               )}
             </View>
             <View style={[styles.productChevron, { backgroundColor: colors.secondary }]}>
-              <Feather name="chevron-down" size={18} color={colors.primary} />
+              
             </View>
           </TouchableOpacity>
         ) : (
@@ -496,11 +495,7 @@ export default function POSScreen() {
                     }}
                     activeOpacity={0.75}
                   >
-                    <Feather
-                      name="package"
-                      size={20}
-                      color={isSelected ? "#FFF" : inStock ? colors.primary : colors.danger}
-                    />
+                    
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: isSelected ? "#FFF" : colors.text, textAlign: "center" }} numberOfLines={2}>
                       {p.name}
                     </Text>
@@ -515,13 +510,13 @@ export default function POSScreen() {
             {/* Stock warnings */}
             {stockWarning === "out-of-stock" && (
               <View style={[styles.alertRow, { backgroundColor: colors.dangerBg }]}>
-                <Feather name="alert-triangle" size={11} color={colors.danger} />
+                
                 <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
               </View>
             )}
             {stockWarning === "exceeds-stock" && (
               <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
-                <Feather name="alert-circle" size={11} color="#D97706" />
+                
                 <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct?.stock}</Text>
               </View>
             )}
@@ -535,7 +530,7 @@ export default function POSScreen() {
               style={[styles.rateBtn, rateMode === "normal" && { backgroundColor: colors.primary }]}
               onPress={() => { setRateMode("normal"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }}
             >
-              <Feather name="tag" size={13} color={rateMode === "normal" ? "#FFF" : colors.mutedForeground} />
+              
               <Text style={[styles.rateBtnText, { color: rateMode === "normal" ? "#FFF" : colors.mutedForeground }]}>
                 Retail {parseFloat(selectedProduct.unitPrice).toFixed(2)}
               </Text>
@@ -544,7 +539,7 @@ export default function POSScreen() {
               style={[styles.rateBtn, rateMode === "wholesale" && { backgroundColor: colors.purchase }]}
               onPress={() => { setRateMode("wholesale"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }}
             >
-              <Feather name="layers" size={13} color={rateMode === "wholesale" ? "#FFF" : colors.mutedForeground} />
+              
               <Text style={[styles.rateBtnText, { color: rateMode === "wholesale" ? "#FFF" : colors.mutedForeground }]}>
                 Wholesale {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}
               </Text>
@@ -588,11 +583,7 @@ export default function POSScreen() {
                   }]}
                   onPress={handleCopyQty} disabled={qty <= 0}
                 >
-                  <Feather
-                    name={copyError ? "alert-circle" : copiedQty ? "check" : "copy"}
-                    size={16}
-                    color={copyError ? colors.danger : copiedQty ? colors.success : colors.primary}
-                  />
+                  
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: copyError ? colors.danger : copiedQty ? colors.success : colors.primary }}>
                     {copyError ? "Error!" : copiedQty ? "Copied" : "Copy"}
                   </Text>
@@ -636,13 +627,13 @@ export default function POSScreen() {
               onPress={() => setShowCustomerModal(true)}
             >
               <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}>
-                <Feather name="user" size={14} color={colors.primary} />
+                
               </View>
               <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Customer</Text>
               <Text style={[styles.optionValue, { color: selectedCustomer ? colors.text : colors.mutedForeground }]}>
                 {selectedCustomer?.name ?? "Walk-in"}
               </Text>
-              <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
+              
             </TouchableOpacity>
           )}
 
@@ -658,11 +649,7 @@ export default function POSScreen() {
             }}
           >
             <View style={[styles.optionIcon, { backgroundColor: selectedAccount ? colors.secondary : (canSelectAccount ? colors.dangerBg : colors.input) }]}>
-              <Feather
-                name={canSelectAccount ? "credit-card" : "lock"}
-                size={14}
-                color={selectedAccount ? colors.primary : (canSelectAccount ? colors.danger : colors.mutedForeground)}
-              />
+              
             </View>
             <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Account</Text>
             {selectedAccount ? (
@@ -679,7 +666,7 @@ export default function POSScreen() {
                 {canSelectAccount ? "Required for cash sale" : "Locked by admin"}
               </Text>
             )}
-            <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
+            
           </TouchableOpacity>
         </View>
 
@@ -698,7 +685,7 @@ export default function POSScreen() {
                   activeOpacity={0.6}
                 >
                   {key === "⌫"
-                    ? <Feather name="delete" size={20} color={colors.numpadDeleteText} />
+                    ? null
                     : <Text style={[styles.numpadKeyText, { color: key === "." ? colors.primary : colors.numpadKeyText }]}>{key}</Text>}
                 </TouchableOpacity>
               ))}
@@ -712,7 +699,7 @@ export default function POSScreen() {
             style={[styles.clearBtn, { backgroundColor: colors.numpadDelete }]}
             onPress={() => { setAmount("0"); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); }}
           >
-            <Feather name="rotate-ccw" size={16} color={colors.danger} />
+            
           </TouchableOpacity>
 
           {canCreditSale && (
@@ -724,7 +711,7 @@ export default function POSScreen() {
               onPress={handleCreditSale}
               disabled={createSaleMutation.isPending}
             >
-              <Feather name="clock" size={18} color="#FFF" />
+              
               <Text style={styles.actionBtnText}>Credit</Text>
             </TouchableOpacity>
           )}
@@ -740,7 +727,7 @@ export default function POSScreen() {
           >
             {createSaleMutation.isPending
               ? <Text style={styles.actionBtnText}>Processing...</Text>
-              : <><Feather name="check-circle" size={18} color="#FFF" /><Text style={styles.actionBtnText}>Complete Sale</Text></>}
+              : <><Text style={styles.actionBtnText}>Complete Sale</Text></>}
           </TouchableOpacity>
         </View>
 
@@ -750,13 +737,13 @@ export default function POSScreen() {
             <Text style={[styles.validationTitle, { color: colors.mutedForeground }]}>CHECKLIST</Text>
             {cashValidations.errors.map((e, i) => (
               <View key={i} style={styles.validationRow}>
-                <Feather name="x-circle" size={13} color={colors.danger} />
+                
                 <Text style={[styles.validationText, { color: colors.danger }]}>{e}</Text>
               </View>
             ))}
             {validations.warnings.map((w, i) => (
               <View key={i} style={styles.validationRow}>
-                <Feather name="alert-triangle" size={13} color="#D97706" />
+                
                 <Text style={[styles.validationText, { color: "#D97706" }]}>{w}</Text>
               </View>
             ))}
@@ -766,7 +753,7 @@ export default function POSScreen() {
         {/* ── Privilege notice ────────────────────────────────────────── */}
         {(!canCreditSale || allowedProductIds !== null || allowedAccountIds !== null || allowedLocationIds !== null) && (
           <View style={[styles.privNotice, { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }]}>
-            <Feather name="shield" size={13} color="#D97706" />
+            
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#92400E", flex: 1 }}>
               {allowedProductIds !== null
                 ? `Products: ${activeProducts.length} allowed. `
@@ -818,7 +805,7 @@ function BalanceTile({
   return (
     <View style={[styles.balanceTile, { backgroundColor: colors.card, borderColor }]}>
       <View style={[styles.balanceIconWrap, { backgroundColor: bg }]}>
-        <Feather name={icon as "briefcase"} size={15} color={color} />
+        
       </View>
       <Text style={[styles.balanceLabel, { color: colors.mutedForeground }]}>{label}</Text>
       <Text style={[styles.balanceValue, { color: value !== null ? color : colors.mutedForeground }]} numberOfLines={1}>

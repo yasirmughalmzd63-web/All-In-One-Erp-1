@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState } from "react";
@@ -62,14 +61,14 @@ export default function LoginScreen() {
 
         {error ? (
           <View style={styles.errorBox}>
-            <Feather name="alert-circle" size={16} color="#DC2626" />
+            
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
         <View style={styles.inputGroup}>
           <View style={styles.inputWrapper}>
-            <Feather name="user" size={18} color="#64748B" style={styles.inputIcon} />
+            
             <TextInput
               style={styles.input}
               placeholder="Username"
@@ -84,7 +83,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputWrapper}>
-            <Feather name="lock" size={18} color="#64748B" style={styles.inputIcon} />
+            
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -97,7 +96,7 @@ export default function LoginScreen() {
               testID="password-input"
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              <Feather name={showPassword ? "eye-off" : "eye"} size={18} color="#64748B" />
+              
             </TouchableOpacity>
           </View>
         </View>
@@ -114,7 +113,7 @@ export default function LoginScreen() {
           ) : (
             <>
               <Text style={styles.loginBtnText}>Sign In</Text>
-              <Feather name="arrow-right" size={20} color="#FFFFFF" />
+              
             </>
           )}
         </TouchableOpacity>

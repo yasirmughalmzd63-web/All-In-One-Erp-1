@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, Platform,
@@ -72,6 +71,9 @@ export default function TransactionsScreen() {
   const accounts = (accountsRaw ?? []) as unknown as Account[];
   const categories = (categoriesRaw ?? []) as unknown as Category[];
 
+  const isAdmin = user?.role === "admin";
+  const canDelete = (entryUserId: number) => isAdmin || entryUserId === user?.id;
+
   // Non-admin users see only their own transactions
   const visibleSales     = isAdmin ? sales     : sales.filter(s => s.userId === user?.id);
   const visiblePurchases = isAdmin ? purchases : purchases.filter(p => p.userId === user?.id);
@@ -83,9 +85,6 @@ export default function TransactionsScreen() {
   const createCredit = useCreateCredit();
   const payCreditMutation = usePayCredit();
   const deleteExpenseMutation = useDeleteExpense();
-
-  const isAdmin = user?.role === "admin";
-  const canDelete = (entryUserId: number) => isAdmin || entryUserId === user?.id;
 
   const handleDeleteSale = (item: Sale) => {
     if (!canDelete(item.userId)) return;
@@ -235,8 +234,8 @@ export default function TransactionsScreen() {
   };
 
   const DeleteBtn = ({ onPress }: { onPress: () => void }) => (
-    <TouchableOpacity style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: "center", justifyContent: "center" }} onPress={onPress}>
-      <Feather name="trash-2" size={13} color={colors.danger} />
+    <TouchableOpacity style={{ paddingHorizontal: 10, height: 30, borderRadius: 8, backgroundColor: colors.dangerBg, alignItems: "center", justifyContent: "center" }} onPress={onPress}>
+      <Text style={{ color: colors.danger, fontFamily: "Inter_600SemiBold", fontSize: 12 }}>Del</Text>
     </TouchableOpacity>
   );
 
@@ -246,7 +245,7 @@ export default function TransactionsScreen() {
       <View style={[listStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={listStyles.cardHeader}>
           <View style={listStyles.cardLeft}>
-            <View style={[listStyles.iconBox, { backgroundColor: colors.saleBg }]}><Feather name="shopping-cart" size={16} color={colors.sale} /></View>
+            <View style={[listStyles.iconBox, { backgroundColor: colors.saleBg }]}></View>
             <View style={{ flex: 1 }}>
               <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.invoiceNo}</Text>
               <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.customerName ?? "Walk-in"} • {item.paymentMethod}</Text>
@@ -271,7 +270,7 @@ export default function TransactionsScreen() {
       <View style={[listStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={listStyles.cardHeader}>
           <View style={listStyles.cardLeft}>
-            <View style={[listStyles.iconBox, { backgroundColor: colors.purchaseBg }]}><Feather name="shopping-bag" size={16} color={colors.purchase} /></View>
+            <View style={[listStyles.iconBox, { backgroundColor: colors.purchaseBg }]}></View>
             <View style={{ flex: 1 }}>
               <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.invoiceNo}</Text>
               <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.supplierName ?? "No supplier"}</Text>
@@ -294,7 +293,7 @@ export default function TransactionsScreen() {
     <View style={[listStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={listStyles.cardHeader}>
         <View style={listStyles.cardLeft}>
-          <View style={[listStyles.iconBox, { backgroundColor: colors.expenseBg }]}><Feather name="arrow-down-circle" size={16} color={colors.expense} /></View>
+          <View style={[listStyles.iconBox, { backgroundColor: colors.expenseBg }]}></View>
           <View style={{ flex: 1 }}>
             <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.title}</Text>
             <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.categoryName ?? "Uncategorized"} • {item.date}</Text>
@@ -316,7 +315,7 @@ export default function TransactionsScreen() {
       <TouchableOpacity style={[listStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]} onPress={() => { setSelectedCredit(item); setShowPayModal(true); }}>
         <View style={listStyles.cardHeader}>
           <View style={listStyles.cardLeft}>
-            <View style={[listStyles.iconBox, { backgroundColor: colors.creditBg }]}><Feather name="clock" size={16} color={colors.credit} /></View>
+            <View style={[listStyles.iconBox, { backgroundColor: colors.creditBg }]}></View>
             <View style={{ flex: 1 }}>
               <Text style={[listStyles.cardTitle, { color: colors.text }]}>{item.partyName}</Text>
               <Text style={[listStyles.cardSub, { color: colors.mutedForeground }]}>{item.type === "receivable" ? "To receive" : "To pay"} • {item.partyType}</Text>
@@ -364,7 +363,7 @@ export default function TransactionsScreen() {
         <Text style={styles.headerTitle}>Transactions</Text>
         {!isAdmin && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(255,255,255,0.18)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
-            <Feather name="user" size={11} color="#FFFFFF" />
+            
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#FFFFFF" }}>My Records</Text>
           </View>
         )}
@@ -384,16 +383,16 @@ export default function TransactionsScreen() {
         </View>
       ) : (
         <>
-          {activeTab === "Sales" && <FlatList data={visibleSales} renderItem={renderSale} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingSales} onRefresh={refetchSales} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="shopping-cart" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No sales yet</Text></View>} />}
-          {activeTab === "Purchases" && <FlatList data={visiblePurchases} renderItem={renderPurchase} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingPurchases} onRefresh={refetchPurchases} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="shopping-bag" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No purchases yet</Text></View>} />}
-          {activeTab === "Expenses" && <FlatList data={visibleExpenses} renderItem={renderExpense} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingExpenses} onRefresh={refetchExpenses} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="arrow-down-circle" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No expenses yet</Text></View>} />}
-          {activeTab === "Credits" && <FlatList data={visibleCredits} renderItem={renderCredit} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingCredits} onRefresh={refetchCredits} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="clock" size={40} color={colors.mutedForeground} /><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No credits yet</Text></View>} />}
+          {activeTab === "Sales" && <FlatList data={visibleSales} renderItem={renderSale} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingSales} onRefresh={refetchSales} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No sales yet</Text></View>} />}
+          {activeTab === "Purchases" && <FlatList data={visiblePurchases} renderItem={renderPurchase} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingPurchases} onRefresh={refetchPurchases} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No purchases yet</Text></View>} />}
+          {activeTab === "Expenses" && <FlatList data={visibleExpenses} renderItem={renderExpense} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingExpenses} onRefresh={refetchExpenses} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No expenses yet</Text></View>} />}
+          {activeTab === "Credits" && <FlatList data={visibleCredits} renderItem={renderCredit} keyExtractor={i => String(i.id)} contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }} refreshControl={<RefreshControl refreshing={loadingCredits} onRefresh={refetchCredits} />} ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No credits yet</Text></View>} />}
         </>
       )}
 
       {activeTab !== "Sales" && (
         <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={() => setShowModal(true)}>
-          <Feather name="plus" size={24} color="#FFFFFF" />
+          
         </TouchableOpacity>
       )}
 
@@ -402,7 +401,7 @@ export default function TransactionsScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "85%" }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>New {activeTab.slice(0, -1)}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
               {activeTab === "Purchases" && (

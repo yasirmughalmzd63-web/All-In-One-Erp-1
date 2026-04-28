@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
@@ -84,8 +83,7 @@ export default function CustomersScreen() {
           try {
             await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: c.id });
             queryClient.invalidateQueries();
-          } catch {}
-        }
+          } catch (e) {} }
       },
     ]);
   };
@@ -93,7 +91,7 @@ export default function CustomersScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.searchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Feather name="search" size={16} color={colors.mutedForeground} />
+        
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search customers..."
@@ -101,7 +99,7 @@ export default function CustomersScreen() {
           value={search}
           onChangeText={setSearch}
         />
-        {search ? <TouchableOpacity onPress={() => setSearch("")}><Feather name="x" size={15} color={colors.mutedForeground} /></TouchableOpacity> : null}
+        {search ? <TouchableOpacity onPress={() => setSearch("")}></TouchableOpacity> : null}
       </View>
 
       {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={colors.primary} /> : (
@@ -113,7 +111,7 @@ export default function CustomersScreen() {
           ListHeaderComponent={filtered.length > 0 ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 4 }}>{filtered.length} customer{filtered.length !== 1 ? "s" : ""}</Text> : null}
           ListEmptyComponent={
             <View style={{ alignItems: "center", padding: 40 }}>
-              <Feather name="users" size={40} color={colors.mutedForeground} />
+              
               <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No customers</Text>
             </View>
           }
@@ -128,19 +126,19 @@ export default function CustomersScreen() {
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
                     {locationName(c.locationId) && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#EFF6FF", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-                        <Feather name="map-pin" size={9} color="#2563EB" />
+                        
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#2563EB" }}>{locationName(c.locationId)}</Text>
                       </View>
                     )}
                     {c.phone && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                        <Feather name="phone" size={10} color={colors.mutedForeground} />
+                        
                         <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>{c.phone}</Text>
                       </View>
                     )}
                     {c.email && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                        <Feather name="mail" size={10} color={colors.mutedForeground} />
+                        
                         <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>{c.email}</Text>
                       </View>
                     )}
@@ -151,10 +149,10 @@ export default function CustomersScreen() {
                 </View>
                 <View style={{ gap: 8 }}>
                   {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(c)}>
-                    <Feather name="edit-2" size={14} color={colors.primary} />
+                    
                   </TouchableOpacity>}
                   {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(c)}>
-                    <Feather name="trash-2" size={14} color={colors.danger} />
+                    
                   </TouchableOpacity>}
                 </View>
               </View>
@@ -164,7 +162,7 @@ export default function CustomersScreen() {
       )}
 
       {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
-        <Feather name="plus" size={24} color="#FFFFFF" />
+        <Text style={{ color: "#FFF", fontSize: 32, fontFamily: "Inter_500Medium", lineHeight: 36 }}>+</Text>
       </TouchableOpacity>}
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
@@ -172,7 +170,7 @@ export default function CustomersScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit Customer" : "New Customer"}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }}>
               {(["Name *", "name", "Phone", "phone", "Email", "email", "Address", "address"] as string[])
@@ -194,7 +192,7 @@ export default function CustomersScreen() {
               {locations.length > 0 && (
                 <View style={{ marginBottom: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <Feather name="map-pin" size={12} color={colors.primary} />
+                    
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground }}>App</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -214,7 +212,7 @@ export default function CustomersScreen() {
                           }]}
                           onPress={() => setForm(f => ({ ...f, locationId: String(l.id) }))}
                         >
-                          <Feather name="map-pin" size={11} color={form.locationId === String(l.id) ? "#FFF" : colors.primary} />
+                          
                           <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === String(l.id) ? "#FFF" : colors.text }}>{l.name}</Text>
                         </TouchableOpacity>
                       ))}
@@ -226,7 +224,7 @@ export default function CustomersScreen() {
               {!editItem && (
                 <View style={[styles.creditSection, { borderColor: colors.credit + "55", backgroundColor: colors.creditBg }]}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                    <Feather name="credit-card" size={15} color={colors.credit} />
+                    
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.credit }}>Opening Credit Balance</Text>
                     <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>(optional)</Text>
                   </View>
@@ -251,7 +249,7 @@ export default function CustomersScreen() {
                         }]}
                         onPress={() => setForm(f => ({ ...f, openingCreditType: t }))}
                       >
-                        <Feather name={t === "receivable" ? "arrow-down-left" : "arrow-up-right"} size={14} color={form.openingCreditType === t ? "#FFF" : colors.mutedForeground} />
+                        
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: form.openingCreditType === t ? "#FFF" : colors.mutedForeground }}>
                           {t === "receivable" ? "Receivable (to receive)" : "Payable (to pay)"}
                         </Text>

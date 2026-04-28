@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
@@ -71,15 +70,14 @@ export default function SuppliersScreen() {
     Alert.alert("Delete", `Delete "${s.name}"?`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
-        try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: s.id }); queryClient.invalidateQueries(); } catch {}
-      }},
+        try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: s.id }); queryClient.invalidateQueries(); } catch (e) {} }},
     ]);
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.searchRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <Feather name="search" size={16} color={colors.mutedForeground} />
+        
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search suppliers..."
@@ -87,7 +85,7 @@ export default function SuppliersScreen() {
           value={search}
           onChangeText={setSearch}
         />
-        {search ? <TouchableOpacity onPress={() => setSearch("")}><Feather name="x" size={15} color={colors.mutedForeground} /></TouchableOpacity> : null}
+        {search ? <TouchableOpacity onPress={() => setSearch("")}></TouchableOpacity> : null}
       </View>
 
       {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={colors.primary} /> : (
@@ -99,7 +97,7 @@ export default function SuppliersScreen() {
           ListHeaderComponent={filtered.length > 0 ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 4 }}>{filtered.length} supplier{filtered.length !== 1 ? "s" : ""}</Text> : null}
           ListEmptyComponent={
             <View style={{ alignItems: "center", padding: 40 }}>
-              <Feather name="truck" size={40} color={colors.mutedForeground} />
+              
               <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No suppliers</Text>
             </View>
           }
@@ -107,26 +105,26 @@ export default function SuppliersScreen() {
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.cardMain}>
                 <View style={[styles.avatar, { backgroundColor: colors.purchaseBg }]}>
-                  <Feather name="truck" size={20} color={colors.purchase} />
+                  
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.cardName, { color: colors.text }]}>{s.name}</Text>
                   <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
                     {locationName(s.locationId) && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "#EFF6FF", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-                        <Feather name="map-pin" size={9} color="#2563EB" />
+                        
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#2563EB" }}>{locationName(s.locationId)}</Text>
                       </View>
                     )}
                     {s.phone && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                        <Feather name="phone" size={10} color={colors.mutedForeground} />
+                        
                         <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>{s.phone}</Text>
                       </View>
                     )}
                     {s.email && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                        <Feather name="mail" size={10} color={colors.mutedForeground} />
+                        
                         <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>{s.email}</Text>
                       </View>
                     )}
@@ -137,10 +135,10 @@ export default function SuppliersScreen() {
                 </View>
                 <View style={{ gap: 8 }}>
                   {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(s)}>
-                    <Feather name="edit-2" size={14} color={colors.primary} />
+                    
                   </TouchableOpacity>}
                   {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(s)}>
-                    <Feather name="trash-2" size={14} color={colors.danger} />
+                    
                   </TouchableOpacity>}
                 </View>
               </View>
@@ -150,7 +148,7 @@ export default function SuppliersScreen() {
       )}
 
       {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.purchase }]} onPress={openAdd}>
-        <Feather name="plus" size={24} color="#FFFFFF" />
+        <Text style={{ color: "#FFF", fontSize: 32, fontFamily: "Inter_500Medium", lineHeight: 36 }}>+</Text>
       </TouchableOpacity>}
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
@@ -158,7 +156,7 @@ export default function SuppliersScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit Supplier" : "New Supplier"}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }}>
               {[["Name *", "name"], ["Phone", "phone"], ["Email", "email"], ["Address", "address"]].map(([label, key]) => (
@@ -177,7 +175,7 @@ export default function SuppliersScreen() {
               {locations.length > 0 && (
                 <View style={{ marginBottom: 16 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <Feather name="map-pin" size={12} color={colors.purchase} />
+                    
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground }}>App</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -197,7 +195,7 @@ export default function SuppliersScreen() {
                           }]}
                           onPress={() => setForm(f => ({ ...f, locationId: String(l.id) }))}
                         >
-                          <Feather name="map-pin" size={11} color={form.locationId === String(l.id) ? "#FFF" : colors.purchase} />
+                          
                           <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === String(l.id) ? "#FFF" : colors.text }}>{l.name}</Text>
                         </TouchableOpacity>
                       ))}

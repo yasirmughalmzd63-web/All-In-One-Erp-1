@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useEffect, useMemo, useState } from "react";
 import {
@@ -66,8 +65,7 @@ export default function AuditScreen() {
       ]);
       setSnapshot(snap);
       setHistory(hist);
-    } catch {}
-    setLoading(false);
+    } catch (e) {}  setLoading(false);
     setRefreshing(false);
   };
 
@@ -175,7 +173,7 @@ export default function AuditScreen() {
         {/* Top */}
         <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}>
           <View style={[styles.iconBox, { backgroundColor: dm.bg }]}>
-            <Feather name={dm.icon as never} size={16} color={dm.color} />
+            
           </View>
           <View style={{ flex: 1 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -197,7 +195,7 @@ export default function AuditScreen() {
           </View>
           {isAdmin && (
             <TouchableOpacity style={[styles.delBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(e)}>
-              <Feather name="trash-2" size={11} color={colors.danger} />
+              
             </TouchableOpacity>
           )}
         </View>
@@ -223,7 +221,7 @@ export default function AuditScreen() {
         {/* Reason if exists */}
         {e.reason && (
           <View style={{ marginTop: 8, backgroundColor: "#FFFBEB", borderRadius: 8, padding: 8, flexDirection: "row", alignItems: "flex-start", gap: 6 }}>
-            <Feather name="message-circle" size={12} color="#D97706" style={{ marginTop: 1 }} />
+            
             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#92400E", flex: 1 }}>Reason: {e.reason}</Text>
           </View>
         )}
@@ -237,7 +235,7 @@ export default function AuditScreen() {
             style={{ marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#FFF7ED", borderRadius: 8, paddingVertical: 9, borderWidth: 1, borderColor: "#FED7AA" }}
             onPress={() => { setShowResolve(e); setResolveReason(""); }}
           >
-            <Feather name="check-circle" size={13} color="#D97706" />
+            
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#D97706" }}>Mark as Resolved</Text>
           </TouchableOpacity>
         )}
@@ -258,7 +256,7 @@ export default function AuditScreen() {
             <Text style={styles.headerSub}>Daily cash reconciliation log</Text>
           </View>
           <TouchableOpacity style={styles.newBtn} onPress={() => setShowModal(true)}>
-            <Feather name="plus" size={16} color="#FFF" />
+            
             <Text style={styles.newBtnText}>New Entry</Text>
           </TouchableOpacity>
         </View>
@@ -266,17 +264,17 @@ export default function AuditScreen() {
         {/* Summary chips */}
         <View style={{ flexDirection: "row", gap: 8, marginTop: 16 }}>
           <View style={styles.chip}>
-            <Feather name="trending-down" size={12} color="#FCA5A5" />
+            
             <Text style={styles.chipLabel}>Total Short</Text>
             <Text style={styles.chipVal}>₨{fmtShort(totalShort.toString())}</Text>
           </View>
           <View style={styles.chip}>
-            <Feather name="trending-up" size={12} color="#86EFAC" />
+            
             <Text style={styles.chipLabel}>Total Excess</Text>
             <Text style={styles.chipVal}>₨{fmtShort(totalExcess.toString())}</Text>
           </View>
           <View style={[styles.chip, pendingCount > 0 && { borderColor: "#FCD34D", borderWidth: 1 }]}>
-            <Feather name="clock" size={12} color={pendingCount > 0 ? "#FCD34D" : "rgba(255,255,255,0.6)"} />
+            
             <Text style={styles.chipLabel}>Pending</Text>
             <Text style={[styles.chipVal, pendingCount > 0 && { color: "#FCD34D" }]}>{pendingCount}</Text>
           </View>
@@ -296,7 +294,7 @@ export default function AuditScreen() {
             pendingShort > 0 ? (
               <View style={{ backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#FECACA", flexDirection: "row", alignItems: "center", gap: 12 }}>
                 <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
-                  <Feather name="alert-triangle" size={18} color="#DC2626" />
+                  
                 </View>
                 <View>
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#DC2626" }}>Outstanding Shortage</Text>
@@ -310,7 +308,7 @@ export default function AuditScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-                <Feather name="clipboard" size={32} color="#7C3AED" />
+                
               </View>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: colors.text }}>No audit entries yet</Text>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground, marginTop: 4, textAlign: "center" }}>Tap "New Entry" to start your first daily cash audit</Text>
@@ -351,7 +349,7 @@ export default function AuditScreen() {
                 </Text>
               </View>
               <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={() => setShowModal(false)}>
-                <Feather name="x" size={18} color={colors.mutedForeground} />
+                <Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
@@ -362,17 +360,17 @@ export default function AuditScreen() {
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.mutedForeground, letterSpacing: 0.5, marginBottom: 4 }}>CURRENT SNAPSHOT</Text>
                   <View style={{ flexDirection: "row", gap: 8 }}>
                     <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 10, padding: 10, alignItems: "center" }}>
-                      <Feather name="briefcase" size={13} color="#2563EB" />
+                      
                       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#2563EB", marginTop: 3 }}>₨{fmtShort(snapshot.bankBalance)}</Text>
                       <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "#93C5FD" }}>BANK</Text>
                     </View>
                     <View style={{ flex: 1, backgroundColor: "#ECFDF5", borderRadius: 10, padding: 10, alignItems: "center" }}>
-                      <Feather name="package" size={13} color="#059669" />
+                      
                       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#059669", marginTop: 3 }}>₨{fmtShort(snapshot.stockValue)}</Text>
                       <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "#6EE7B7" }}>STOCK</Text>
                     </View>
                     <View style={{ flex: 1, backgroundColor: "#EDE9FE", borderRadius: 10, padding: 10, alignItems: "center" }}>
-                      <Feather name="credit-card" size={13} color="#7C3AED" />
+                      
                       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#7C3AED", marginTop: 3 }}>₨{fmtShort(snapshot.creditReceivable)}</Text>
                       <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "#C4B5FD" }}>CREDIT</Text>
                     </View>
@@ -413,7 +411,7 @@ export default function AuditScreen() {
               {physicalBalance ? (
                 <View style={[styles.diffBox, { backgroundColor: diffTypeBg, borderWidth: 1.5, borderColor: diffTypeColor + "55" }]}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <Feather name={diffType === "short" ? "trending-down" : diffType === "excess" ? "trending-up" : "check-circle"} size={18} color={diffTypeColor} />
+                    
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: diffTypeColor }}>{diffTypeLabel}</Text>
                   </View>
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: diffTypeColor }}>
@@ -451,7 +449,7 @@ export default function AuditScreen() {
                 style={[styles.saveBtn, { backgroundColor: "#7C3AED", opacity: saving ? 0.6 : 1 }]}
                 onPress={handleSave} disabled={saving}
               >
-                <Feather name="check" size={18} color="#FFF" />
+                
                 <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save Audit Entry"}</Text>
               </TouchableOpacity>
               <View style={{ height: 40 }} />
@@ -469,12 +467,12 @@ export default function AuditScreen() {
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Resolve Audit</Text>
                   <TouchableOpacity onPress={() => setShowResolve(null)}>
-                    <Feather name="x" size={22} color={colors.mutedForeground} />
+                    
                   </TouchableOpacity>
                 </View>
 
                 <View style={{ backgroundColor: showResolve.diffType === "short" ? "#FEF2F2" : "#DCFCE7", borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: "row", alignItems: "center", gap: 10 }}>
-                  <Feather name={showResolve.diffType === "short" ? "trending-down" : "trending-up"} size={18} color={showResolve.diffType === "short" ? "#DC2626" : "#16A34A"} />
+                  
                   <View>
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: showResolve.diffType === "short" ? "#DC2626" : "#16A34A" }}>
                       {showResolve.diffType === "short" ? "Cash Short" : "Cash Excess"}: ₨{fmt(Math.abs(parseFloat(showResolve.difference)).toString())}
@@ -497,7 +495,7 @@ export default function AuditScreen() {
                   style={{ backgroundColor: "#16A34A", paddingVertical: 16, borderRadius: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 8 }}
                   onPress={handleResolve}
                 >
-                  <Feather name="check-circle" size={18} color="#FFF" />
+                  
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" }}>Mark as Resolved</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ alignItems: "center", paddingVertical: 10, marginBottom: 16 }} onPress={() => setShowResolve(null)}>

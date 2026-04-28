@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -88,9 +87,9 @@ export default function ProductProfitScreen() {
     <View style={[styles.container, { paddingTop: topPad }]}>
       <LinearGradient colors={["#7C3AED", "#5B21B6"]} style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><Feather name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}></TouchableOpacity>
           <Text style={styles.title}>Product Profit</Text>
-          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}><Feather name="refresh-cw" size={20} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}></TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>{range.label} • {selectedLocName}</Text>
         <View style={styles.heroRow}>
@@ -110,9 +109,9 @@ export default function ProductProfitScreen() {
 
       {isAdmin && (
         <TouchableOpacity style={styles.locBtn} onPress={() => setPickerOpen(true)}>
-          <Feather name="map-pin" size={14} color={colors.text} />
+          
           <Text style={[styles.locText, { color: colors.text }]}>App: {selectedLocName}</Text>
-          <Feather name="chevron-down" size={16} color={colors.text} />
+          
         </TouchableOpacity>
       )}
 
@@ -166,7 +165,7 @@ export default function ProductProfitScreen() {
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.modalItem} onPress={() => { setLocId(item.id || null); setPickerOpen(false); }}>
                   <Text style={[styles.modalText, { color: colors.text }]}>{item.name}</Text>
-                  {(item.id ? locId === item.id : locId === null) && <Feather name="check" size={18} color={colors.tint} />}
+                  {null}
                 </TouchableOpacity>
               )}
             />

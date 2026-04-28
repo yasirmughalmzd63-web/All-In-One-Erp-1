@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
@@ -71,8 +70,7 @@ export default function AccountsScreen() {
     Alert.alert("Delete", `Delete "${a.name}"?`, [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
-        try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: a.id }); queryClient.invalidateQueries(); } catch {}
-      }},
+        try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: a.id }); queryClient.invalidateQueries(); } catch (e) {} }},
     ]);
   };
 
@@ -140,7 +138,7 @@ export default function AccountsScreen() {
         <Text style={{ fontFamily: "Inter_700Bold", fontSize: 28, color: "#FFFFFF", marginTop: 4 }}>${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
         {isAdminOrManager && (
           <TouchableOpacity style={styles.transferBtn} onPress={() => setShowTransferModal(true)}>
-            <Feather name="arrow-right-circle" size={16} color="#FFF" />
+            
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" }}>Transfer Between Accounts</Text>
           </TouchableOpacity>
         )}
@@ -152,13 +150,13 @@ export default function AccountsScreen() {
           keyExtractor={i => String(i.id)}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}
-          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="credit-card" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No accounts</Text></View>}
+          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No accounts</Text></View>}
           renderItem={({ item: a }) => {
             const locName = getLocationName(a.locationId);
             return (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <View style={[styles.iconBox, { backgroundColor: colors.secondary }]}><Feather name={typeIcon(a.type)} size={20} color={colors.primary} /></View>
+                  <View style={[styles.iconBox, { backgroundColor: colors.secondary }]}></View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>{a.name}</Text>
                     <View style={{ flexDirection: "row", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
@@ -176,10 +174,10 @@ export default function AccountsScreen() {
                     </Text>
                     {isAdmin && <View style={{ flexDirection: "row", gap: 6 }}>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(a)}>
-                        <Feather name="edit-2" size={13} color={colors.primary} />
+                        
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(a)}>
-                        <Feather name="trash-2" size={13} color={colors.danger} />
+                        
                       </TouchableOpacity>
                     </View>}
                   </View>
@@ -191,7 +189,7 @@ export default function AccountsScreen() {
       )}
 
       {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.primary }]} onPress={openAdd}>
-        <Feather name="plus" size={24} color="#FFFFFF" />
+        <Text style={{ color: "#FFF", fontSize: 32, fontFamily: "Inter_500Medium", lineHeight: 36 }}>+</Text>
       </TouchableOpacity>}
 
       {/* Create / Edit Account Modal */}
@@ -200,7 +198,7 @@ export default function AccountsScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit Account" : "New Account"}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Name *</Text>
@@ -259,12 +257,12 @@ export default function AccountsScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "80%" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Transfer Funds</Text>
-              <TouchableOpacity onPress={() => setShowTransferModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowTransferModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
               <AccountPicker label="From Account" selected={transfer.fromId} onSelect={v => setTransfer(t => ({ ...t, fromId: v }))} exclude={transfer.toId} />
               <View style={[styles.transferArrow, { backgroundColor: colors.secondary }]}>
-                <Feather name="arrow-down" size={18} color={colors.primary} />
+                
               </View>
               <AccountPicker label="To Account" selected={transfer.toId} onSelect={v => setTransfer(t => ({ ...t, toId: v }))} exclude={transfer.fromId} />
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Amount *</Text>

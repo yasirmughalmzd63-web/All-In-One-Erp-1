@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
@@ -109,7 +108,7 @@ export default function CreditsScreen() {
           <View style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 14, padding: 14 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" }}>
-                <Feather name="alert-circle" size={13} color="#FFF" />
+                
               </View>
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: "rgba(255,255,255,0.8)", letterSpacing: 0.5 }}>OUTSTANDING</Text>
             </View>
@@ -123,7 +122,7 @@ export default function CreditsScreen() {
           <View style={{ flex: 1, backgroundColor: colors.saleBg, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.success + "33" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <View style={{ width: 26, height: 26, borderRadius: 13, backgroundColor: colors.success + "22", alignItems: "center", justifyContent: "center" }}>
-                <Feather name="check-circle" size={13} color={colors.success} />
+                
               </View>
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.success, letterSpacing: 0.5 }}>RECEIVED</Text>
             </View>
@@ -139,7 +138,7 @@ export default function CreditsScreen() {
           {/* New (not yet paid at all) */}
           <View style={{ flex: 1, backgroundColor: colors.secondary, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.primary + "22" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-              <Feather name="plus-circle" size={13} color={colors.primary} />
+              
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.primary, letterSpacing: 0.5 }}>NEW CREDITS</Text>
             </View>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.primary }}>{fmt(newAmount)}</Text>
@@ -149,7 +148,7 @@ export default function CreditsScreen() {
           {/* Pending (partially paid) */}
           <View style={{ flex: 1, backgroundColor: colors.expenseBg, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: colors.expense + "33" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
-              <Feather name="clock" size={13} color={colors.expense} />
+              
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.expense, letterSpacing: 0.5 }}>PARTIALLY PAID</Text>
             </View>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.expense }}>{fmt(pendingAmount)}</Text>
@@ -174,7 +173,7 @@ export default function CreditsScreen() {
               }}
               onPress={() => setFilter(f.key)}
             >
-              <Feather name={f.icon as never} size={12} color={active ? "#FFF" : colors.mutedForeground} />
+              
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: active ? "#FFF" : colors.mutedForeground }}>
                 {f.label}
               </Text>
@@ -198,7 +197,7 @@ export default function CreditsScreen() {
           ListEmptyComponent={
             <View style={{ alignItems: "center", padding: 40 }}>
               <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-                <Feather name="clock" size={32} color={colors.primary} />
+                
               </View>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: colors.text }}>No credits here</Text>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground, marginTop: 4 }}>
@@ -219,7 +218,7 @@ export default function CreditsScreen() {
                 {/* Top row */}
                 <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
                   <View style={[styles.iconBox, { backgroundColor: meta.bg }]}>
-                    <Feather name={meta.icon as never} size={18} color={meta.color} />
+                    
                   </View>
 
                   <View style={{ flex: 1 }}>
@@ -239,7 +238,7 @@ export default function CreditsScreen() {
 
                     {c.dueDate && (
                       <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.expense, marginBottom: 2 }}>
-                        <Feather name="calendar" size={10} /> Due: {c.dueDate}
+                         Due: {c.dueDate}
                       </Text>
                     )}
 
@@ -274,7 +273,7 @@ export default function CreditsScreen() {
                 {/* "Tap to record payment" hint */}
                 {canPay && (
                   <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 5, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
-                    <Feather name="arrow-right-circle" size={13} color={colors.primary} />
+                    
                     <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.primary }}>Tap to record payment</Text>
                   </View>
                 )}
@@ -297,7 +296,7 @@ export default function CreditsScreen() {
                     <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground, marginTop: 2 }}>{selected.partyName}</Text>
                   </View>
                   <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={() => setSelected(null)}>
-                    <Feather name="x" size={18} color={colors.mutedForeground} />
+                    
                   </TouchableOpacity>
                 </View>
 
@@ -360,7 +359,7 @@ export default function CreditsScreen() {
                             style={[styles.accChip, { backgroundColor: selectedAccountId === String(a.id) ? colors.primary : colors.input, borderColor: selectedAccountId === String(a.id) ? colors.primary : colors.border }]}
                             onPress={() => setSelectedAccountId(String(a.id))}
                           >
-                            <Feather name="briefcase" size={11} color={selectedAccountId === String(a.id) ? "#FFF" : colors.primary} />
+                            
                             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: selectedAccountId === String(a.id) ? "#FFF" : colors.text }}>{a.name}</Text>
                             <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: selectedAccountId === String(a.id) ? "rgba(255,255,255,0.7)" : colors.mutedForeground }}>
                               {fmt(parseFloat(a.balance))}
@@ -376,7 +375,7 @@ export default function CreditsScreen() {
                   style={{ backgroundColor: colors.success, paddingVertical: 16, borderRadius: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8, marginBottom: 8 }}
                   onPress={handlePay}
                 >
-                  <Feather name="check-circle" size={18} color="#FFF" />
+                  
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>Confirm Payment Received</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={{ alignItems: "center", paddingVertical: 12, marginBottom: 8 }} onPress={() => setSelected(null)}>

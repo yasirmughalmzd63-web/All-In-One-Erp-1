@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -287,7 +286,7 @@ export default function WalletsScreen() {
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.cardRow}>
           <View style={[styles.iconBox, { backgroundColor: et?.bg ?? colors.secondary }]}>
-            <Feather name={(et?.icon ?? "circle") as "circle"} size={17} color={et?.color ?? colors.primary} />
+            
           </View>
           <View style={{ flex: 1 }}>
             <Text style={[styles.cardTitle, { color: colors.text }]}>
@@ -308,7 +307,7 @@ export default function WalletsScreen() {
             </Text>
             {isAdmin && (
               <TouchableOpacity style={[styles.delBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(item)}>
-                <Feather name="trash-2" size={13} color={colors.danger} />
+                
               </TouchableOpacity>
             )}
           </View>
@@ -340,11 +339,11 @@ export default function WalletsScreen() {
         </View>
         <View style={styles.quickRow}>
           <TouchableOpacity style={styles.quickBtn} onPress={() => setShowBuyModal(true)}>
-            <Feather name="shopping-bag" size={16} color="#FFF" />
+            
             <Text style={styles.quickText}>Buy USD</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "rgba(147,51,234,0.85)" }]} onPress={() => setShowTopupModal(true)}>
-            <Feather name="zap" size={16} color="#FFF" />
+            
             <Text style={styles.quickText}>Top-up Coins</Text>
           </TouchableOpacity>
         </View>
@@ -390,7 +389,7 @@ export default function WalletsScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="dollar-sign" size={40} color={colors.mutedForeground} />
+              
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No dollar wallet entries yet</Text>
               <Text style={[styles.emptyHint, { color: colors.mutedForeground }]}>Tap + to record received dollars, products, payments or credit recoveries</Text>
             </View>
@@ -399,7 +398,7 @@ export default function WalletsScreen() {
       )}
 
       <TouchableOpacity style={[styles.fab, { backgroundColor: "#0891B2" }]} onPress={() => setShowModal(true)}>
-        <Feather name="plus" size={24} color="#FFF" />
+        
       </TouchableOpacity>
 
       {/* BUY USD MODAL */}
@@ -408,7 +407,7 @@ export default function WalletsScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "92%" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Buy USD from Account</Text>
-              <TouchableOpacity onPress={() => setShowBuyModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowBuyModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DOLLAR WALLET (USD GOES IN)</Text>
@@ -536,14 +535,14 @@ export default function WalletsScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "92%" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Top-up Coins with USD</Text>
-              <TouchableOpacity onPress={() => setShowTopupModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowTopupModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
                 <Text style={[styles.formLabel, { color: colors.mutedForeground, marginBottom: 0, flex: 1 }]}>PARTY (WHO SELLS YOU COINS)</Text>
                 <TouchableOpacity onPress={() => setTopupForm(f => ({ ...f, coinsPerUsd: "6000", exchangeRatePkr: "333.33", costPricePkr: "0.0556" }))}
                   style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FEF3C7", borderColor: "#F59E0B", borderWidth: 1, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 }}>
-                  <Feather name="zap" size={11} color="#92400E" />
+                  
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#92400E" }}>AUTO 6000/USD · 18/PKR</Text>
                 </TouchableOpacity>
               </View>
@@ -649,7 +648,7 @@ export default function WalletsScreen() {
               {topupForm.coinsPerUsd && parseFloat(topupForm.coinsPerUsd) > 0 && topupForm.amountUsd ? (
                 <View style={{ backgroundColor: "#ECFDF5", borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: "#10B981", gap: 4 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Feather name="info" size={14} color="#059669" />
+                    
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#065F46" }}>
                       ${topupForm.amountUsd} → {topupQty.toLocaleString()} coins
                     </Text>
@@ -778,7 +777,7 @@ export default function WalletsScreen() {
                   <>
                     {showWarn ? (
                       <View style={{ backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: "#DC2626", flexDirection: "row", alignItems: "center", gap: 10 }}>
-                        <Feather name="alert-triangle" size={20} color="#991B1B" />
+                        
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#991B1B" }}>
                             Not enough dollars in {selW!.name}
@@ -812,7 +811,7 @@ export default function WalletsScreen() {
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>New Dollar Entry</Text>
               <TouchableOpacity onPress={() => setShowModal(false)}>
-                <Feather name="x" size={22} color={colors.mutedForeground} />
+                <Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
@@ -828,7 +827,7 @@ export default function WalletsScreen() {
                     }]}
                     onPress={() => setForm(f => ({ ...f, entryType: t.key }))}
                   >
-                    <Feather name={t.icon as "circle"} size={14} color={form.entryType === t.key ? "#FFF" : t.color} />
+                    
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: form.entryType === t.key ? "#FFF" : colors.text, marginTop: 4 }}>{t.label}</Text>
                     <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: form.entryType === t.key ? "rgba(255,255,255,0.8)" : colors.mutedForeground }}>{t.desc}</Text>
                   </TouchableOpacity>

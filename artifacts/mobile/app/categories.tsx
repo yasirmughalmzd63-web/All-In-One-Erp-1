@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
@@ -47,7 +46,7 @@ export default function CategoriesScreen() {
   const handleDelete = (c: Category) => {
     Alert.alert("Delete", `Delete "${c.name}"?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: c.id }); queryClient.invalidateQueries(); } catch {} }},
+      { text: "Delete", style: "destructive", onPress: async () => { try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: c.id }); queryClient.invalidateQueries(); } catch (e) {} }},
     ]);
   };
 
@@ -59,21 +58,21 @@ export default function CategoriesScreen() {
           keyExtractor={i => String(i.id)}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}
-          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="tag" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No categories</Text></View>}
+          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No categories</Text></View>}
           renderItem={({ item: c }) => {
             const [tc, tb] = typeColor[c.type] ?? ["#475569", "#F8FAFC"];
             return (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <View style={[styles.iconBox, { backgroundColor: tb }]}><Feather name="tag" size={18} color={tc} /></View>
+                  <View style={[styles.iconBox, { backgroundColor: tb }]}></View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>{c.name}</Text>
                     {c.description && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>{c.description}</Text>}
                   </View>
                   <View style={[styles.typeBadge, { backgroundColor: tb }]}><Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: tc }}>{c.type}</Text></View>
                   <View style={{ gap: 6 }}>
-                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(c)}><Feather name="edit-2" size={13} color={colors.primary} /></TouchableOpacity>}
-                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(c)}><Feather name="trash-2" size={13} color={colors.danger} /></TouchableOpacity>}
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(c)}></TouchableOpacity>}
+                    {isAdmin && <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(c)}></TouchableOpacity>}
                   </View>
                 </View>
               </View>
@@ -81,13 +80,13 @@ export default function CategoriesScreen() {
           }}
         />
       )}
-      {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.danger }]} onPress={openAdd}><Feather name="plus" size={24} color="#FFFFFF" /></TouchableOpacity>}
+      {isAdmin && <TouchableOpacity style={[styles.fab, { backgroundColor: colors.danger }]} onPress={openAdd}><Text style={{ color: "#FFF", fontSize: 32, fontFamily: "Inter_500Medium", lineHeight: 36 }}>+</Text></TouchableOpacity>}
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit Category" : "New Category"}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <View style={{ padding: 20 }}>
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Name *</Text>

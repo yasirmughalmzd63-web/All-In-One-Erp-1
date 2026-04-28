@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
@@ -97,8 +96,7 @@ export default function PrivilegesScreen() {
       setProducts(p);
       setLocations(l);
       setAccounts(a);
-    } catch {}
-    setEntityLoading(false);
+    } catch (e) {}  setEntityLoading(false);
   };
 
   const openUser = (u: User) => {
@@ -221,7 +219,7 @@ export default function PrivilegesScreen() {
               {hasAll ? "Full Access" : "Custom"}
             </Text>
           </View>
-          <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+          
         </View>
       </TouchableOpacity>
     );
@@ -231,7 +229,7 @@ export default function PrivilegesScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient colors={["#059669", "#047857"]} style={[styles.header, { paddingTop: topPad + 8 }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Feather name="arrow-left" size={20} color="#FFF" />
+          
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>User Privileges</Text>
@@ -250,7 +248,7 @@ export default function PrivilegesScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 60, gap: 10 }}
           ListHeaderComponent={
             <View style={[styles.infoBox, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" }]}>
-              <Feather name="shield" size={14} color="#2563EB" />
+              
               <Text style={[styles.infoText, { color: "#1E40AF" }]}>
                 Admins always have full access. For each non-admin user you can control which modules, products, accounts, and locations they can access.
               </Text>
@@ -258,7 +256,7 @@ export default function PrivilegesScreen() {
           }
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="user-x" size={36} color={colors.mutedForeground} />
+              
               <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No non-admin users found</Text>
             </View>
           }
@@ -281,7 +279,7 @@ export default function PrivilegesScreen() {
                 </View>
               </View>
               <TouchableOpacity onPress={() => setSelectedUser(null)} style={{ padding: 4 }}>
-                <Feather name="x" size={22} color={colors.mutedForeground} />
+                
               </TouchableOpacity>
             </View>
 
@@ -292,7 +290,7 @@ export default function PrivilegesScreen() {
                 onPress={() => toggleAll(!allAccess)} activeOpacity={0.8}
               >
                 <View style={[styles.allAccessIcon, { backgroundColor: allAccess ? "#16A34A" : colors.mutedForeground }]}>
-                  <Feather name={allAccess ? "unlock" : "lock"} size={16} color="#FFF" />
+                  
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>Full Access</Text>
@@ -326,14 +324,14 @@ export default function PrivilegesScreen() {
                             return (
                               <TouchableOpacity key={m} style={[styles.moduleRow, { borderTopColor: colors.border, borderTopWidth: idx === 0 ? 0 : 1 }]} onPress={() => toggleModule(m)} activeOpacity={0.7}>
                                 <View style={[styles.moduleIcon, { backgroundColor: on ? gc.bg : colors.input }]}>
-                                  <Feather name={meta.icon as "grid"} size={15} color={on ? gc.header : colors.mutedForeground} />
+                                  
                                 </View>
                                 <View style={{ flex: 1 }}>
                                   <Text style={[styles.moduleLabel, { color: on ? colors.text : colors.mutedForeground }]}>{meta.label}</Text>
                                   <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{meta.desc}</Text>
                                 </View>
                                 <View style={[styles.checkBox, { backgroundColor: on ? gc.header : "transparent", borderColor: on ? gc.header : colors.border }]}>
-                                  {on && <Feather name="check" size={12} color="#FFF" />}
+                                  {null}
                                 </View>
                               </TouchableOpacity>
                             );
@@ -376,7 +374,7 @@ export default function PrivilegesScreen() {
                             >
                               <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#FFF" }}>{summary.allOn ? "ALL" : "NONE"}</Text>
                             </TouchableOpacity>
-                            <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={16} color={eg.color} style={{ marginLeft: 6 }} />
+                            
                           </TouchableOpacity>
 
                           {isExpanded && (
@@ -407,14 +405,14 @@ export default function PrivilegesScreen() {
                                       activeOpacity={0.7}
                                     >
                                       <View style={[styles.moduleIcon, { backgroundColor: on ? eg.bg : colors.input }]}>
-                                        <Feather name={eg.icon as "package"} size={14} color={on ? eg.color : colors.mutedForeground} />
+                                        
                                       </View>
                                       <View style={{ flex: 1 }}>
                                         <Text style={[styles.moduleLabel, { color: on ? colors.text : colors.mutedForeground }]}>{item.name}</Text>
                                         {sub ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{sub}</Text> : null}
                                       </View>
                                       <View style={[styles.checkBox, { backgroundColor: on ? eg.color : "transparent", borderColor: on ? eg.color : colors.border }]}>
-                                        {on && <Feather name="check" size={12} color="#FFF" />}
+                                        {null}
                                       </View>
                                     </TouchableOpacity>
                                   );
@@ -433,7 +431,7 @@ export default function PrivilegesScreen() {
                 style={[styles.saveBtn, { backgroundColor: "#059669", opacity: saving ? 0.6 : 1 }]}
                 onPress={handleSave} disabled={saving}
               >
-                <Feather name="check" size={18} color="#FFF" />
+                
                 <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Save Privileges"}</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -447,7 +445,7 @@ export default function PrivilegesScreen() {
 function EntityPill({ icon, label, active, colors }: { icon: string; label: string; active: boolean; colors: ReturnType<typeof import("@/hooks/useColors").useColors> }) {
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7, backgroundColor: active ? "#DCFCE7" : "#FEF2F2" }}>
-      <Feather name={icon as "package"} size={9} color={active ? "#16A34A" : "#DC2626"} />
+      
       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: active ? "#16A34A" : "#DC2626" }}>{label}</Text>
     </View>
   );

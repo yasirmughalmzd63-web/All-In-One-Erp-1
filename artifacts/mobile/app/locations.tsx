@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, RefreshControl,
@@ -93,14 +92,13 @@ export default function LocationsScreen() {
   const handleDelete = (l: Location) => {
     Alert.alert("Delete", `Delete "${l.name}"?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: l.id }); queryClient.invalidateQueries(); } catch {} } },
+      { text: "Delete", style: "destructive", onPress: async () => { try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: l.id }); queryClient.invalidateQueries(); } catch (e) {} } },
     ]);
   };
 
   const loadTransfers = async () => {
     setLoadingTransfers(true);
-    try { const rows = await customFetch<Transfer[]>("/api/locations/stock-transfers"); setTransfers(rows); } catch {}
-    setLoadingTransfers(false);
+    try { const rows = await customFetch<Transfer[]>("/api/locations/stock-transfers"); setTransfers(rows); } catch (e) {}  setLoadingTransfers(false);
   };
 
   const openHistory = () => { loadTransfers(); setShowHistoryModal(true); };
@@ -154,7 +152,7 @@ export default function LocationsScreen() {
   const SummaryTile = ({ label, value, icon, iconBg, iconColor }: { label: string; value: string; icon: string; iconBg: string; iconColor: string }) => (
     <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, alignItems: "center", gap: 6 }}>
       <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: iconBg, alignItems: "center", justifyContent: "center" }}>
-        <Feather name={icon as never} size={14} color={iconColor} />
+        
       </View>
       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>{value}</Text>
       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: colors.mutedForeground, letterSpacing: 0.5, textAlign: "center" }}>{label}</Text>
@@ -177,17 +175,17 @@ export default function LocationsScreen() {
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "rgba(255,255,255,0.75)", letterSpacing: 0.6, marginBottom: 8 }}>ALL APPS SUMMARY</Text>
                   <View style={{ flexDirection: "row", gap: 10 }}>
                     <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, alignItems: "center" }}>
-                      <Feather name="briefcase" size={14} color="rgba(255,255,255,0.9)" />
+                      
                       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF", marginTop: 4 }}>{fmt2(totalAccountBalance)}</Text>
                       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: 0.5, marginTop: 2 }}>TOTAL BANK</Text>
                     </View>
                     <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, alignItems: "center" }}>
-                      <Feather name="package" size={14} color="rgba(255,255,255,0.9)" />
+                      
                       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF", marginTop: 4 }}>{fmt2(totalStockValue)}</Text>
                       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: 0.5, marginTop: 2 }}>TOTAL STOCK</Text>
                     </View>
                     <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, alignItems: "center" }}>
-                      <Feather name="map-pin" size={14} color="rgba(255,255,255,0.9)" />
+                      
                       <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF", marginTop: 4 }}>{allLocations.length}</Text>
                       <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: 0.5, marginTop: 2 }}>BRANCHES</Text>
                     </View>
@@ -199,18 +197,18 @@ export default function LocationsScreen() {
               {isAdminOrManager && (
                 <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>
                   <TouchableOpacity style={[S.headerBtn, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE", flex: 1 }]} onPress={openHistory}>
-                    <Feather name="list" size={14} color="#2563EB" />
+                    
                     <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#2563EB" }}>Transfer History</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[S.headerBtn, { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", flex: 1 }]} onPress={() => { setTf(emptyTransfer); setShowTransferModal(true); }}>
-                    <Feather name="repeat" size={14} color="#D97706" />
+                    
                     <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#D97706" }}>Transfer Stock</Text>
                   </TouchableOpacity>
                 </View>
               )}
             </View>
           }
-          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="map-pin" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No locations</Text></View>}
+          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No locations</Text></View>}
           renderItem={({ item: l }) => {
             const prodCount = locationProductCount(l.id);
             const stockQty = locationStockQty(l.id);
@@ -220,7 +218,7 @@ export default function LocationsScreen() {
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
                   <View style={{ width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "#ECFDF5" }}>
-                    <Feather name="map-pin" size={20} color="#059669" />
+                    
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text, marginBottom: 2 }}>{l.name}</Text>
@@ -230,15 +228,15 @@ export default function LocationsScreen() {
                     {/* Stats row */}
                     <View style={{ flexDirection: "row", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                       <View style={[S.statBadge, { backgroundColor: "#EFF6FF" }]}>
-                        <Feather name="briefcase" size={10} color="#2563EB" />
+                        
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#2563EB" }}>{fmt2(accBal)}</Text>
                       </View>
                       <View style={[S.statBadge, { backgroundColor: "#ECFDF5" }]}>
-                        <Feather name="package" size={10} color="#059669" />
+                        
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#059669" }}>{fmt2(stockVal)}</Text>
                       </View>
                       <View style={[S.statBadge, { backgroundColor: "#FFF7ED" }]}>
-                        <Feather name="layers" size={10} color="#D97706" />
+                        
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>{stockQty} units · {prodCount} products</Text>
                       </View>
                     </View>
@@ -246,10 +244,10 @@ export default function LocationsScreen() {
                   {isAdmin && (
                     <View style={{ gap: 8 }}>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(l)}>
-                        <Feather name="edit-2" size={14} color={colors.primary} />
+                        
                       </TouchableOpacity>
                       <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(l)}>
-                        <Feather name="trash-2" size={14} color={colors.danger} />
+                        
                       </TouchableOpacity>
                     </View>
                   )}
@@ -262,7 +260,7 @@ export default function LocationsScreen() {
 
       {isAdmin && (
         <TouchableOpacity style={[styles.fab, { backgroundColor: "#059669" }]} onPress={openAdd}>
-          <Feather name="plus" size={24} color="#FFFFFF" />
+          <Text style={{ color: "#FFF", fontSize: 32, fontFamily: "Inter_500Medium", lineHeight: 36 }}>+</Text>
         </TouchableOpacity>
       )}
 
@@ -272,7 +270,7 @@ export default function LocationsScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit App" : "New App"}</Text>
-              <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <View style={{ padding: 20 }}>
               {[["Name *", "name"], ["Address", "address"], ["Phone", "phone"]].map(([label, key]) => (
@@ -301,11 +299,11 @@ export default function LocationsScreen() {
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                 <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#FFF7ED", alignItems: "center", justifyContent: "center" }}>
-                  <Feather name="repeat" size={18} color="#D97706" />
+                  
                 </View>
                 <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Transfer Stock</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowTransferModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowTransferModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
               <ChipRow label="FROM LOCATION" items={allLocations.map(l => ({ id: l.id, name: l.name }))} value={tf.fromLocationId} onSelect={v => setTf(f => ({ ...f, fromLocationId: v, fromProductId: "" }))} />
@@ -313,7 +311,7 @@ export default function LocationsScreen() {
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 }}>
                 <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                 <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#FFF7ED", alignItems: "center", justifyContent: "center" }}>
-                  <Feather name="arrow-down" size={14} color="#D97706" />
+                  
                 </View>
                 <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
               </View>
@@ -341,7 +339,7 @@ export default function LocationsScreen() {
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "85%" }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Transfer History</Text>
-              <TouchableOpacity onPress={() => setShowHistoryModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setShowHistoryModal(false)}><Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text></TouchableOpacity>
             </View>
             {loadingTransfers ? (
               <ActivityIndicator style={{ margin: 40 }} color={colors.primary} />
@@ -350,12 +348,12 @@ export default function LocationsScreen() {
                 data={transfers}
                 keyExtractor={t => String(t.id)}
                 contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 10 }}
-                ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="repeat" size={36} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No transfers yet</Text></View>}
+                ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No transfers yet</Text></View>}
                 renderItem={({ item: t }) => (
                   <View style={[S.histCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>
                       <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: "#FFF7ED", alignItems: "center", justifyContent: "center" }}>
-                        <Feather name="repeat" size={14} color="#D97706" />
+                        
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }}>{t.fromProductName ?? `#${t.fromProductId}`} → {t.toProductName ?? `#${t.toProductId}`}</Text>
@@ -366,9 +364,9 @@ export default function LocationsScreen() {
                       </View>
                     </View>
                     <View style={{ flexDirection: "row", gap: 8 }}>
-                      <View style={[S.histBadge, { backgroundColor: "#FEF2F2" }]}><Feather name="map-pin" size={10} color={colors.danger} /><Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.danger }}>{t.fromLocationName ?? `Loc #${t.fromLocationId}`}</Text></View>
-                      <Feather name="arrow-right" size={12} color={colors.mutedForeground} style={{ marginTop: 2 }} />
-                      <View style={[S.histBadge, { backgroundColor: "#ECFDF5" }]}><Feather name="map-pin" size={10} color="#059669" /><Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: "#059669" }}>{t.toLocationName ?? `Loc #${t.toLocationId}`}</Text></View>
+                      <View style={[S.histBadge, { backgroundColor: "#FEF2F2" }]}><Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.danger }}>{t.fromLocationName ?? `Loc #${t.fromLocationId}`}</Text></View>
+                      
+                      <View style={[S.histBadge, { backgroundColor: "#ECFDF5" }]}><Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: "#059669" }}>{t.toLocationName ?? `Loc #${t.toLocationId}`}</Text></View>
                     </View>
                     {t.notes && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 6 }}>"{t.notes}"</Text>}
                   </View>

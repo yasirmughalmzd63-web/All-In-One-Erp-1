@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
@@ -55,13 +54,13 @@ export default function AuditChecksScreen() {
     <View style={[styles.container, { paddingTop: topPad }]}>
       <LinearGradient colors={["#DC2626", "#991B1B"]} style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><Feather name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}></TouchableOpacity>
           <Text style={styles.title}>Audit & Control</Text>
-          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}><Feather name="refresh-cw" size={20} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}></TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>{data ? new Date(data.generatedAt).toLocaleString() : "—"}</Text>
         <View style={styles.heroBox}>
-          <Feather name={allClear ? "check-circle" : "alert-triangle"} size={28} color="#fff" />
+          
           <Text style={styles.heroValue}>{allClear ? "All clear" : "Issues detected"}</Text>
         </View>
       </LinearGradient>
@@ -143,11 +142,11 @@ export default function AuditChecksScreen() {
   );
 }
 
-function Stat({ icon, label, value, color, colors }: { icon: keyof typeof Feather.glyphMap; label: string; value: string; color: string; colors: ReturnType<typeof useColors> }) {
+function Stat({ icon, label, value, color, colors }: { icon: string; label: string; value: string; color: string; colors: ReturnType<typeof useColors> }) {
   return (
     <View style={[ms(colors).statBox, { backgroundColor: colors.card }]}>
       <View style={[ms(colors).statIcon, { backgroundColor: color + "22" }]}>
-        <Feather name={icon} size={18} color={color} />
+        
       </View>
       <View style={{ flex: 1 }}>
         <Text style={{ color: colors.mutedForeground, fontSize: 11 }}>{label}</Text>

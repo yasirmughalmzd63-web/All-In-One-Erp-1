@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -100,8 +99,7 @@ export default function InventoryLedgerScreen() {
   useEffect(() => {
     if (!isAdmin) return;
     (async () => {
-      try { setLocations(await customFetch<Location[]>("/api/locations")); } catch {}
-    })();
+      try { setLocations(await customFetch<Location[]>("/api/locations")); } catch (e) {} })();
   }, [isAdmin]);
 
   const load = useCallback(async (isRefresh = false) => {
@@ -115,8 +113,7 @@ export default function InventoryLedgerScreen() {
       const url = `/api/inventory/ledger${params.toString() ? `?${params.toString()}` : ""}`;
       const resp = await customFetch<LedgerResp>(url);
       setData(resp);
-    } catch {}
-    setLoading(false);
+    } catch (e) {}  setLoading(false);
     setRefreshing(false);
   }, [period, locationId]);
 
@@ -141,7 +138,7 @@ export default function InventoryLedgerScreen() {
           <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>{item.productName}</Text>
           {item.locationName && (
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
-              <Feather name="map-pin" size={10} color={colors.mutedForeground} />
+              
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.mutedForeground }}>{item.locationName}</Text>
             </View>
           )}
@@ -180,14 +177,14 @@ export default function InventoryLedgerScreen() {
       <LinearGradient colors={["#0F172A", "#1E293B"]} style={[styles.header, { paddingTop: topPad + 8 }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 }}>
           <TouchableOpacity style={styles.iconBtn} onPress={() => router.back()}>
-            <Feather name="arrow-left" size={20} color="#FFF" />
+            
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Inventory Ledger</Text>
             <Text style={styles.headerSub}>{periodLabel} · {currentLocName}</Text>
           </View>
           <TouchableOpacity style={styles.iconBtn} onPress={() => load(true)}>
-            <Feather name="refresh-cw" size={16} color="#FFF" />
+            
           </TouchableOpacity>
         </View>
 
@@ -249,22 +246,22 @@ export default function InventoryLedgerScreen() {
               style={[styles.dropdownBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
               onPress={() => setShowLocPicker(true)}
             >
-              <Feather name="map-pin" size={12} color={colors.text} />
+              
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.text, flex: 1 }} numberOfLines={1}>
                 {currentLocName}
               </Text>
-              <Feather name="chevron-down" size={12} color={colors.mutedForeground} />
+              
             </TouchableOpacity>
           )}
           <TouchableOpacity
             style={[styles.dropdownBtn, { backgroundColor: colors.background, borderColor: colors.border }]}
             onPress={() => setValueMode(valueMode === "cost" ? "price" : "cost")}
           >
-            <Feather name="dollar-sign" size={12} color={colors.text} />
+            
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.text, flex: 1 }}>
               {valueMode === "cost" ? "At Cost" : "At Price"}
             </Text>
-            <Feather name="repeat" size={12} color={colors.mutedForeground} />
+            
           </TouchableOpacity>
         </View>
       </View>
@@ -281,7 +278,7 @@ export default function InventoryLedgerScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={styles.empty}>
-              <Feather name="package" size={36} color={colors.mutedForeground} />
+              
               <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 8 }}>No products in this scope</Text>
             </View>
           }
@@ -295,7 +292,7 @@ export default function InventoryLedgerScreen() {
             <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>Select App</Text>
               <TouchableOpacity onPress={() => setShowLocPicker(false)}>
-                <Feather name="x" size={20} color={colors.mutedForeground} />
+                <Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
               </TouchableOpacity>
             </View>
             <FlatList
@@ -308,9 +305,9 @@ export default function InventoryLedgerScreen() {
                     style={[styles.modalItem, { borderBottomColor: colors.border, backgroundColor: sel ? colors.background : "transparent" }]}
                     onPress={() => { setLocationId(item.id === 0 ? null : item.id); setShowLocPicker(false); }}
                   >
-                    <Feather name={item.id === 0 ? "globe" : "map-pin"} size={14} color={sel ? colors.primary : colors.mutedForeground} />
+                    
                     <Text style={{ flex: 1, fontFamily: sel ? "Inter_700Bold" : "Inter_500Medium", fontSize: 13, color: sel ? colors.primary : colors.text }}>{item.name}</Text>
-                    {sel && <Feather name="check" size={16} color={colors.primary} />}
+                    {null}
                   </TouchableOpacity>
                 );
               }}

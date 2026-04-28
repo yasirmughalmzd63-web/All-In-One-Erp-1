@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import React from "react";
 import {
   ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View,
@@ -31,7 +30,7 @@ export default function AuditScreen() {
           keyExtractor={i => String(i.id)}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 8 }}
-          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="shield" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No audit logs</Text></View>}
+          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No audit logs</Text></View>}
           renderItem={({ item: log }) => {
             const actionColor = ACTION_COLORS[log.action] ?? colors.mutedForeground;
             return (

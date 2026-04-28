@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -82,7 +81,7 @@ export default function MoreScreen() {
       activeOpacity={0.8}
     >
       <View style={[styles.menuIcon, { backgroundColor: item.bg }]}>
-        <Feather name={item.icon as "users"} size={22} color={item.color} />
+        
       </View>
       <Text style={[styles.menuLabel, { color: colors.text }]}>{item.label}</Text>
       <Text style={[styles.menuDesc, { color: colors.mutedForeground }]}>{item.desc}</Text>
@@ -142,19 +141,19 @@ export default function MoreScreen() {
 
         <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <View style={[styles.infoRow, { borderBottomColor: colors.border, borderBottomWidth: 1 }]}>
-            <Feather name="info" size={16} color={colors.mutedForeground} />
+            
             <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>Version</Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>Coins Sale 1.0.0</Text>
           </View>
           <View style={styles.infoRow}>
-            <Feather name="user" size={16} color={colors.mutedForeground} />
+            
             <Text style={[styles.infoLabel, { color: colors.mutedForeground }]}>Logged in as</Text>
             <Text style={[styles.infoValue, { color: colors.text }]}>{user?.username}</Text>
           </View>
         </View>
 
         <TouchableOpacity style={[styles.logoutBtn, { borderColor: colors.danger }]} onPress={handleLogout}>
-          <Feather name="log-out" size={18} color={colors.danger} />
+          
           <Text style={[styles.logoutText, { color: colors.danger }]}>Sign Out</Text>
         </TouchableOpacity>
       </ScrollView>

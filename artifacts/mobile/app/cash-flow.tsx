@@ -1,4 +1,3 @@
-import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -39,7 +38,7 @@ function periodToRange(p: Period): { start: string | null; end: string | null; l
   const s = new Date(today.getFullYear(), today.getMonth(), 1);
   return { start: f(s), end: f(today), label: "This month" };
 }
-function typeIcon(t: string): keyof typeof Feather.glyphMap {
+function typeIcon(t: string): string {
   if (t === "bank") return "credit-card";
   if (t === "mobile_wallet") return "smartphone";
   return "dollar-sign";
@@ -76,9 +75,9 @@ export default function CashFlowScreen() {
     <View style={[styles.container, { paddingTop: topPad }]}>
       <LinearGradient colors={["#0369A1", "#075985"]} style={styles.header}>
         <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}><Feather name="arrow-left" size={22} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}></TouchableOpacity>
           <Text style={styles.title}>Cash Flow</Text>
-          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}><Feather name="refresh-cw" size={20} color="#fff" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => load(true)} style={styles.iconBtn}></TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>{range.label} • per account</Text>
         <View style={styles.heroRow}>
@@ -109,7 +108,7 @@ export default function CashFlowScreen() {
             <View style={[styles.card, { backgroundColor: colors.card }]}>
               <View style={styles.cardTop}>
                 <View style={[styles.iconBg, { backgroundColor: "#E0F2FE" }]}>
-                  <Feather name={typeIcon(item.accountType)} size={18} color="#0369A1" />
+                  
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.accName, { color: colors.text }]}>{item.accountName}</Text>
