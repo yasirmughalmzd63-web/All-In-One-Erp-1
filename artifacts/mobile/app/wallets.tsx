@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, Platform,
   RefreshControl, ScrollView, StyleSheet, Text, TextInput,
@@ -34,7 +35,7 @@ const ENTRY_TYPES: { key: string; label: string; desc: string; sign: 1 | -1; col
 ];
 
 type Account = { id: number; name: string; type: string; currency: string; balance: string };
-type Product = { id: number; name: string; unit: string; stock: number; costPrice: string };
+type Product = { id: number; name: string; unit: string; stock: number; costPrice: string; unitPrice: string; wholesalePrice: string };
 
 const emptyBuyForm = {
   amountUsd: "",
@@ -110,6 +111,14 @@ export default function WalletsScreen() {
   };
 
   React.useEffect(() => { load(); }, []);
+
+  const params = useLocalSearchParams<{ topup?: string }>();
+  useEffect(() => {
+    if (params.topup) {
+      setTopupForm(f => ({ ...f, productId: String(params.topup) }));
+      setShowTopupModal(true);
+    }
+  }, [params.topup]);
 
   const handleBuyUsd = async () => {
     if (!buyForm.amountUsd || !buyForm.rate || !buyForm.accountId || !buyForm.date) {

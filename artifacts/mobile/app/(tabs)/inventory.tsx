@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, Platform,
@@ -52,6 +53,7 @@ const chipStyles = StyleSheet.create({
 
 export default function InventoryScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const colors = useColors();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -242,14 +244,22 @@ export default function InventoryScreen() {
                       </View>
                     </View>
                   </View>
-                  {isAdmin && <View style={{ flexDirection: "row", gap: 6 }}>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(p)}>
-                      <Feather name="edit-2" size={13} color={colors.primary} />
+                  <View style={{ flexDirection: "row", gap: 6 }}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: "#F3E8FF" }]}
+                      onPress={() => router.push({ pathname: "/wallets", params: { topup: String(p.id) } })}
+                    >
+                      <Feather name="dollar-sign" size={13} color="#9333EA" />
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(p)}>
-                      <Feather name="trash-2" size={13} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>}
+                    {isAdmin && <>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(p)}>
+                        <Feather name="edit-2" size={13} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(p)}>
+                        <Feather name="trash-2" size={13} color={colors.danger} />
+                      </TouchableOpacity>
+                    </>}
+                  </View>
                 </View>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   <PriceChip label="COST" value={`₨${parseFloat(p.costPrice).toFixed(2)}`} color={colors.mutedForeground} bg={colors.input} />
