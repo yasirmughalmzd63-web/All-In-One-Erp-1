@@ -218,7 +218,7 @@ export default function AccountsScreen() {
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 6 }}>Currency</Text>
               <TextInput style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.input, marginBottom: 12 }]} value={form.currency} onChangeText={v => setForm(f => ({ ...f, currency: v }))} autoCapitalize="characters" />
 
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>Assigned Location</Text>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>Assigned App</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   <TouchableOpacity

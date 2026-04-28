@@ -173,12 +173,12 @@ export default function SuppliersScreen() {
                 </View>
               ))}
 
-              {/* Location selector */}
+              {/* App selector */}
               {locations.length > 0 && (
                 <View style={{ marginBottom: 16 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
                     <Feather name="map-pin" size={12} color={colors.purchase} />
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground }}>Location</Text>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground }}>App</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={{ flexDirection: "row", gap: 8 }}>
@@ -186,7 +186,7 @@ export default function SuppliersScreen() {
                         style={[styles.locChip, { borderColor: form.locationId === "" ? colors.purchase : colors.border, backgroundColor: form.locationId === "" ? colors.purchaseBg : colors.input }]}
                         onPress={() => setForm(f => ({ ...f, locationId: "" }))}
                       >
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === "" ? colors.purchase : colors.mutedForeground }}>No Location</Text>
+                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === "" ? colors.purchase : colors.mutedForeground }}>No App</Text>
                       </TouchableOpacity>
                       {locations.map(l => (
                         <TouchableOpacity

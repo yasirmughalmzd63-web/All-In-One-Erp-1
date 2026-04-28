@@ -20,7 +20,7 @@ const MANAGEMENT_ITEMS: MenuItem[] = [
   { label: "Customers",  icon: "users",       route: "/customers",  color: "#2563EB", bg: "#EFF6FF", desc: "Manage customer records",   module: "customers" },
   { label: "Suppliers",  icon: "truck",        route: "/suppliers",  color: "#0284C7", bg: "#E0F2FE", desc: "Manage supplier records",   module: "suppliers" },
   { label: "Users",      icon: "user-check",   route: "/users",      color: "#7C3AED", bg: "#F3E8FF", desc: "Manage user accounts",      module: "users",   adminOnly: true },
-  { label: "Locations",  icon: "map-pin",      route: "/locations",  color: "#059669", bg: "#ECFDF5", desc: "Manage store locations",    module: "locations" },
+  { label: "Apps",  icon: "map-pin",      route: "/locations",  color: "#059669", bg: "#ECFDF5", desc: "Manage store apps",    module: "locations" },
   { label: "Accounts",   icon: "credit-card",  route: "/accounts",   color: "#D97706", bg: "#FFF7ED", desc: "Financial accounts",        module: "accounts" },
   { label: "Categories", icon: "tag",          route: "/categories", color: "#DC2626", bg: "#FEF2F2", desc: "Product categories",        module: "categories" },
   { label: "Credits",    icon: "clock",        route: "/credits",    color: "#7C3AED", bg: "#F3E8FF", desc: "Receivables & payables",    module: "credits" },

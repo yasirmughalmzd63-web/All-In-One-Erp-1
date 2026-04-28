@@ -159,7 +159,7 @@ export default function DailyReportScreen() {
       <View style={{ flexDirection: "row", backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
         {([
           { key: "summary",   label: "Summary",   icon: "bar-chart-2" },
-          { key: "locations", label: "Locations",  icon: "map-pin"     },
+          { key: "locations", label: "Apps",       icon: "map-pin"     },
           { key: "users",     label: "Users",      icon: "users"       },
         ] as { key: Section; label: string; icon: string }[]).map(tab => (
           <TouchableOpacity
@@ -249,16 +249,16 @@ export default function DailyReportScreen() {
         {/* ── LOCATIONS section ──────────────────────────────────────────── */}
         {section === "locations" && (
           <>
-            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{locations.length} ACTIVE LOCATION{locations.length !== 1 ? "S" : ""}</Text>
+            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>{locations.length} ACTIVE APP{locations.length !== 1 ? "S" : ""}</Text>
             {locations.length === 0 ? (
               <View style={styles.empty}>
                 <Feather name="map-pin" size={36} color={colors.mutedForeground} />
-                <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 8 }}>No locations found</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 8 }}>No apps found</Text>
               </View>
             ) : (
               locations.map((loc, i) => (
                 <View key={loc.id} style={[styles.locCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  {/* Location header */}
+                  {/* App header */}
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
                     <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" }}>
                       <Feather name="map-pin" size={16} color="#2563EB" />
@@ -294,7 +294,7 @@ export default function DailyReportScreen() {
                     <View style={{ backgroundColor: "#0F172A", borderRadius: 10, padding: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                         <Feather name="layers" size={14} color="#FFF" />
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" }}>Location Total</Text>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#FFF" }}>App Total</Text>
                       </View>
                       <View style={{ alignItems: "flex-end" }}>
                         <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF" }}>{fmtPKR(loc.totalPKR)}</Text>
@@ -313,7 +313,7 @@ export default function DailyReportScreen() {
                   <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: "#FFF7ED", alignItems: "center", justifyContent: "center" }}>
                     <Feather name="alert-circle" size={16} color="#D97706" />
                   </View>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>No Location Assigned</Text>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>No App Assigned</Text>
                 </View>
                 {totals.unlinkedBankPKR > 0 && (
                   <View style={{ backgroundColor: "#FFF7ED", borderRadius: 10, padding: 12, flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>

@@ -316,14 +316,14 @@ export default function DashboardScreen() {
               />
             </View>
 
-            {/* 2. Inventory in Hand — Per Location breakdown */}
+            {/* 2. Inventory in Hand — Per App breakdown */}
             <View>
               <View style={styles.sectionHeaderRow}>
                 <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Inventory in Hand</Text>
                 <View style={[styles.scopeBadge, { backgroundColor: dash.scope.isAdmin ? colors.primary + "15" : colors.purchase + "15" }]}>
                   <Feather name={dash.scope.isAdmin ? "globe" : "user"} size={11} color={dash.scope.isAdmin ? colors.primary : colors.purchase} />
                   <Text style={[styles.scopeBadgeText, { color: dash.scope.isAdmin ? colors.primary : colors.purchase }]}>
-                    {dash.scope.isAdmin ? "All Locations" : "Your Location"}
+                    {dash.scope.isAdmin ? "All Apps" : "Your App"}
                   </Text>
                 </View>
               </View>
@@ -369,7 +369,7 @@ export default function DashboardScreen() {
                 primaryValue={fmtNum(dash.totalProductsQty)}
                 secondaryLabel="Total Value"
                 secondaryValue={fmtPKRk(dash.totalStockValue)}
-                footer={`${dash.totalProducts} product${dash.totalProducts !== 1 ? "s" : ""} • ${(dash.inventoryByLocation ?? []).length} location${(dash.inventoryByLocation ?? []).length !== 1 ? "s" : ""}`}
+                footer={`${dash.totalProducts} product${dash.totalProducts !== 1 ? "s" : ""} • ${(dash.inventoryByLocation ?? []).length} app${(dash.inventoryByLocation ?? []).length !== 1 ? "s" : ""}`}
                 color={colors.purchase}
                 bg={colors.purchaseBg}
               />

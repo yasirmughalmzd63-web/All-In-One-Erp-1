@@ -31,14 +31,14 @@ const MODULE_META: Record<AppModule, ModuleMeta> = {
   customers:           { label: "Customers",            icon: "users",            group: "Management",    desc: "Add & manage customers" },
   suppliers:           { label: "Suppliers",            icon: "truck",            group: "Management",    desc: "Add & manage suppliers" },
   accounts:            { label: "Accounts",             icon: "credit-card",      group: "Management",    desc: "Manage payment accounts" },
-  locations:           { label: "Locations",            icon: "map-pin",          group: "Management",    desc: "Manage store locations" },
+  locations:           { label: "Apps",                  icon: "map-pin",          group: "Management",    desc: "Manage store apps" },
   categories:          { label: "Categories",           icon: "tag",              group: "Management",    desc: "Manage product categories" },
   users:               { label: "Users",                icon: "user-check",       group: "Management",    desc: "View & manage user accounts" },
   audit:               { label: "Audit Log",            icon: "shield",           group: "Reports",       desc: "View system activity history" },
   currency:            { label: "Currency / Dollar",    icon: "dollar-sign",      group: "Reports",       desc: "Forex & dollar wallet" },
   cash_count:          { label: "Cash Count",           icon: "archive",          group: "Reports",       desc: "Balance sheet & reconciliation" },
   pos_product:         { label: "All Products",         icon: "package",          group: "POS Controls",  desc: "Can select any product (overrides per-product)" },
-  pos_location:        { label: "All Locations",        icon: "map-pin",          group: "POS Controls",  desc: "Can use any location" },
+  pos_location:        { label: "All Apps",              icon: "map-pin",          group: "POS Controls",  desc: "Can use any app" },
   pos_account:         { label: "All Accounts",         icon: "credit-card",      group: "POS Controls",  desc: "Can use any payment account (overrides per-account)" },
   pos_credit_customer: { label: "Credit Sales",         icon: "clock",            group: "POS Controls",  desc: "Can create credit sales & pick customer" },
 };
@@ -54,7 +54,7 @@ const GROUP_COLORS: Record<string, { header: string; bg: string }> = {
 
 const ENTITY_GROUPS = [
   { key: "product",  label: "Products",  icon: "package",     color: "#0284C7", bg: "#E0F2FE",  desc: "Which products this user can sell on POS" },
-  { key: "location", label: "Locations", icon: "map-pin",     color: "#059669", bg: "#ECFDF5",  desc: "Which locations this user can operate from" },
+  { key: "location", label: "Apps",      icon: "map-pin",     color: "#059669", bg: "#ECFDF5",  desc: "Which apps this user can operate from" },
   { key: "account",  label: "Accounts",  icon: "credit-card", color: "#D97706", bg: "#FFF7ED",  desc: "Which payment accounts this user can use" },
 ] as const;
 
@@ -235,7 +235,7 @@ export default function PrivilegesScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>User Privileges</Text>
-          <Text style={styles.headerSub}>Per-module · Per-product · Per-account · Per-location</Text>
+          <Text style={styles.headerSub}>Per-module · Per-product · Per-account · Per-app</Text>
         </View>
       </LinearGradient>
 
@@ -296,7 +296,7 @@ export default function PrivilegesScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>Full Access</Text>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>Grant access to all modules, products, accounts, and locations</Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>Grant access to all modules, products, accounts, and apps</Text>
                 </View>
                 <Switch value={allAccess} onValueChange={toggleAll} trackColor={{ true: "#16A34A" }} />
               </TouchableOpacity>

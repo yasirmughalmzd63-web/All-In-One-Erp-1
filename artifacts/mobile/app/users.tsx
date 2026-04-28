@@ -46,7 +46,7 @@ export default function UsersScreen() {
     if (!form.name.trim() || !form.username.trim()) { Alert.alert("Error", "Name and username required"); return; }
     if (!editItem && !form.password) { Alert.alert("Error", "Password required for new user"); return; }
     if (form.role !== "admin" && !form.locationId) {
-      Alert.alert("Error", "Location is required for non-admin users");
+      Alert.alert("Error", "App is required for non-admin users");
       return;
     }
     try {
@@ -107,7 +107,7 @@ export default function UsersScreen() {
                       <View style={[styles.badge, { backgroundColor: rb }]}><Text style={[styles.badgeText, { color: rc }]}>{u.role}</Text></View>
                       {locName
                         ? <View style={[styles.badge, { backgroundColor: colors.secondary }]}><Feather name="map-pin" size={9} color={colors.primary} /><Text style={[styles.badgeText, { color: colors.primary }]}> {locName}</Text></View>
-                        : u.role !== "admin" && <View style={[styles.badge, { backgroundColor: colors.dangerBg }]}><Text style={[styles.badgeText, { color: colors.danger }]}>No location</Text></View>
+                        : u.role !== "admin" && <View style={[styles.badge, { backgroundColor: colors.dangerBg }]}><Text style={[styles.badgeText, { color: colors.danger }]}>No app</Text></View>
                       }
                       {!u.isActive && <View style={[styles.badge, { backgroundColor: colors.dangerBg }]}><Text style={[styles.badgeText, { color: colors.danger }]}>Inactive</Text></View>}
                     </View>
@@ -155,10 +155,10 @@ export default function UsersScreen() {
               </View>
 
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground, marginBottom: 8 }}>
-                Assigned Location {form.role !== "admin" && <Text style={{ color: colors.danger }}>*</Text>}
+                Assigned App {form.role !== "admin" && <Text style={{ color: colors.danger }}>*</Text>}
               </Text>
               {locations.length === 0
-                ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 12 }}>No locations available — create a location first</Text>
+                ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 12 }}>No apps available — create an app first</Text>
                 : (
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
                     <View style={{ flexDirection: "row", gap: 8 }}>

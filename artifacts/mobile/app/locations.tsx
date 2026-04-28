@@ -171,10 +171,10 @@ export default function LocationsScreen() {
           contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
           ListHeaderComponent={
             <View>
-              {/* ── All-Locations Summary ─────────────────────────────── */}
+              {/* ── All-Apps Summary ─────────────────────────────── */}
               {isAdmin && (
                 <View style={{ backgroundColor: colors.primary, borderRadius: 16, padding: 16, marginBottom: 12 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "rgba(255,255,255,0.75)", letterSpacing: 0.6, marginBottom: 8 }}>ALL LOCATIONS SUMMARY</Text>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "rgba(255,255,255,0.75)", letterSpacing: 0.6, marginBottom: 8 }}>ALL APPS SUMMARY</Text>
                   <View style={{ flexDirection: "row", gap: 10 }}>
                     <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, alignItems: "center" }}>
                       <Feather name="briefcase" size={14} color="rgba(255,255,255,0.9)" />
@@ -271,7 +271,7 @@ export default function LocationsScreen() {
         <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
           <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit Location" : "New Location"}</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>{editItem ? "Edit App" : "New App"}</Text>
               <TouchableOpacity onPress={() => setShowModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
             </View>
             <View style={{ padding: 20 }}>
@@ -287,7 +287,7 @@ export default function LocationsScreen() {
                 </View>
               ))}
               <TouchableOpacity style={{ backgroundColor: "#059669", paddingVertical: 16, borderRadius: 14, alignItems: "center", marginTop: 8, marginBottom: 40 }} onPress={handleSubmit}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>{editItem ? "Update" : "Create"} Location</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>{editItem ? "Update" : "Create"} App</Text>
               </TouchableOpacity>
             </View>
           </View>

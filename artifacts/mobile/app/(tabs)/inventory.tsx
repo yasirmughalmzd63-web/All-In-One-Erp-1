@@ -323,12 +323,12 @@ export default function InventoryScreen() {
                 </ScrollView>
               </View>
 
-              {/* Location */}
+              {/* App */}
               {locations.length > 0 && (
                 <View style={{ marginBottom: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
                     <Feather name="map-pin" size={12} color={colors.primary} />
-                    <Text style={[fStyles.label, { marginBottom: 0 }]}>Location</Text>
+                    <Text style={[fStyles.label, { marginBottom: 0 }]}>App</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={{ flexDirection: "row", gap: 8 }}>
@@ -340,7 +340,7 @@ export default function InventoryScreen() {
                         }]}
                         onPress={() => setForm(prev => ({ ...prev, locationId: "" }))}
                       >
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: form.locationId === "" ? colors.mutedForeground : colors.text }}>No Location</Text>
+                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: form.locationId === "" ? colors.mutedForeground : colors.text }}>No App</Text>
                       </TouchableOpacity>
                       {locations.map(l => (
                         <TouchableOpacity

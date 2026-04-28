@@ -190,12 +190,12 @@ export default function CustomersScreen() {
                   </View>
                 ))}
 
-              {/* Location selector */}
+              {/* App selector */}
               {locations.length > 0 && (
                 <View style={{ marginBottom: 14 }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 }}>
                     <Feather name="map-pin" size={12} color={colors.primary} />
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground }}>Location</Text>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.mutedForeground }}>App</Text>
                   </View>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={{ flexDirection: "row", gap: 8 }}>
@@ -203,7 +203,7 @@ export default function CustomersScreen() {
                         style={[styles.locChip, { backgroundColor: form.locationId === "" ? colors.input : colors.input, borderColor: form.locationId === "" ? colors.primary : colors.border, opacity: form.locationId === "" ? 1 : 0.7 }]}
                         onPress={() => setForm(f => ({ ...f, locationId: "" }))}
                       >
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === "" ? colors.primary : colors.mutedForeground }}>No Location</Text>
+                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: form.locationId === "" ? colors.primary : colors.mutedForeground }}>No App</Text>
                       </TouchableOpacity>
                       {locations.map(l => (
                         <TouchableOpacity

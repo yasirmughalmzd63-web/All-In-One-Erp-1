@@ -56,7 +56,7 @@ function RootLayoutNav() {
       <Stack.Screen name="customers" options={{ title: "Customers", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
       <Stack.Screen name="suppliers" options={{ title: "Suppliers", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
       <Stack.Screen name="users" options={{ title: "Users", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
-      <Stack.Screen name="locations" options={{ title: "Locations", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
+      <Stack.Screen name="locations" options={{ title: "Apps", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
       <Stack.Screen name="accounts" options={{ title: "Accounts", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
       <Stack.Screen name="categories" options={{ title: "Categories", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
       <Stack.Screen name="wallets" options={{ title: "Wallets", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />

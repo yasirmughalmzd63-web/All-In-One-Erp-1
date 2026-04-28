@@ -355,10 +355,10 @@ export default function POSScreen() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.locationBannerLabel, { color: colors.mutedForeground }]}>
-            {isAdmin ? "ACTIVE LOCATION" : "YOUR LOCATION"}
+            {isAdmin ? "ACTIVE APP" : "YOUR APP"}
           </Text>
           <Text style={[styles.locationBannerName, { color: selectedLocation ? "#065F46" : colors.mutedForeground }]}>
-            {selectedLocation?.name ?? (isAdmin ? "Select App" : "No location assigned")}
+            {selectedLocation?.name ?? (isAdmin ? "Select App" : "No app assigned")}
           </Text>
         </View>
         {isAdmin && <Feather name="chevron-down" size={16} color={selectedLocation ? "#059669" : colors.mutedForeground} />}
@@ -800,7 +800,7 @@ export default function POSScreen() {
         renderSub={a => `${a.type}  ·  Balance: ₨${parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
       />
       <PickerModal<Location>
-        visible={showLocationModal} title="Select Location" items={allowedLocations}
+        visible={showLocationModal} title="Select App" items={allowedLocations}
         onSelect={setSelectedLocation} onClose={() => setShowLocationModal(false)}
         renderSub={l => l.address ?? ""}
       />
