@@ -26,11 +26,10 @@ const PERIODS: { key: Period; label: string }[] = [
   { key: "monthly", label: "This Month" },
 ];
 const PERIOD_LABELS: Record<Period, string> = {
-  today: "Today's Activity", yesterday: "Yesterday's Activity",
-  weekly: "This Week's Activity", monthly: "This Month's Activity",
+  today: "Today", yesterday: "Yesterday",
+  weekly: "This Week", monthly: "This Month",
 };
 
-type Sale = { id: number; invoiceNo: string; customerName?: string | null; total: string; paymentMethod: string; createdAt: string };
 type Account = { id: number; name: string; balance: string; currency: string };
 type DashboardData = {
   period: string;
@@ -40,18 +39,44 @@ type DashboardData = {
   creditPayable: string; creditPayableCount: number;
   pendingCredits: string; pendingCreditsCount: number;
   totalStockValue: string; totalAccountsBalance: string;
-  recentSales: Sale[]; accountBalances: Account[];
+  totalProductsQty: number;
+  receivedStockQty: number; receivedStockValue: string; receivedStockCount: number;
+  cashTransferredToCompany: string; cashTransferredCount: number;
+  stockTransferredQty: number; stockTransferredValue: string; stockTransferredCount: number;
+  dollarReceivedUsd: string; dollarExchangedPkr: string; dollarAvgRate: string; dollarReceivedCount: number;
+  accountBalances: Account[];
 };
 
-function HeroMetric({ label, value, sub, color, icon, bg }: {
-  label: string; value: string; sub?: string; color: string; icon: keyof typeof Feather.glyphMap; bg: string;
+// PKR formatting (₨)
+const fmtPKR = (v?: string) => {
+  if (!v) return "₨0";
+  const n = parseFloat(v);
+  return `₨${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+};
+const fmtPKRk = (v?: string) => {
+  if (!v) return "₨0";
+  const n = parseFloat(v);
+  if (n >= 10_000_000) return `₨${(n / 10_000_000).toFixed(2)}Cr`;
+  if (n >= 100_000) return `₨${(n / 100_000).toFixed(2)}L`;
+  if (n >= 1000) return `₨${(n / 1000).toFixed(1)}K`;
+  return `₨${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+};
+const fmtUSD = (v?: string) => {
+  if (!v) return "$0";
+  const n = parseFloat(v);
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+const fmtNum = (n?: number) => (n ?? 0).toLocaleString();
+
+function HeroCard({ icon, label, value, sub, color, bg }: {
+  icon: keyof typeof Feather.glyphMap; label: string; value: string; sub?: string; color: string; bg: string;
 }) {
   return (
     <View style={[heroStyles.card, { backgroundColor: bg, borderColor: color + "44" }]}>
       <View style={[heroStyles.iconBox, { backgroundColor: color + "22" }]}>
-        <Feather name={icon} size={20} color={color} />
+        <Feather name={icon} size={22} color={color} />
       </View>
-      <Text style={[heroStyles.value, { color }]}>{value}</Text>
+      <Text style={[heroStyles.value, { color }]} numberOfLines={1} adjustsFontSizeToFit>{value}</Text>
       <Text style={heroStyles.label}>{label}</Text>
       {sub ? <Text style={heroStyles.sub}>{sub}</Text> : null}
     </View>
@@ -60,31 +85,107 @@ function HeroMetric({ label, value, sub, color, icon, bg }: {
 
 const heroStyles = StyleSheet.create({
   card: { flex: 1, borderRadius: 16, padding: 16, gap: 6, borderWidth: 1.5, minWidth: 130 },
-  iconBox: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 2 },
-  value: { fontFamily: "Inter_700Bold", fontSize: 18, lineHeight: 22 },
-  label: { fontFamily: "Inter_500Medium", fontSize: 11, color: "#64748B" },
-  sub: { fontFamily: "Inter_400Regular", fontSize: 10, color: "#94A3B8" },
+  iconBox: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  value: { fontFamily: "Inter_700Bold", fontSize: 20, lineHeight: 24 },
+  label: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#475569" },
+  sub: { fontFamily: "Inter_400Regular", fontSize: 11, color: "#94A3B8" },
 });
 
-function StatCard({ title, value, sub, color, bg, icon }: { title: string; value: string; sub?: string; color: string; bg: string; icon: keyof typeof Feather.glyphMap }) {
+function DualMetricCard({ icon, title, primaryLabel, primaryValue, secondaryLabel, secondaryValue, footer, color, bg }: {
+  icon: keyof typeof Feather.glyphMap;
+  title: string;
+  primaryLabel: string; primaryValue: string;
+  secondaryLabel: string; secondaryValue: string;
+  footer?: string;
+  color: string; bg: string;
+}) {
   return (
-    <View style={[statStyles.card, { backgroundColor: bg, borderColor: color + "33" }]}>
-      <View style={[statStyles.iconBox, { backgroundColor: color + "22" }]}>
-        <Feather name={icon} size={16} color={color} />
+    <View style={[dualStyles.card, { backgroundColor: bg, borderColor: color + "44" }]}>
+      <View style={dualStyles.header}>
+        <View style={[dualStyles.iconBox, { backgroundColor: color + "22" }]}>
+          <Feather name={icon} size={18} color={color} />
+        </View>
+        <Text style={[dualStyles.title, { color: color }]}>{title}</Text>
       </View>
-      <Text style={[statStyles.value, { color }]}>{value}</Text>
-      <Text style={statStyles.title}>{title}</Text>
-      {sub ? <Text style={statStyles.sub}>{sub}</Text> : null}
+      <View style={dualStyles.row}>
+        <View style={dualStyles.col}>
+          <Text style={dualStyles.colLabel}>{primaryLabel}</Text>
+          <Text style={[dualStyles.colValue, { color }]} numberOfLines={1} adjustsFontSizeToFit>{primaryValue}</Text>
+        </View>
+        <View style={[dualStyles.divider, { backgroundColor: color + "33" }]} />
+        <View style={dualStyles.col}>
+          <Text style={dualStyles.colLabel}>{secondaryLabel}</Text>
+          <Text style={[dualStyles.colValue, { color }]} numberOfLines={1} adjustsFontSizeToFit>{secondaryValue}</Text>
+        </View>
+      </View>
+      {footer ? <Text style={dualStyles.footer}>{footer}</Text> : null}
     </View>
   );
 }
 
-const statStyles = StyleSheet.create({
-  card: { flex: 1, borderRadius: 14, padding: 14, gap: 5, borderWidth: 1, minWidth: 120 },
-  iconBox: { width: 32, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
-  value: { fontFamily: "Inter_700Bold", fontSize: 17, lineHeight: 21 },
-  title: { fontFamily: "Inter_500Medium", fontSize: 11, color: "#64748B" },
-  sub: { fontFamily: "Inter_400Regular", fontSize: 11, color: "#94A3B8" },
+const dualStyles = StyleSheet.create({
+  card: { borderRadius: 16, padding: 16, gap: 12, borderWidth: 1.5 },
+  header: { flexDirection: "row", alignItems: "center", gap: 10 },
+  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  title: { fontFamily: "Inter_700Bold", fontSize: 14, flex: 1 },
+  row: { flexDirection: "row", alignItems: "stretch", gap: 12 },
+  col: { flex: 1, gap: 4 },
+  colLabel: { fontFamily: "Inter_500Medium", fontSize: 11, color: "#64748B" },
+  colValue: { fontFamily: "Inter_700Bold", fontSize: 18, lineHeight: 22 },
+  divider: { width: 1, alignSelf: "stretch" },
+  footer: { fontFamily: "Inter_400Regular", fontSize: 11, color: "#94A3B8", marginTop: -4 },
+});
+
+function DollarFlowCard({ usd, pkr, rate, count, color, bg }: {
+  usd: string; pkr: string; rate: string; count: number; color: string; bg: string;
+}) {
+  return (
+    <View style={[dollarStyles.card, { backgroundColor: bg, borderColor: color + "44" }]}>
+      <View style={dollarStyles.header}>
+        <View style={[dollarStyles.iconBox, { backgroundColor: color + "22" }]}>
+          <Feather name="dollar-sign" size={18} color={color} />
+        </View>
+        <Text style={[dollarStyles.title, { color }]}>Dollar → Coins Exchange</Text>
+      </View>
+
+      <View style={dollarStyles.flowRow}>
+        <View style={dollarStyles.flowBox}>
+          <Text style={dollarStyles.flowLabel}>Received</Text>
+          <Text style={[dollarStyles.flowValue, { color }]} numberOfLines={1} adjustsFontSizeToFit>{fmtUSD(usd)}</Text>
+        </View>
+        <View style={[dollarStyles.arrow, { backgroundColor: color + "22" }]}>
+          <Feather name="arrow-right" size={16} color={color} />
+        </View>
+        <View style={dollarStyles.flowBox}>
+          <Text style={dollarStyles.flowLabel}>Rate</Text>
+          <Text style={[dollarStyles.flowValue, { color, fontSize: 16 }]} numberOfLines={1} adjustsFontSizeToFit>
+            ₨{parseFloat(rate || "0").toFixed(2)}
+          </Text>
+        </View>
+        <View style={[dollarStyles.arrow, { backgroundColor: color + "22" }]}>
+          <Feather name="arrow-right" size={16} color={color} />
+        </View>
+        <View style={dollarStyles.flowBox}>
+          <Text style={dollarStyles.flowLabel}>Coins (PKR)</Text>
+          <Text style={[dollarStyles.flowValue, { color }]} numberOfLines={1} adjustsFontSizeToFit>{fmtPKRk(pkr)}</Text>
+        </View>
+      </View>
+      <Text style={dollarStyles.footer}>{count} exchange{count !== 1 ? "s" : ""}</Text>
+    </View>
+  );
+}
+
+const dollarStyles = StyleSheet.create({
+  card: { borderRadius: 16, padding: 16, gap: 14, borderWidth: 1.5 },
+  header: { flexDirection: "row", alignItems: "center", gap: 10 },
+  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  title: { fontFamily: "Inter_700Bold", fontSize: 14, flex: 1 },
+  flowRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  flowBox: { flex: 1, alignItems: "center", gap: 4 },
+  flowLabel: { fontFamily: "Inter_500Medium", fontSize: 10, color: "#64748B" },
+  flowValue: { fontFamily: "Inter_700Bold", fontSize: 17, textAlign: "center" },
+  arrow: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  footer: { fontFamily: "Inter_400Regular", fontSize: 11, color: "#94A3B8", textAlign: "center" },
 });
 
 export default function DashboardScreen() {
@@ -98,15 +199,6 @@ export default function DashboardScreen() {
     queryKey: ["dashboard", period],
     queryFn: () => customFetch<DashboardData>(`/api/dashboard?period=${period}`),
   });
-
-  const fmt = (v?: string) => v ? `$${parseFloat(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00";
-  const fmtK = (v?: string) => {
-    if (!v) return "$0";
-    const n = parseFloat(v);
-    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1000) return `$${(n / 1000).toFixed(1)}K`;
-    return `$${n.toFixed(2)}`;
-  };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -141,7 +233,7 @@ export default function DashboardScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isFetching} onRefresh={refetch} tintColor={colors.primary} />}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 16 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 18 }}
       >
         {isLoading ? (
           <View style={{ alignItems: "center", padding: 40 }}>
@@ -150,61 +242,97 @@ export default function DashboardScreen() {
           </View>
         ) : dash ? (
           <>
+            {/* 1. Total Account Balance */}
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Financial Overview</Text>
-              <View style={[styles.heroRow, { marginBottom: 10 }]}>
-                <HeroMetric
-                  label="Total Accounts"
-                  value={fmtK(dash.totalAccountsBalance)}
-                  sub={`${(dash.accountBalances ?? []).length} account${(dash.accountBalances ?? []).length !== 1 ? "s" : ""}`}
-                  color={colors.primary}
-                  bg={colors.secondary}
-                  icon="credit-card"
-                />
-                <HeroMetric
-                  label="Stock Value"
-                  value={fmtK(dash.totalStockValue)}
-                  sub="goods in hand"
-                  color={colors.purchase}
-                  bg={colors.purchaseBg}
-                  icon="package"
-                />
-              </View>
-              <View style={styles.heroRow}>
-                <HeroMetric
-                  label="Receivable"
-                  value={fmtK(dash.creditReceivable)}
-                  sub={`${dash.creditReceivableCount} open`}
-                  color={colors.success}
-                  bg={colors.saleBg}
-                  icon="arrow-down-left"
-                />
-                <HeroMetric
-                  label="Payable"
-                  value={fmtK(dash.creditPayable)}
-                  sub={`${dash.creditPayableCount} open`}
-                  color={colors.credit}
-                  bg={colors.creditBg}
-                  icon="arrow-up-right"
-                />
-              </View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Total Account Balance</Text>
+              <HeroCard
+                icon="credit-card"
+                label="All Accounts Combined"
+                value={fmtPKRk(dash.totalAccountsBalance)}
+                sub={`${(dash.accountBalances ?? []).length} account${(dash.accountBalances ?? []).length !== 1 ? "s" : ""}`}
+                color={colors.primary}
+                bg={colors.secondary}
+              />
             </View>
 
+            {/* 2. Product Qty + Stock Value */}
             <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>{PERIOD_LABELS[period]}</Text>
-              <View style={styles.statsGrid}>
-                <StatCard title="Sales" value={fmt(dash.todaySales)} sub={`${dash.todaySalesCount} txn`} color={colors.sale} bg={colors.saleBg} icon="trending-up" />
-                <StatCard title="Purchases" value={fmt(dash.todayPurchases)} color={colors.purchase} bg={colors.purchaseBg} icon="shopping-bag" />
-              </View>
-              <View style={[styles.statsGrid, { marginTop: 10 }]}>
-                <StatCard title="Expenses" value={fmt(dash.todayExpenses)} color={colors.expense} bg={colors.expenseBg} icon="arrow-down-circle" />
-                <StatCard title="Net Credits" value={fmt(dash.pendingCredits)} sub={`${dash.pendingCreditsCount} open`} color={colors.credit} bg={colors.creditBg} icon="clock" />
-              </View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Inventory in Hand</Text>
+              <DualMetricCard
+                icon="package"
+                title="Product Qty & Stock Value"
+                primaryLabel="Total Qty"
+                primaryValue={fmtNum(dash.totalProductsQty)}
+                secondaryLabel="Stock Value"
+                secondaryValue={fmtPKRk(dash.totalStockValue)}
+                footer={`${dash.totalProducts} product${dash.totalProducts !== 1 ? "s" : ""} active`}
+                color={colors.purchase}
+                bg={colors.purchaseBg}
+              />
             </View>
 
+            {/* 3. Received Stock (period) */}
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Received Stock — {PERIOD_LABELS[period]}</Text>
+              <DualMetricCard
+                icon="download"
+                title="Total Stock Received"
+                primaryLabel="Qty Received"
+                primaryValue={fmtNum(dash.receivedStockQty)}
+                secondaryLabel="Qty Value"
+                secondaryValue={fmtPKRk(dash.receivedStockValue)}
+                footer={`${dash.receivedStockCount} purchase${dash.receivedStockCount !== 1 ? "s" : ""}`}
+                color={colors.success}
+                bg={colors.saleBg}
+              />
+            </View>
+
+            {/* 4. Cash Transferred to Company (period) */}
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Cash Transferred to Company — {PERIOD_LABELS[period]}</Text>
+              <HeroCard
+                icon="send"
+                label="Total Cash Sent Out"
+                value={fmtPKRk(dash.cashTransferredToCompany)}
+                sub={`${dash.cashTransferredCount} transfer${dash.cashTransferredCount !== 1 ? "s" : ""}`}
+                color={colors.expense}
+                bg={colors.expenseBg}
+              />
+            </View>
+
+            {/* 5. Stock Transferred to Other Company (period) */}
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Stock Transferred to Other Co. — {PERIOD_LABELS[period]}</Text>
+              <DualMetricCard
+                icon="truck"
+                title="Outgoing Stock Transfers"
+                primaryLabel="Qty Transferred"
+                primaryValue={fmtNum(dash.stockTransferredQty)}
+                secondaryLabel="Qty Value"
+                secondaryValue={fmtPKRk(dash.stockTransferredValue)}
+                footer={`${dash.stockTransferredCount} transfer${dash.stockTransferredCount !== 1 ? "s" : ""}`}
+                color={colors.credit}
+                bg={colors.creditBg}
+              />
+            </View>
+
+            {/* 6. Dollar received → Exchanged → Coins (period) */}
+            <View>
+              <Text style={[styles.sectionTitle, { color: colors.text }]}>Dollar Module — {PERIOD_LABELS[period]}</Text>
+              <DollarFlowCard
+                usd={dash.dollarReceivedUsd}
+                pkr={dash.dollarExchangedPkr}
+                rate={dash.dollarAvgRate}
+                count={dash.dollarReceivedCount}
+                color={colors.sale}
+                bg={colors.saleBg}
+              />
+            </View>
+
+            {/* Account Balances breakdown */}
             {(dash.accountBalances ?? []).length > 0 && (
               <View>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>Account Balances</Text>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Account Balances Breakdown</Text>
                 <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                   {dash.accountBalances.map((acc, idx, arr) => (
                     <View key={acc.id} style={[styles.summaryRow, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}>
@@ -213,64 +341,11 @@ export default function DashboardScreen() {
                       </View>
                       <Text style={[styles.summaryLabel, { color: colors.text }]}>{acc.name}</Text>
                       <Text style={[styles.summaryValue, { color: parseFloat(acc.balance) >= 0 ? colors.success : colors.danger }]}>
-                        {acc.currency} {parseFloat(acc.balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {acc.currency === "USD" ? fmtUSD(acc.balance) : `₨${parseFloat(acc.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                       </Text>
                     </View>
                   ))}
                 </View>
-              </View>
-            )}
-
-            <View>
-              <Text style={[styles.sectionTitle, { color: colors.text }]}>Business Summary</Text>
-              <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                {[
-                  { label: "Total Customers", value: String(dash.totalCustomers), icon: "users" as const, color: colors.primary },
-                  { label: "Total Products", value: String(dash.totalProducts), icon: "package" as const, color: colors.purchase },
-                  { label: "Total Suppliers", value: String(dash.totalSuppliers), icon: "truck" as const, color: colors.expense },
-                ].map((item, idx, arr) => (
-                  <View key={item.label} style={[styles.summaryRow, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}>
-                    <View style={[styles.summaryIcon, { backgroundColor: item.color + "15" }]}>
-                      <Feather name={item.icon} size={16} color={item.color} />
-                    </View>
-                    <Text style={[styles.summaryLabel, { color: colors.text }]}>{item.label}</Text>
-                    <Text style={[styles.summaryValue, { color: item.color }]}>{item.value}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            {(dash.recentSales ?? []).length > 0 && (
-              <View>
-                <Text style={[styles.sectionTitle, { color: colors.text }]}>
-                  {period === "today" || period === "yesterday" ? "Recent Sales" : `Sales — ${PERIOD_LABELS[period]}`}
-                </Text>
-                <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  {dash.recentSales.map((sale, idx, arr) => (
-                    <View key={sale.id} style={[styles.summaryRow, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}>
-                      <View style={[styles.summaryIcon, { backgroundColor: colors.saleBg }]}>
-                        <Feather name="shopping-cart" size={16} color={colors.sale} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styles.summaryLabel, { color: colors.text }]}>{sale.invoiceNo}</Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{sale.customerName ?? "Walk-in"}</Text>
-                      </View>
-                      <View style={{ alignItems: "flex-end" }}>
-                        <Text style={[styles.summaryValue, { color: colors.success }]}>{fmt(sale.total)}</Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{new Date(sale.createdAt).toLocaleDateString()}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {(dash.recentSales ?? []).length === 0 && (
-              <View style={[styles.emptyBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Feather name="inbox" size={32} color={colors.mutedForeground} />
-                <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                  No sales {period === "today" ? "today" : period === "yesterday" ? "yesterday" : "this period"}
-                </Text>
               </View>
             )}
           </>
@@ -300,14 +375,10 @@ const styles = StyleSheet.create({
   pillText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
   pillTextActive: { color: "#1E40AF" },
   pillTextInactive: { color: "rgba(255,255,255,0.9)" },
-  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 16, marginBottom: 10 },
-  heroRow: { flexDirection: "row", gap: 10 },
-  statsGrid: { flexDirection: "row", gap: 10 },
+  sectionTitle: { fontFamily: "Inter_700Bold", fontSize: 15, marginBottom: 10 },
   summaryCard: { borderRadius: 14, borderWidth: 1, overflow: "hidden" },
   summaryRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
   summaryIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   summaryLabel: { flex: 1, fontFamily: "Inter_500Medium", fontSize: 14 },
   summaryValue: { fontFamily: "Inter_700Bold", fontSize: 15 },
-  emptyBox: { borderRadius: 14, borderWidth: 1, alignItems: "center", paddingVertical: 36, gap: 10 },
-  emptyText: { fontFamily: "Inter_500Medium", fontSize: 14 },
 });

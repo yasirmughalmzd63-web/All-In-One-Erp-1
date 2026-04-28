@@ -1,6 +1,19 @@
 import { Router } from "express";
-import { desc, eq, gte, and, lt, or } from "drizzle-orm";
-import { db, salesTable, purchasesTable, expensesTable, creditsTable, customersTable, productsTable, suppliersTable, accountsTable } from "@workspace/db";
+import { desc, eq, gte, and, lt, or, inArray } from "drizzle-orm";
+import {
+  db,
+  salesTable,
+  purchasesTable,
+  purchaseItemsTable,
+  expensesTable,
+  creditsTable,
+  customersTable,
+  productsTable,
+  suppliersTable,
+  accountsTable,
+  stockTransfersTable,
+  dollarWalletTable,
+} from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router = Router();
@@ -58,6 +71,7 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     customersCount, productsCount, suppliersCount,
     creditReceivableRows, creditPayableRows,
     stockProducts, accounts, recentSales,
+    periodPurchaseIds, periodStockTransfers, periodDollarReceived,
   ] = await Promise.all([
     db.select({ total: salesTable.total }).from(salesTable).where(salesPeriodFilter),
     db.select({ total: purchasesTable.total }).from(purchasesTable).where(periodFilter(purchasesTable.createdAt)),
@@ -92,7 +106,47 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
       .where(period === "today" || isYesterday ? salesPeriodFilter : undefined)
       .orderBy(desc(salesTable.createdAt))
       .limit(10),
+    // Period purchase IDs to aggregate received stock qty
+    db.select({ id: purchasesTable.id }).from(purchasesTable).where(periodFilter(purchasesTable.createdAt)),
+    // Stock transfers for the period (with product price for value)
+    db.select({
+      qty: stockTransfersTable.qty,
+      unitPrice: productsTable.unitPrice,
+      costPrice: productsTable.costPrice,
+    })
+      .from(stockTransfersTable)
+      .leftJoin(productsTable, eq(stockTransfersTable.fromProductId, productsTable.id))
+      .where(periodFilter(stockTransfersTable.createdAt)),
+    // Dollar wallet "received" entries for the period
+    db.select({ amountUsd: dollarWalletTable.amountUsd, totalPkr: dollarWalletTable.totalPkr, rate: dollarWalletTable.rate })
+      .from(dollarWalletTable)
+      .where(and(eq(dollarWalletTable.entryType, "received"), periodFilter(dollarWalletTable.createdAt))),
   ]);
+
+  // Received stock qty: sum of all purchase_items.qty for purchases in this period
+  const purchaseIds = periodPurchaseIds.map(p => p.id);
+  const receivedStockItems = purchaseIds.length > 0
+    ? await db.select({ qty: purchaseItemsTable.qty, total: purchaseItemsTable.total })
+        .from(purchaseItemsTable)
+        .where(inArray(purchaseItemsTable.purchaseId, purchaseIds))
+    : [];
+  const receivedStockQty = receivedStockItems.reduce((sum, r) => sum + r.qty, 0);
+  const receivedStockValue = receivedStockItems.reduce((sum, r) => sum + parseFloat(r.total), 0);
+
+  // Stock transferred to other locations
+  const stockTransferredQty = periodStockTransfers.reduce((sum, r) => sum + r.qty, 0);
+  const stockTransferredValue = periodStockTransfers.reduce(
+    (sum, r) => sum + r.qty * parseFloat(r.unitPrice ?? "0"),
+    0,
+  );
+
+  // Dollar received -> exchanged to PKR
+  const dollarReceivedUsd = periodDollarReceived.reduce((sum, r) => sum + parseFloat(r.amountUsd), 0);
+  const dollarExchangedPkr = periodDollarReceived.reduce((sum, r) => sum + parseFloat(r.totalPkr), 0);
+  const dollarAvgRate = dollarReceivedUsd > 0 ? dollarExchangedPkr / dollarReceivedUsd : 0;
+
+  // Total product qty (sum of stock units across all active products)
+  const totalProductsQty = stockProducts.reduce((sum, p) => sum + p.stock, 0);
 
   const periodSales = periodSalesRows.reduce((sum, r) => sum + parseFloat(r.total), 0);
   const periodPurchases = periodPurchasesRows.reduce((sum, r) => sum + parseFloat(r.total), 0);
@@ -119,6 +173,20 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     pendingCreditsCount: creditReceivableRows.length + creditPayableRows.length,
     totalStockValue: totalStockValue.toFixed(8),
     totalAccountsBalance: totalAccountsBalance.toFixed(8),
+    // New metrics
+    totalProductsQty,
+    receivedStockQty,
+    receivedStockValue: receivedStockValue.toFixed(8),
+    receivedStockCount: periodPurchaseIds.length,
+    cashTransferredToCompany: periodExpenses.toFixed(8),
+    cashTransferredCount: periodExpensesRows.length,
+    stockTransferredQty,
+    stockTransferredValue: stockTransferredValue.toFixed(8),
+    stockTransferredCount: periodStockTransfers.length,
+    dollarReceivedUsd: dollarReceivedUsd.toFixed(8),
+    dollarExchangedPkr: dollarExchangedPkr.toFixed(8),
+    dollarAvgRate: dollarAvgRate.toFixed(4),
+    dollarReceivedCount: periodDollarReceived.length,
     recentSales: recentSales.map(s => ({
       ...s, items: [], customerName: null, locationName: null, accountName: null,
       createdAt: s.createdAt.toISOString(),
