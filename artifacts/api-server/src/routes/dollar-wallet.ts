@@ -90,23 +90,31 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 });
 
 router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void> => {
-  const { productId, amountUsd, perCoinUsdRate, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
-    productId?: number; amountUsd?: string; perCoinUsdRate?: string;
+  const { productId, amountUsd, perCoinUsdRate, coinsPerUsd, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
+    productId?: number; amountUsd?: string; perCoinUsdRate?: string; coinsPerUsd?: string;
     exchangeRatePkr?: string; costPricePkr?: string | null; salePricePkr?: string | null; wholesalePricePkr?: string | null;
     date?: string; notes?: string | null;
   };
-  if (!productId || !amountUsd || !perCoinUsdRate || !exchangeRatePkr || !date) {
-    res.status(400).json({ error: "productId, amountUsd, perCoinUsdRate, exchangeRatePkr, date required" });
+  if (!productId || !amountUsd || (!perCoinUsdRate && !coinsPerUsd) || !exchangeRatePkr || !date) {
+    res.status(400).json({ error: "productId, amountUsd, perCoinUsdRate or coinsPerUsd, exchangeRatePkr, date required" });
     return;
   }
   const usd = parseFloat(amountUsd);
-  const perCoin = parseFloat(perCoinUsdRate);
   const fx = parseFloat(exchangeRatePkr);
+  let qty = 0;
+  let perCoin = 0;
+  if (coinsPerUsd && parseFloat(coinsPerUsd) > 0) {
+    const cpu = parseFloat(coinsPerUsd);
+    qty = Math.floor(usd * cpu);
+    perCoin = 1 / cpu;
+  } else {
+    perCoin = parseFloat(perCoinUsdRate!);
+    qty = Math.floor(usd / perCoin);
+  }
   if (!(usd > 0) || !(perCoin > 0) || !(fx > 0)) {
-    res.status(400).json({ error: "amountUsd, perCoinUsdRate and exchangeRatePkr must be positive" });
+    res.status(400).json({ error: "amountUsd, rate and exchangeRatePkr must be positive" });
     return;
   }
-  const qty = Math.floor(usd / perCoin);
   if (qty <= 0) { res.status(400).json({ error: "Computed coin quantity is zero — increase USD or lower per-coin rate" }); return; }
   const totalPkr = usd * fx;
   const newCostPerCoin = totalPkr / qty;
@@ -142,7 +150,7 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
     rate: fmt(fx),
     totalPkr: fmt(totalPkr),
     partyName: product.name,
-    notes: notes ? `${notes} · ${qty} ${product.unit} @ $${perCoinUsdRate}/coin` : `${qty} ${product.unit} @ $${perCoinUsdRate}/coin`,
+    notes: notes ? `${notes} · ${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin` : `${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin`,
     date,
     userId: String(req.userId),
   }).returning();

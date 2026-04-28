@@ -47,7 +47,7 @@ const emptyBuyForm = {
 const emptyTopupForm = {
   productId: "",
   amountUsd: "",
-  perCoinUsdRate: "",
+  coinsPerUsd: "",
   exchangeRatePkr: "",
   costPricePkr: "",
   salePricePkr: "",
@@ -147,8 +147,8 @@ export default function WalletsScreen() {
   };
 
   const handleTopup = async () => {
-    if (!topupForm.productId || !topupForm.amountUsd || !topupForm.perCoinUsdRate || !topupForm.exchangeRatePkr || !topupForm.date) {
-      Alert.alert("Error", "Coin, USD amount, per-coin USD rate, PKR rate and date are required");
+    if (!topupForm.productId || !topupForm.amountUsd || !topupForm.coinsPerUsd || !topupForm.exchangeRatePkr || !topupForm.date) {
+      Alert.alert("Error", "Coin, USD amount, coins per USD, PKR rate and date are required");
       return;
     }
     setSaving(true);
@@ -158,7 +158,7 @@ export default function WalletsScreen() {
         body: JSON.stringify({
           productId: parseInt(topupForm.productId, 10),
           amountUsd: topupForm.amountUsd,
-          perCoinUsdRate: topupForm.perCoinUsdRate,
+          coinsPerUsd: topupForm.coinsPerUsd,
           exchangeRatePkr: topupForm.exchangeRatePkr,
           costPricePkr: topupForm.costPricePkr || null,
           salePricePkr: topupForm.salePricePkr || null,
@@ -177,8 +177,8 @@ export default function WalletsScreen() {
     setSaving(false);
   };
 
-  const topupQty = topupForm.amountUsd && topupForm.perCoinUsdRate
-    ? Math.floor(parseFloat(topupForm.amountUsd) / parseFloat(topupForm.perCoinUsdRate || "0"))
+  const topupQty = topupForm.amountUsd && topupForm.coinsPerUsd
+    ? Math.floor(parseFloat(topupForm.amountUsd) * parseFloat(topupForm.coinsPerUsd))
     : 0;
   const topupPkr = topupForm.amountUsd && topupForm.exchangeRatePkr
     ? parseFloat(topupForm.amountUsd) * parseFloat(topupForm.exchangeRatePkr)
@@ -429,27 +429,32 @@ export default function WalletsScreen() {
                     keyboardType="decimal-pad" placeholder="100" placeholderTextColor={colors.mutedForeground} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>USD PER COIN</Text>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>COINS PER 1 USD</Text>
                   <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
-                    value={topupForm.perCoinUsdRate}
+                    value={topupForm.coinsPerUsd}
                     onChangeText={v => setTopupForm(f => {
-                      const next = { ...f, perCoinUsdRate: v };
-                      const per = parseFloat(v);
+                      const next = { ...f, coinsPerUsd: v };
+                      const cpu = parseFloat(v);
                       const fx = parseFloat(f.exchangeRatePkr || (lastRate > 0 ? String(lastRate) : "0"));
-                      if (per > 0 && fx > 0) {
-                        next.salePricePkr = (per * fx).toFixed(2);
+                      if (cpu > 0 && fx > 0) {
+                        next.salePricePkr = (fx / cpu).toFixed(4);
                       }
                       return next;
                     })}
-                    keyboardType="decimal-pad" placeholder="0.05" placeholderTextColor={colors.mutedForeground} />
+                    keyboardType="decimal-pad" placeholder="6000" placeholderTextColor={colors.mutedForeground} />
                 </View>
               </View>
 
-              {topupForm.perCoinUsdRate && parseFloat(topupForm.perCoinUsdRate) > 0 ? (
-                <View style={{ backgroundColor: "#ECFDF5", borderRadius: 8, padding: 8, marginBottom: 12, borderWidth: 1, borderColor: "#10B981", flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <Feather name="info" size={14} color="#059669" />
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#065F46" }}>
-                    1 USD = {(1 / parseFloat(topupForm.perCoinUsdRate)).toFixed(2)} coins
+              {topupForm.coinsPerUsd && parseFloat(topupForm.coinsPerUsd) > 0 && topupForm.amountUsd ? (
+                <View style={{ backgroundColor: "#ECFDF5", borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: "#10B981", gap: 4 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Feather name="info" size={14} color="#059669" />
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#065F46" }}>
+                      ${topupForm.amountUsd} → {topupQty.toLocaleString()} coins
+                    </Text>
+                  </View>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#065F46", marginLeft: 22 }}>
+                    Rate: 1 USD = {parseFloat(topupForm.coinsPerUsd).toLocaleString()} coins  ·  Cost ${(1 / parseFloat(topupForm.coinsPerUsd)).toFixed(6)}/coin
                   </Text>
                 </View>
               ) : null}
@@ -460,9 +465,9 @@ export default function WalletsScreen() {
                 onChangeText={v => setTopupForm(f => {
                   const next = { ...f, exchangeRatePkr: v };
                   const fx = parseFloat(v);
-                  const per = parseFloat(f.perCoinUsdRate);
-                  if (per > 0 && fx > 0) {
-                    next.salePricePkr = (per * fx).toFixed(2);
+                  const cpu = parseFloat(f.coinsPerUsd);
+                  if (cpu > 0 && fx > 0) {
+                    next.salePricePkr = (fx / cpu).toFixed(4);
                   }
                   return next;
                 })}
