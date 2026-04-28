@@ -580,6 +580,33 @@ export default function POSScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* ── Quick amount presets ─────────────────────────────────────── */}
+        <View style={[styles.presetRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <Text style={[styles.presetLabel, { color: colors.mutedForeground }]}>QUICK AMOUNT</Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {[500, 1000, 2000, 5000].map(preset => {
+              const isSelected = parseFloat(amount) === preset;
+              return (
+                <TouchableOpacity
+                  key={preset}
+                  style={[styles.presetBtn, {
+                    backgroundColor: isSelected ? colors.primary : colors.secondary,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  }]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setAmount(String(preset));
+                  }}
+                >
+                  <Text style={[styles.presetBtnText, { color: isSelected ? "#FFF" : colors.primary }]}>
+                    {preset >= 1000 ? `${preset / 1000}K` : preset}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         {/* ── Numpad ──────────────────────────────────────────────────── */}
         <View style={[styles.numpadContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
           {NUMPAD_KEYS.map((row, ri) => (
@@ -770,6 +797,11 @@ const styles = StyleSheet.create({
   qtyLabel: { fontFamily: "Inter_500Medium", fontSize: 10, letterSpacing: 1, marginBottom: 4 },
   qtyValue: { fontFamily: "Inter_700Bold", fontSize: 44, lineHeight: 52 },
   copyBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1.5 },
+  // Quick presets
+  presetRow: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, padding: 12, gap: 8 },
+  presetLabel: { fontFamily: "Inter_600SemiBold", fontSize: 10, letterSpacing: 0.8 },
+  presetBtn: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: "center", borderWidth: 1.5 },
+  presetBtnText: { fontFamily: "Inter_700Bold", fontSize: 14 },
   copyText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
   // Options
   optionsCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
