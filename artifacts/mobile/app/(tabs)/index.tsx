@@ -406,68 +406,145 @@ export default function POSScreen() {
         </View>
 
         {/* ── Product picker ───────────────────────────────────────────── */}
-        <TouchableOpacity
-          style={[styles.productCard, {
+        {canSelectProduct ? (
+          /* Admin / Manager — tap card to open full modal */
+          <TouchableOpacity
+            style={[styles.productCard, {
+              backgroundColor: colors.card,
+              borderColor: stockWarning === "out-of-stock" ? colors.danger
+                : stockWarning === "exceeds-stock" ? "#F59E0B"
+                : selectedProduct ? colors.primary : colors.border,
+            }]}
+            onPress={() => setShowProductModal(true)}
+            activeOpacity={0.85}
+          >
+            <View style={{ flex: 1 }}>
+              {selectedProduct ? (
+                <>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }} />
+                    <Text style={[styles.productName, { color: colors.text }]}>{selectedProduct.name}</Text>
+                    <View style={[styles.stockBadge, { backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.saleBg : colors.dangerBg }]}>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }}>
+                        Stock: {selectedProduct.stock ?? 0} {selectedProduct.unit}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.primary }}>Retail {parseFloat(selectedProduct.unitPrice).toFixed(2)}</Text>
+                    </View>
+                    <View style={{ backgroundColor: colors.purchaseBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.purchase }}>WS {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
+                    </View>
+                  </View>
+                  {stockWarning === "out-of-stock" && (
+                    <View style={[styles.alertRow, { backgroundColor: colors.dangerBg }]}>
+                      <Feather name="alert-triangle" size={11} color={colors.danger} />
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
+                    </View>
+                  )}
+                  {stockWarning === "exceeds-stock" && (
+                    <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
+                      <Feather name="alert-circle" size={11} color="#D97706" />
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct.stock}</Text>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Text style={[styles.productPlaceholder, { color: colors.mutedForeground }]}>Tap to select product</Text>
+                  <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Required to begin sale</Text>
+                </>
+              )}
+            </View>
+            <View style={[styles.productChevron, { backgroundColor: colors.secondary }]}>
+              <Feather name="chevron-down" size={18} color={colors.primary} />
+            </View>
+          </TouchableOpacity>
+        ) : (
+          /* Cashier — quick-tap product icon chips */
+          <View style={[styles.productCard, {
             backgroundColor: colors.card,
             borderColor: stockWarning === "out-of-stock" ? colors.danger
               : stockWarning === "exceeds-stock" ? "#F59E0B"
               : selectedProduct ? colors.primary : colors.border,
-          }]}
-          onPress={() => {
-            if (!canSelectProduct) {
-              Alert.alert("Access Denied", "You don't have permission to change the product.");
-              return;
-            }
-            setShowProductModal(true);
-          }}
-          activeOpacity={canSelectProduct ? 0.85 : 1}
-        >
-          <View style={{ flex: 1 }}>
+            flexDirection: "column", gap: 10,
+          }]}>
+            {/* Selected product info row */}
             {selectedProduct ? (
-              <>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }} />
-                  <Text style={[styles.productName, { color: colors.text }]}>{selectedProduct.name}</Text>
-                  <View style={[styles.stockBadge, { backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.saleBg : colors.dangerBg }]}>
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }}>
-                      Stock: {selectedProduct.stock ?? 0} {selectedProduct.unit}
-                    </Text>
-                  </View>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }} />
+                <Text style={[styles.productName, { color: colors.text, flex: 1 }]} numberOfLines={1}>{selectedProduct.name}</Text>
+                <View style={[styles.stockBadge, { backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.saleBg : colors.dangerBg }]}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }}>
+                    Stock: {selectedProduct.stock ?? 0} {selectedProduct.unit}
+                  </Text>
                 </View>
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.primary }}>Retail {parseFloat(selectedProduct.unitPrice).toFixed(2)}</Text>
-                  </View>
-                  <View style={{ backgroundColor: colors.purchaseBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.purchase }}>Wholesale {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
-                  </View>
+                <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.primary }}>
+                    ₨{parseFloat(rateMode === "wholesale" ? (selectedProduct.wholesalePrice || selectedProduct.unitPrice) : selectedProduct.unitPrice).toFixed(0)}
+                  </Text>
                 </View>
-                {stockWarning === "out-of-stock" && (
-                  <View style={[styles.alertRow, { backgroundColor: colors.dangerBg }]}>
-                    <Feather name="alert-triangle" size={11} color={colors.danger} />
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
-                  </View>
-                )}
-                {stockWarning === "exceeds-stock" && (
-                  <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
-                    <Feather name="alert-circle" size={11} color="#D97706" />
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct.stock}</Text>
-                  </View>
-                )}
-              </>
+              </View>
             ) : (
-              <>
-                <Text style={[styles.productPlaceholder, { color: canSelectProduct ? colors.mutedForeground : colors.danger }]}>
-                  {canSelectProduct ? "Tap to select product" : "No permission to select product"}
-                </Text>
-                <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Required to begin sale</Text>
-              </>
+              <Text style={[styles.productPlaceholder, { color: colors.mutedForeground }]}>Select a product below</Text>
+            )}
+
+            {/* Product chip grid */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -4 }} contentContainerStyle={{ paddingHorizontal: 4, gap: 8, flexDirection: "row" }}>
+              {activeProducts.map(p => {
+                const isSelected = selectedProduct?.id === p.id;
+                const inStock = (p.stock ?? 0) > 0;
+                return (
+                  <TouchableOpacity
+                    key={p.id}
+                    style={{
+                      alignItems: "center", gap: 5,
+                      paddingHorizontal: 12, paddingVertical: 9,
+                      borderRadius: 12, borderWidth: 2,
+                      backgroundColor: isSelected ? colors.primary : inStock ? colors.secondary : colors.dangerBg,
+                      borderColor: isSelected ? colors.primary : inStock ? colors.border : colors.danger,
+                      minWidth: 70,
+                    }}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                      setSelectedProduct(p);
+                      setRateMode("normal");
+                    }}
+                    activeOpacity={0.75}
+                  >
+                    <Feather
+                      name="package"
+                      size={20}
+                      color={isSelected ? "#FFF" : inStock ? colors.primary : colors.danger}
+                    />
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: isSelected ? "#FFF" : colors.text, textAlign: "center" }} numberOfLines={2}>
+                      {p.name}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: isSelected ? "rgba(255,255,255,0.8)" : inStock ? colors.success : colors.danger }}>
+                      {inStock ? `${p.stock} ${p.unit}` : "OUT"}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {/* Stock warnings */}
+            {stockWarning === "out-of-stock" && (
+              <View style={[styles.alertRow, { backgroundColor: colors.dangerBg }]}>
+                <Feather name="alert-triangle" size={11} color={colors.danger} />
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
+              </View>
+            )}
+            {stockWarning === "exceeds-stock" && (
+              <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
+                <Feather name="alert-circle" size={11} color="#D97706" />
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct?.stock}</Text>
+              </View>
             )}
           </View>
-          <View style={[styles.productChevron, { backgroundColor: canSelectProduct ? colors.secondary : colors.dangerBg }]}>
-            <Feather name={canSelectProduct ? "chevron-down" : "lock"} size={18} color={canSelectProduct ? colors.primary : colors.danger} />
-          </View>
-        </TouchableOpacity>
+        )}
 
         {/* ── Rate toggle ──────────────────────────────────────────────── */}
         {selectedProduct && (
