@@ -6,12 +6,13 @@ import {
 } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useListLocations, useCreateLocation, useUpdateLocation, useDeleteLocation, useListProducts, customFetch } from "@workspace/api-client-react";
+import { useListLocations, useCreateLocation, useUpdateLocation, useDeleteLocation, useListProducts, useListAccounts, customFetch } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { useAuth, getAllowedLocationIds } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
 type Location = { id: number; name: string; address?: string | null; phone?: string | null; isActive: boolean };
-type Product = { id: number; name: string; locationId?: number | null; stock: number; unit: string };
+type Product = { id: number; name: string; locationId?: number | null; stock: number; unit: string; unitPrice: string; isActive?: boolean };
+type Account = { id: number; name: string; balance: string; locationId?: number | null };
 type Transfer = {
   id: number; qty: number; notes?: string | null; userId: number; createdAt: string;
   fromLocationId: number; toLocationId: number; fromProductId: number; toProductId: number;
@@ -21,10 +22,17 @@ type Transfer = {
 const emptyForm = { name: "", address: "", phone: "" };
 const emptyTransfer = { fromLocationId: "", toLocationId: "", fromProductId: "", toProductId: "", qty: "", notes: "" };
 
+function fmt2(n: number) {
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toFixed(2)}`;
+}
+
 export default function LocationsScreen() {
   const colors = useColors();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const isAdminOrManager = user?.role === "admin" || user?.role === "manager";
   const queryClient = useQueryClient();
 
   const [showModal, setShowModal] = useState(false);
@@ -39,16 +47,32 @@ export default function LocationsScreen() {
 
   const { data: raw, isLoading, refetch } = useListLocations();
   const { data: productsRaw } = useListProducts();
+  const { data: accountsRaw } = useListAccounts();
   const createMut = useCreateLocation();
   const updateMut = useUpdateLocation();
   const deleteMut = useDeleteLocation();
 
-  const allItems = (raw ?? []) as unknown as Location[];
+  const allLocations = (raw ?? []) as unknown as Location[];
   const allProducts = (productsRaw ?? []) as unknown as Product[];
-  const allowedLocationIds = getAllowedLocationIds(user);
-  const items = isAdmin ? allItems : allItems.filter(l => allowedLocationIds === null || allowedLocationIds.has(l.id));
+  const allAccounts = (accountsRaw ?? []) as unknown as Account[];
 
-  // Products filtered by selected from/to location
+  // For non-admin: show only their assigned location
+  const items = isAdmin
+    ? allLocations
+    : allLocations.filter(l => l.id === user?.locationId);
+
+  // Per-location helpers
+  const locationProducts = (locId: number) => allProducts.filter(p => p.locationId === locId && p.isActive !== false);
+  const locationStockValue = (locId: number) => locationProducts(locId).reduce((s, p) => s + (p.stock ?? 0) * parseFloat(p.unitPrice ?? "0"), 0);
+  const locationStockQty = (locId: number) => locationProducts(locId).reduce((s, p) => s + (p.stock ?? 0), 0);
+  const locationAccountBalance = (locId: number) => allAccounts.filter(a => a.locationId === locId).reduce((s, a) => s + parseFloat(a.balance ?? "0"), 0);
+  const locationProductCount = (locId: number) => allProducts.filter(p => p.locationId === locId).length;
+
+  // All-locations totals
+  const totalStockValue = allProducts.filter(p => p.isActive !== false).reduce((s, p) => s + (p.stock ?? 0) * parseFloat(p.unitPrice ?? "0"), 0);
+  const totalAccountBalance = allAccounts.reduce((s, a) => s + parseFloat(a.balance ?? "0"), 0);
+
+  // Transfer products by selected location
   const fromProducts = allProducts.filter(p => tf.fromLocationId ? p.locationId === parseInt(tf.fromLocationId) : true);
   const toProducts = allProducts.filter(p => tf.toLocationId ? p.locationId === parseInt(tf.toLocationId) : true);
 
@@ -69,16 +93,13 @@ export default function LocationsScreen() {
   const handleDelete = (l: Location) => {
     Alert.alert("Delete", `Delete "${l.name}"?`, [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => { try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: l.id }); queryClient.invalidateQueries(); } catch {} }},
+      { text: "Delete", style: "destructive", onPress: async () => { try { await (deleteMut as unknown as { mutateAsync: (a: { id: number }) => Promise<unknown> }).mutateAsync({ id: l.id }); queryClient.invalidateQueries(); } catch {} } },
     ]);
   };
 
   const loadTransfers = async () => {
     setLoadingTransfers(true);
-    try {
-      const rows = await customFetch<Transfer[]>("/api/locations/stock-transfers");
-      setTransfers(rows);
-    } catch {}
+    try { const rows = await customFetch<Transfer[]>("/api/locations/stock-transfers"); setTransfers(rows); } catch {}
     setLoadingTransfers(false);
   };
 
@@ -88,9 +109,7 @@ export default function LocationsScreen() {
     if (!tf.fromLocationId || !tf.toLocationId || !tf.fromProductId || !tf.toProductId || !tf.qty) {
       Alert.alert("Error", "All fields are required"); return;
     }
-    if (tf.fromProductId === tf.toProductId) {
-      Alert.alert("Error", "Source and destination product must be different"); return;
-    }
+    if (tf.fromProductId === tf.toProductId) { Alert.alert("Error", "Source and destination product must be different"); return; }
     const qty = parseInt(tf.qty);
     if (isNaN(qty) || qty <= 0) { Alert.alert("Error", "Enter a valid quantity"); return; }
     setSubmitting(true);
@@ -98,27 +117,22 @@ export default function LocationsScreen() {
       await customFetch("/api/locations/stock-transfer", {
         method: "POST",
         body: JSON.stringify({
-          fromLocationId: parseInt(tf.fromLocationId),
-          toLocationId: parseInt(tf.toLocationId),
-          fromProductId: parseInt(tf.fromProductId),
-          toProductId: parseInt(tf.toProductId),
-          qty,
-          notes: tf.notes || null,
+          fromLocationId: parseInt(tf.fromLocationId), toLocationId: parseInt(tf.toLocationId),
+          fromProductId: parseInt(tf.fromProductId), toProductId: parseInt(tf.toProductId),
+          qty, notes: tf.notes || null,
         }),
       });
       queryClient.invalidateQueries();
       setShowTransferModal(false);
       setTf(emptyTransfer);
       Alert.alert("Success", `${qty} units transferred successfully`);
-    } catch (e) {
-      Alert.alert("Transfer Failed", e instanceof Error ? e.message : "Failed");
-    }
+    } catch (e) { Alert.alert("Transfer Failed", e instanceof Error ? e.message : "Failed"); }
     setSubmitting(false);
   };
 
-  const ChipRow = ({ label, items: chips, value, onSelect, colorKey }: {
+  const ChipRow = ({ label, items: chips, value, onSelect }: {
     label: string; items: { id: number; name: string; sub?: string }[];
-    value: string; onSelect: (v: string) => void; colorKey?: string;
+    value: string; onSelect: (v: string) => void;
   }) => (
     <View style={{ marginBottom: 14 }}>
       <Text style={[S.fLabel, { color: colors.mutedForeground }]}>{label}</Text>
@@ -136,6 +150,17 @@ export default function LocationsScreen() {
     </View>
   );
 
+  // Summary tile
+  const SummaryTile = ({ label, value, icon, iconBg, iconColor }: { label: string; value: string; icon: string; iconBg: string; iconColor: string }) => (
+    <View style={{ flex: 1, backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, alignItems: "center", gap: 6 }}>
+      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: iconBg, alignItems: "center", justifyContent: "center" }}>
+        <Feather name={icon as never} size={14} color={iconColor} />
+      </View>
+      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>{value}</Text>
+      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: colors.mutedForeground, letterSpacing: 0.5, textAlign: "center" }}>{label}</Text>
+    </View>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={colors.primary} /> : (
@@ -145,23 +170,52 @@ export default function LocationsScreen() {
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 120, gap: 10 }}
           ListHeaderComponent={
-            isAdmin ? (
-              <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>
-                <TouchableOpacity style={[S.headerBtn, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" }]} onPress={openHistory}>
-                  <Feather name="list" size={14} color="#2563EB" />
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#2563EB" }}>Transfer History</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[S.headerBtn, { backgroundColor: "#FFF7ED", borderColor: "#FED7AA" }]} onPress={() => { setTf(emptyTransfer); setShowTransferModal(true); }}>
-                  <Feather name="repeat" size={14} color="#D97706" />
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#D97706" }}>Transfer Stock</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null
+            <View>
+              {/* ── All-Locations Summary ─────────────────────────────── */}
+              {isAdmin && (
+                <View style={{ backgroundColor: colors.primary, borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "rgba(255,255,255,0.75)", letterSpacing: 0.6, marginBottom: 8 }}>ALL LOCATIONS SUMMARY</Text>
+                  <View style={{ flexDirection: "row", gap: 10 }}>
+                    <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, alignItems: "center" }}>
+                      <Feather name="briefcase" size={14} color="rgba(255,255,255,0.9)" />
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF", marginTop: 4 }}>{fmt2(totalAccountBalance)}</Text>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: 0.5, marginTop: 2 }}>TOTAL BANK</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, alignItems: "center" }}>
+                      <Feather name="package" size={14} color="rgba(255,255,255,0.9)" />
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF", marginTop: 4 }}>{fmt2(totalStockValue)}</Text>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: 0.5, marginTop: 2 }}>TOTAL STOCK</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 10, alignItems: "center" }}>
+                      <Feather name="map-pin" size={14} color="rgba(255,255,255,0.9)" />
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFF", marginTop: 4 }}>{allLocations.length}</Text>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "rgba(255,255,255,0.7)", letterSpacing: 0.5, marginTop: 2 }}>BRANCHES</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* ── Transfer buttons for admin/manager ─────────────── */}
+              {isAdminOrManager && (
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 4 }}>
+                  <TouchableOpacity style={[S.headerBtn, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE", flex: 1 }]} onPress={openHistory}>
+                    <Feather name="list" size={14} color="#2563EB" />
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#2563EB" }}>Transfer History</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[S.headerBtn, { backgroundColor: "#FFF7ED", borderColor: "#FED7AA", flex: 1 }]} onPress={() => { setTf(emptyTransfer); setShowTransferModal(true); }}>
+                    <Feather name="repeat" size={14} color="#D97706" />
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#D97706" }}>Transfer Stock</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           }
           ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="map-pin" size={40} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No locations</Text></View>}
           renderItem={({ item: l }) => {
-            const productCount = allProducts.filter(p => p.locationId === l.id).length;
-            const totalStock = allProducts.filter(p => p.locationId === l.id).reduce((s, p) => s + (p.stock ?? 0), 0);
+            const prodCount = locationProductCount(l.id);
+            const stockQty = locationStockQty(l.id);
+            const stockVal = locationStockValue(l.id);
+            const accBal = locationAccountBalance(l.id);
             return (
               <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
@@ -169,17 +223,23 @@ export default function LocationsScreen() {
                     <Feather name="map-pin" size={20} color="#059669" />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text, marginBottom: 4 }}>{l.name}</Text>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text, marginBottom: 2 }}>{l.name}</Text>
                     {l.address && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>{l.address}</Text>}
                     {l.phone && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>{l.phone}</Text>}
-                    <View style={{ flexDirection: "row", gap: 8, marginTop: 6 }}>
+
+                    {/* Stats row */}
+                    <View style={{ flexDirection: "row", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
                       <View style={[S.statBadge, { backgroundColor: "#EFF6FF" }]}>
-                        <Feather name="package" size={11} color="#2563EB" />
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#2563EB" }}>{productCount} products</Text>
+                        <Feather name="briefcase" size={10} color="#2563EB" />
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#2563EB" }}>{fmt2(accBal)}</Text>
+                      </View>
+                      <View style={[S.statBadge, { backgroundColor: "#ECFDF5" }]}>
+                        <Feather name="package" size={10} color="#059669" />
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#059669" }}>{fmt2(stockVal)}</Text>
                       </View>
                       <View style={[S.statBadge, { backgroundColor: "#FFF7ED" }]}>
-                        <Feather name="layers" size={11} color="#D97706" />
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>{totalStock} in stock</Text>
+                        <Feather name="layers" size={10} color="#D97706" />
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>{stockQty} units · {prodCount} products</Text>
                       </View>
                     </View>
                   </View>
@@ -248,21 +308,8 @@ export default function LocationsScreen() {
               <TouchableOpacity onPress={() => setShowTransferModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
-              {/* From Location */}
-              <ChipRow
-                label="FROM LOCATION"
-                items={allItems.map(l => ({ id: l.id, name: l.name }))}
-                value={tf.fromLocationId}
-                onSelect={v => setTf(f => ({ ...f, fromLocationId: v, fromProductId: "" }))}
-              />
-              {/* From Product */}
-              <ChipRow
-                label="FROM PRODUCT"
-                items={fromProducts.map(p => ({ id: p.id, name: p.name, sub: `Stock: ${p.stock}` }))}
-                value={tf.fromProductId}
-                onSelect={v => setTf(f => ({ ...f, fromProductId: v }))}
-              />
-              {/* Divider */}
+              <ChipRow label="FROM LOCATION" items={allLocations.map(l => ({ id: l.id, name: l.name }))} value={tf.fromLocationId} onSelect={v => setTf(f => ({ ...f, fromLocationId: v, fromProductId: "" }))} />
+              <ChipRow label="FROM PRODUCT" items={fromProducts.map(p => ({ id: p.id, name: p.name, sub: `Stock: ${p.stock}` }))} value={tf.fromProductId} onSelect={v => setTf(f => ({ ...f, fromProductId: v }))} />
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 }}>
                 <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                 <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: "#FFF7ED", alignItems: "center", justifyContent: "center" }}>
@@ -270,46 +317,18 @@ export default function LocationsScreen() {
                 </View>
                 <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
               </View>
-              {/* To Location */}
-              <ChipRow
-                label="TO LOCATION"
-                items={allItems.map(l => ({ id: l.id, name: l.name }))}
-                value={tf.toLocationId}
-                onSelect={v => setTf(f => ({ ...f, toLocationId: v, toProductId: "" }))}
-              />
-              {/* To Product */}
-              <ChipRow
-                label="TO PRODUCT"
-                items={toProducts.map(p => ({ id: p.id, name: p.name, sub: `Stock: ${p.stock}` }))}
-                value={tf.toProductId}
-                onSelect={v => setTf(f => ({ ...f, toProductId: v }))}
-              />
-              {/* Qty */}
+              <ChipRow label="TO LOCATION" items={allLocations.map(l => ({ id: l.id, name: l.name }))} value={tf.toLocationId} onSelect={v => setTf(f => ({ ...f, toLocationId: v, toProductId: "" }))} />
+              <ChipRow label="TO PRODUCT" items={toProducts.map(p => ({ id: p.id, name: p.name, sub: `Stock: ${p.stock}` }))} value={tf.toProductId} onSelect={v => setTf(f => ({ ...f, toProductId: v }))} />
               <View style={{ marginBottom: 14 }}>
                 <Text style={[S.fLabel, { color: colors.mutedForeground }]}>QUANTITY</Text>
-                <TextInput
-                  style={[S.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
-                  value={tf.qty} onChangeText={v => setTf(f => ({ ...f, qty: v }))}
-                  placeholder="Enter quantity" placeholderTextColor={colors.mutedForeground}
-                  keyboardType="numeric"
-                />
+                <TextInput style={[S.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]} value={tf.qty} onChangeText={v => setTf(f => ({ ...f, qty: v }))} placeholder="Enter quantity" placeholderTextColor={colors.mutedForeground} keyboardType="numeric" />
               </View>
-              {/* Notes */}
               <View style={{ marginBottom: 20 }}>
                 <Text style={[S.fLabel, { color: colors.mutedForeground }]}>NOTES (OPTIONAL)</Text>
-                <TextInput
-                  style={[S.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
-                  value={tf.notes} onChangeText={v => setTf(f => ({ ...f, notes: v }))}
-                  placeholder="Transfer notes" placeholderTextColor={colors.mutedForeground}
-                />
+                <TextInput style={[S.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]} value={tf.notes} onChangeText={v => setTf(f => ({ ...f, notes: v }))} placeholder="Transfer notes" placeholderTextColor={colors.mutedForeground} />
               </View>
-              <TouchableOpacity
-                style={{ backgroundColor: "#D97706", paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 60, opacity: submitting ? 0.6 : 1 }}
-                onPress={handleTransfer} disabled={submitting}
-              >
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>
-                  {submitting ? "Transferring…" : "Confirm Transfer"}
-                </Text>
+              <TouchableOpacity style={{ backgroundColor: "#D97706", paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 60, opacity: submitting ? 0.6 : 1 }} onPress={handleTransfer} disabled={submitting}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF" }}>{submitting ? "Transferring…" : "Confirm Transfer"}</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -331,12 +350,7 @@ export default function LocationsScreen() {
                 data={transfers}
                 keyExtractor={t => String(t.id)}
                 contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 10 }}
-                ListEmptyComponent={
-                  <View style={{ alignItems: "center", padding: 40 }}>
-                    <Feather name="repeat" size={36} color={colors.mutedForeground} />
-                    <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No transfers yet</Text>
-                  </View>
-                }
+                ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Feather name="repeat" size={36} color={colors.mutedForeground} /><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No transfers yet</Text></View>}
                 renderItem={({ item: t }) => (
                   <View style={[S.histCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>
@@ -344,27 +358,17 @@ export default function LocationsScreen() {
                         <Feather name="repeat" size={14} color="#D97706" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }}>
-                          {t.fromProductName ?? `#${t.fromProductId}`} → {t.toProductName ?? `#${t.toProductId}`}
-                        </Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>
-                          {new Date(t.createdAt).toLocaleDateString()} {new Date(t.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </Text>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }}>{t.fromProductName ?? `#${t.fromProductId}`} → {t.toProductName ?? `#${t.toProductId}`}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{new Date(t.createdAt).toLocaleDateString()} {new Date(t.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
                       </View>
                       <View style={{ backgroundColor: "#FFF7ED", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}>
                         <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#D97706" }}>{t.qty} units</Text>
                       </View>
                     </View>
                     <View style={{ flexDirection: "row", gap: 8 }}>
-                      <View style={[S.histBadge, { backgroundColor: "#FEF2F2" }]}>
-                        <Feather name="map-pin" size={10} color={colors.danger} />
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.danger }}>{t.fromLocationName ?? `Loc #${t.fromLocationId}`}</Text>
-                      </View>
+                      <View style={[S.histBadge, { backgroundColor: "#FEF2F2" }]}><Feather name="map-pin" size={10} color={colors.danger} /><Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.danger }}>{t.fromLocationName ?? `Loc #${t.fromLocationId}`}</Text></View>
                       <Feather name="arrow-right" size={12} color={colors.mutedForeground} style={{ marginTop: 2 }} />
-                      <View style={[S.histBadge, { backgroundColor: "#ECFDF5" }]}>
-                        <Feather name="map-pin" size={10} color="#059669" />
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: "#059669" }}>{t.toLocationName ?? `Loc #${t.toLocationId}`}</Text>
-                      </View>
+                      <View style={[S.histBadge, { backgroundColor: "#ECFDF5" }]}><Feather name="map-pin" size={10} color="#059669" /><Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: "#059669" }}>{t.toLocationName ?? `Loc #${t.toLocationId}`}</Text></View>
                     </View>
                     {t.notes && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 6 }}>"{t.notes}"</Text>}
                   </View>

@@ -10,7 +10,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
 
 import {
-  useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, useListCategories,
+  useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
+  useListCategories, useListLocations,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
@@ -18,11 +19,15 @@ import { useAuth } from "@/context/AuthContext";
 type Product = {
   id: number; name: string; sku?: string | null; categoryName?: string | null;
   unitPrice: string; wholesalePrice: string; costPrice: string;
-  stock: number; unit: string; isActive: boolean;
+  stock: number; unit: string; isActive: boolean; locationId?: number | null;
 };
 type Category = { id: number; name: string };
+type Location = { id: number; name: string };
 
-const emptyForm = { name: "", sku: "", categoryId: "", unitPrice: "", wholesalePrice: "", costPrice: "", stock: "0", unit: "pcs" };
+const emptyForm = {
+  name: "", sku: "", categoryId: "", locationId: "",
+  unitPrice: "", wholesalePrice: "", costPrice: "", stock: "0", unit: "pcs",
+};
 
 function PriceChip({ label, value, color, bg }: { label: string; value: string; color: string; bg: string }) {
   return (
@@ -53,19 +58,26 @@ export default function InventoryScreen() {
 
   const { data: productsRaw, isLoading, refetch } = useListProducts();
   const { data: categoriesRaw } = useListCategories();
+  const { data: locationsRaw } = useListLocations();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
 
   const products = (productsRaw ?? []) as unknown as Product[];
   const categories = (categoriesRaw ?? []) as unknown as Category[];
+  const locations = (locationsRaw ?? []) as unknown as Location[];
 
   const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     (p.sku ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  const openAdd = () => { setEditProduct(null); setForm(emptyForm); setShowModal(true); };
+  const openAdd = () => {
+    setEditProduct(null);
+    setForm({ ...emptyForm, locationId: user?.locationId ? String(user.locationId) : "" });
+    setShowModal(true);
+  };
+
   const openEdit = (p: Product) => {
     setEditProduct(p);
     setForm({
@@ -74,6 +86,7 @@ export default function InventoryScreen() {
       wholesalePrice: parseFloat(p.wholesalePrice).toString(),
       costPrice: parseFloat(p.costPrice).toString(),
       categoryId: p.categoryName ? String((categories.find(c => c.name === p.categoryName) ?? { id: "" }).id) : "",
+      locationId: p.locationId ? String(p.locationId) : "",
     });
     setShowModal(true);
   };
@@ -87,6 +100,7 @@ export default function InventoryScreen() {
       name: form.name.trim(),
       sku: form.sku || null,
       categoryId: form.categoryId ? parseInt(form.categoryId) : null,
+      locationId: form.locationId ? parseInt(form.locationId) : null,
       unitPrice: parseFloat(form.unitPrice).toFixed(8),
       wholesalePrice: form.wholesalePrice ? parseFloat(form.wholesalePrice).toFixed(8) : parseFloat(form.unitPrice).toFixed(8),
       costPrice: parseFloat(form.costPrice).toFixed(8),
@@ -122,6 +136,8 @@ export default function InventoryScreen() {
 
   const stockColor = (s: number) => s > 10 ? colors.success : s > 0 ? colors.expense : colors.danger;
   const stockBg = (s: number) => s > 10 ? colors.saleBg : s > 0 ? colors.expenseBg : colors.dangerBg;
+
+  const locationName = (id?: number | null) => locations.find(l => l.id === id)?.name;
 
   const InputField = ({ label, fkey, kb }: { label: string; fkey: keyof typeof form; kb?: "default" | "decimal-pad" | "numeric" }) => (
     <View style={{ marginBottom: 14 }}>
@@ -197,6 +213,12 @@ export default function InventoryScreen() {
                       )}
                       {p.categoryName && (
                         <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>#{p.categoryName}</Text>
+                      )}
+                      {locationName(p.locationId) && (
+                        <View style={{ backgroundColor: "#EFF6FF", paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, flexDirection: "row", alignItems: "center", gap: 3 }}>
+                          <Feather name="map-pin" size={9} color="#2563EB" />
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#2563EB" }}>{locationName(p.locationId)}</Text>
+                        </View>
                       )}
                       <View style={[styles.stockBadge, { backgroundColor: stockBg(p.stock) }]}>
                         <Feather name="layers" size={10} color={stockColor(p.stock)} />
@@ -280,6 +302,7 @@ export default function InventoryScreen() {
                 </View>
               </View>
 
+              {/* Category */}
               <View style={{ marginBottom: 14 }}>
                 <Text style={fStyles.label}>Category</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -299,6 +322,45 @@ export default function InventoryScreen() {
                   </View>
                 </ScrollView>
               </View>
+
+              {/* Location */}
+              {locations.length > 0 && (
+                <View style={{ marginBottom: 14 }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                    <Feather name="map-pin" size={12} color={colors.primary} />
+                    <Text style={[fStyles.label, { marginBottom: 0 }]}>Location</Text>
+                  </View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity
+                        style={[fStyles.catChip, {
+                          backgroundColor: form.locationId === "" ? colors.input : colors.input,
+                          borderColor: form.locationId === "" ? colors.border : colors.border,
+                          opacity: form.locationId === "" ? 0.6 : 1,
+                        }]}
+                        onPress={() => setForm(prev => ({ ...prev, locationId: "" }))}
+                      >
+                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: form.locationId === "" ? colors.mutedForeground : colors.text }}>No Location</Text>
+                      </TouchableOpacity>
+                      {locations.map(l => (
+                        <TouchableOpacity
+                          key={l.id}
+                          style={[fStyles.catChip, {
+                            backgroundColor: form.locationId === String(l.id) ? colors.primary : colors.input,
+                            borderColor: form.locationId === String(l.id) ? colors.primary : colors.border,
+                          }]}
+                          onPress={() => setForm(prev => ({ ...prev, locationId: String(l.id) }))}
+                        >
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                            <Feather name="map-pin" size={11} color={form.locationId === String(l.id) ? "#FFF" : colors.primary} />
+                            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: form.locationId === String(l.id) ? "#FFF" : colors.text }}>{l.name}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
 
               <TouchableOpacity style={[fStyles.submitBtn, { backgroundColor: colors.primary, marginTop: 6 }]} onPress={handleSubmit}>
                 <Feather name={editProduct ? "check" : "plus"} size={18} color="#FFF" />
