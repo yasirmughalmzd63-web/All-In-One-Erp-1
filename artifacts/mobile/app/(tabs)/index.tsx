@@ -337,34 +337,8 @@ export default function POSScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8 }]}>
-        {/* Logo + title */}
-        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>₵</Text>
-          </View>
-          <View>
-            <Text style={styles.headerTitle}>COINS SALE</Text>
-            <Text style={styles.headerSub}>Point of Sale</Text>
-          </View>
-        </View>
-
-        {/* Right: dollar badge + user badge */}
-        <View style={styles.headerRight}>
-          {dollarBalance !== null && dollarBalance.usd !== 0 && (
-            <View style={styles.dollarBadge}>
-              <Feather name="dollar-sign" size={13} color="#0891B2" />
-              <View>
-                <Text style={styles.dollarUsd}>{dollarBalance.usd.toFixed(2)} USD</Text>
-                <Text style={styles.dollarPkr}>₨{dollarBalance.pkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
-              </View>
-            </View>
-          )}
-          <View style={styles.userBadge}>
-            <Feather name="user" size={12} color={colors.primary} />
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.primary }}>{user?.name?.split(" ")[0] ?? "—"}</Text>
-          </View>
-        </View>
+      <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8, justifyContent: "center" }]}>
+        <Text style={[styles.headerTitle, { textAlign: "center", fontSize: 22, letterSpacing: 2 }]}>COINS DYNASTY</Text>
       </LinearGradient>
 
       {/* ── Location banner ─────────────────────────────────────────────── */}
