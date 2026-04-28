@@ -785,12 +785,12 @@ const styles = StyleSheet.create({
   locationBannerLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8 },
   locationBannerName: { fontFamily: "Inter_700Bold", fontSize: 14, marginTop: 1 },
   // Balance tiles
-  balanceGrid: { marginHorizontal: 14, marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  balanceTile: { width: "47%", alignItems: "center", paddingVertical: 12, paddingHorizontal: 4, borderRadius: 14, borderWidth: 1.5 },
+  balanceGrid: { marginHorizontal: 14, marginTop: 12, flexDirection: "row", gap: 6 },
+  balanceTile: { flex: 1, alignItems: "center", paddingVertical: 10, paddingHorizontal: 2, borderRadius: 12, borderWidth: 1.5 },
   balanceTileFirst: {},
-  balanceIconWrap: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 6 },
-  balanceLabel: { fontFamily: "Inter_600SemiBold", fontSize: 9, letterSpacing: 0.6, textAlign: "center", marginBottom: 3 },
-  balanceValue: { fontFamily: "Inter_700Bold", fontSize: 14, textAlign: "center" },
+  balanceIconWrap: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  balanceLabel: { fontFamily: "Inter_600SemiBold", fontSize: 8, letterSpacing: 0.5, textAlign: "center", marginBottom: 2 },
+  balanceValue: { fontFamily: "Inter_700Bold", fontSize: 12, textAlign: "center" },
   balSep: { width: 1, marginVertical: 12 },
   // Product
   productCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
