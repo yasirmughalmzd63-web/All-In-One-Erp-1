@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { customFetch, useListAccounts, useListProducts } from "@workspace/api-client-react";
+import { customFetch, useListAccounts, useListProducts, useListSuppliers, useListCustomers } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 
@@ -36,16 +36,22 @@ const ENTRY_TYPES: { key: string; label: string; desc: string; sign: 1 | -1; col
 
 type Account = { id: number; name: string; type: string; currency: string; balance: string };
 type Product = { id: number; name: string; unit: string; stock: number; costPrice: string; unitPrice: string; wholesalePrice: string };
+type Wallet = { id: number; name: string; type: string; currency: string; balance: string };
+type Party = { id: number; name: string };
 
 const emptyBuyForm = {
   amountUsd: "",
   rate: "",
   accountId: "",
+  walletId: "",
+  partyType: "supplier" as "supplier" | "customer",
+  partyId: "",
   notes: "",
   date: new Date().toISOString().split("T")[0]!,
 };
 const emptyTopupForm = {
   productId: "",
+  walletId: "",
   amountUsd: "",
   coinsPerUsd: "",
   exchangeRatePkr: "",
@@ -99,8 +105,21 @@ export default function WalletsScreen() {
 
   const { data: accountsRaw } = useListAccounts();
   const { data: productsRaw } = useListProducts();
+  const { data: suppliersRaw } = useListSuppliers();
+  const { data: customersRaw } = useListCustomers();
   const accounts = (accountsRaw ?? []) as unknown as Account[];
   const products = (productsRaw ?? []) as unknown as Product[];
+  const suppliers = (suppliersRaw ?? []) as unknown as Party[];
+  const customers = (customersRaw ?? []) as unknown as Party[];
+
+  const [dollarWallets, setDollarWallets] = useState<Wallet[]>([]);
+  const loadWallets = async () => {
+    try {
+      const w = await customFetch<Wallet[]>("/api/dollar-wallet/wallets");
+      setDollarWallets(w);
+    } catch { /* ignore */ }
+  };
+  useEffect(() => { loadWallets(); }, []);
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -121,8 +140,8 @@ export default function WalletsScreen() {
   }, [params.topup]);
 
   const handleBuyUsd = async () => {
-    if (!buyForm.amountUsd || !buyForm.rate || !buyForm.accountId || !buyForm.date) {
-      Alert.alert("Error", "Amount, rate, account and date are required");
+    if (!buyForm.amountUsd || !buyForm.rate || !buyForm.accountId || !buyForm.walletId || !buyForm.partyId || !buyForm.date) {
+      Alert.alert("Error", "Amount, rate, dollar wallet, party, account and date are all required");
       return;
     }
     setSaving(true);
@@ -133,6 +152,9 @@ export default function WalletsScreen() {
           amountUsd: buyForm.amountUsd,
           rate: buyForm.rate,
           accountId: parseInt(buyForm.accountId, 10),
+          walletId: parseInt(buyForm.walletId, 10),
+          partyType: buyForm.partyType,
+          partyId: parseInt(buyForm.partyId, 10),
           date: buyForm.date,
           notes: buyForm.notes || null,
         }),
@@ -140,6 +162,7 @@ export default function WalletsScreen() {
       setShowBuyModal(false);
       setBuyForm(emptyBuyForm);
       load();
+      loadWallets();
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to buy USD");
     }
@@ -147,8 +170,8 @@ export default function WalletsScreen() {
   };
 
   const handleTopup = async () => {
-    if (!topupForm.productId || !topupForm.amountUsd || !topupForm.coinsPerUsd || !topupForm.exchangeRatePkr || !topupForm.date) {
-      Alert.alert("Error", "Coin, USD amount, coins per USD, PKR rate and date are required");
+    if (!topupForm.productId || !topupForm.walletId || !topupForm.amountUsd || !topupForm.coinsPerUsd || !topupForm.exchangeRatePkr || !topupForm.date) {
+      Alert.alert("Error", "Coin, dollar wallet, USD amount, coins per USD, PKR rate and date are required");
       return;
     }
     setSaving(true);
@@ -157,6 +180,7 @@ export default function WalletsScreen() {
         method: "POST",
         body: JSON.stringify({
           productId: parseInt(topupForm.productId, 10),
+          walletId: parseInt(topupForm.walletId, 10),
           amountUsd: topupForm.amountUsd,
           coinsPerUsd: topupForm.coinsPerUsd,
           exchangeRatePkr: topupForm.exchangeRatePkr,
@@ -171,6 +195,7 @@ export default function WalletsScreen() {
       setShowTopupModal(false);
       setTopupForm(emptyTopupForm);
       load();
+      loadWallets();
     } catch (e) {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to top-up coins");
     }
@@ -304,6 +329,35 @@ export default function WalletsScreen() {
             <Text style={styles.quickText}>Top-up Coins</Text>
           </TouchableOpacity>
         </View>
+
+        {dollarWallets.length > 0 ? (
+          <View style={{ marginTop: 14 }}>
+            <Text style={{ color: "rgba(255,255,255,0.85)", fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 0.5, marginBottom: 8 }}>
+              MY {dollarWallets.length} DOLLAR WALLETS
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {dollarWallets.map(w => (
+                  <View key={w.id} style={{
+                    backgroundColor: "rgba(255,255,255,0.18)",
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    minWidth: 110,
+                    borderWidth: 1,
+                    borderColor: "rgba(255,255,255,0.25)",
+                  }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#FFF" }} numberOfLines={1}>{w.name}</Text>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#4ADE80", marginTop: 2 }}>
+                      ${parseFloat(w.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.7)", textTransform: "uppercase" }}>{w.type}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+        ) : null}
       </LinearGradient>
 
       {loading ? (
@@ -338,7 +392,62 @@ export default function WalletsScreen() {
               <TouchableOpacity onPress={() => setShowBuyModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
-              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PAY FROM ACCOUNT</Text>
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DOLLAR WALLET (USD GOES IN)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {dollarWallets.map(w => {
+                    const sel = buyForm.walletId === String(w.id);
+                    return (
+                      <TouchableOpacity key={w.id} onPress={() => setBuyForm(f => ({ ...f, walletId: String(w.id) }))}
+                        style={[styles.acctChip, { backgroundColor: sel ? "#16A34A" : colors.card, borderColor: sel ? "#16A34A" : colors.border }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{w.name}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : colors.mutedForeground }}>
+                          ${parseFloat(w.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PARTY TYPE</Text>
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+                {(["supplier", "customer"] as const).map(t => {
+                  const sel = buyForm.partyType === t;
+                  return (
+                    <TouchableOpacity key={t} onPress={() => setBuyForm(f => ({ ...f, partyType: t, partyId: "" }))}
+                      style={{ flex: 1, padding: 10, borderRadius: 8, alignItems: "center",
+                        backgroundColor: sel ? "#0EA5E9" : colors.card,
+                        borderWidth: 1, borderColor: sel ? "#0EA5E9" : colors.border }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: sel ? "#FFF" : colors.text, textTransform: "capitalize" }}>{t}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>
+                {buyForm.partyType === "supplier" ? "SUPPLIER (USD SOURCE)" : "CUSTOMER (USD SOURCE)"}
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(buyForm.partyType === "supplier" ? suppliers : customers).map(p => {
+                    const sel = buyForm.partyId === String(p.id);
+                    return (
+                      <TouchableOpacity key={p.id} onPress={() => setBuyForm(f => ({ ...f, partyId: String(p.id) }))}
+                        style={[styles.acctChip, { backgroundColor: sel ? "#7C3AED" : colors.card, borderColor: sel ? "#7C3AED" : colors.border }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{p.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {(buyForm.partyType === "supplier" ? suppliers : customers).length === 0 ? (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, padding: 8 }}>
+                      No {buyForm.partyType}s yet — add one first.
+                    </Text>
+                  ) : null}
+                </View>
+              </ScrollView>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PAY FROM COMPANY ACCOUNT (PKR)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {accounts.map(a => {
@@ -376,6 +485,14 @@ export default function WalletsScreen() {
                 <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: "#0369A1" }}>
                   ₨{buyPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </Text>
+                {buyForm.walletId && buyForm.amountUsd ? (() => {
+                  const w = dollarWallets.find(x => String(x.id) === buyForm.walletId);
+                  return w ? (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 4 }}>
+                      ${w.balance} → ${(parseFloat(w.balance) + parseFloat(buyForm.amountUsd)).toFixed(2)} in {w.name}
+                    </Text>
+                  ) : null;
+                })() : null}
               </View>
 
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DATE</Text>
@@ -403,6 +520,25 @@ export default function WalletsScreen() {
               <TouchableOpacity onPress={() => setShowTopupModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DOLLAR WALLET (USD COMES OUT OF)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {dollarWallets.map(w => {
+                    const sel = topupForm.walletId === String(w.id);
+                    const insufficient = topupForm.amountUsd ? parseFloat(w.balance) < parseFloat(topupForm.amountUsd) : false;
+                    return (
+                      <TouchableOpacity key={w.id} onPress={() => setTopupForm(f => ({ ...f, walletId: String(w.id) }))}
+                        style={[styles.acctChip, { backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : insufficient ? "#DC2626" : colors.border }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{w.name}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : insufficient ? "#DC2626" : colors.mutedForeground }}>
+                          ${parseFloat(w.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>COIN PRODUCT</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
                 <View style={{ flexDirection: "row", gap: 8 }}>

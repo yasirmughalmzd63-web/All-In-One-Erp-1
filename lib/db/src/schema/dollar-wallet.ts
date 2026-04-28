@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -9,6 +9,10 @@ export const dollarWalletTable = pgTable("dollar_wallet", {
   rate: text("rate").notNull().default("0.00000000"),
   totalPkr: text("total_pkr").notNull().default("0.00000000"),
   partyName: text("party_name"),
+  partyType: text("party_type"),
+  partyId: integer("party_id"),
+  walletId: integer("wallet_id"),
+  accountId: integer("account_id"),
   notes: text("notes"),
   date: text("date").notNull(),
   userId: text("user_id").notNull().default("0"),

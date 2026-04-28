@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { desc, eq } from "drizzle-orm";
-import { db, dollarWalletTable, accountsTable, productsTable } from "@workspace/db";
+import { and, desc, eq } from "drizzle-orm";
+import { db, dollarWalletTable, accountsTable, productsTable, walletsTable, suppliersTable, customersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 
@@ -54,12 +54,38 @@ router.post("/dollar-wallet", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
 
+router.get("/dollar-wallet/wallets", requireAuth, async (_req, res): Promise<void> => {
+  const defaults = [
+    { name: "Wise USD", type: "online" },
+    { name: "PayPal USD", type: "online" },
+    { name: "USDT (Crypto)", type: "crypto" },
+    { name: "Cash USD", type: "cash" },
+    { name: "Bank USD", type: "bank" },
+  ];
+  await db.transaction(async tx => {
+    const existing = await tx.select().from(walletsTable).where(eq(walletsTable.currency, "USD"));
+    const missing = defaults
+      .filter(d => !existing.some(w => w.name.toLowerCase() === d.name.toLowerCase()))
+      .map(d => ({ ...d, balance: "0.00000000", currency: "USD" }));
+    if (missing.length > 0) {
+      await tx.insert(walletsTable).values(missing);
+    }
+  });
+  const all = await db.select().from(walletsTable).where(eq(walletsTable.currency, "USD")).orderBy(walletsTable.id);
+  res.json(all);
+});
+
 router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<void> => {
-  const { amountUsd, rate, accountId, date, notes } = req.body as {
-    amountUsd?: string; rate?: string; accountId?: number; date?: string; notes?: string | null;
+  const { amountUsd, rate, accountId, walletId, partyType, partyId, date, notes } = req.body as {
+    amountUsd?: string; rate?: string; accountId?: number; walletId?: number;
+    partyType?: string; partyId?: number; date?: string; notes?: string | null;
   };
-  if (!amountUsd || !rate || !accountId || !date) {
-    res.status(400).json({ error: "amountUsd, rate, accountId, date required" });
+  if (!amountUsd || !rate || !accountId || !walletId || !partyType || !partyId || !date) {
+    res.status(400).json({ error: "amountUsd, rate, accountId, walletId, partyType, partyId, date required" });
+    return;
+  }
+  if (partyType !== "supplier" && partyType !== "customer") {
+    res.status(400).json({ error: "partyType must be 'supplier' or 'customer'" });
     return;
   }
   const usd = parseFloat(amountUsd);
@@ -72,33 +98,61 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 
   const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
   if (!account) { res.status(404).json({ error: "Account not found" }); return; }
-  const newBal = parseFloat(account.balance) - totalPkr;
-  await db.update(accountsTable).set({ balance: fmt(newBal) }).where(eq(accountsTable.id, accountId));
 
-  const [row] = await db.insert(dollarWalletTable).values({
-    entryType: "purchase",
-    amountUsd: fmt(usd),
-    rate: fmt(r),
-    totalPkr: fmt(totalPkr),
-    partyName: account.name,
-    notes: notes ?? null,
-    date,
-    userId: String(req.userId),
-  }).returning();
-  await logAudit(req.userId, "create", "dollar_wallet", row!.id, `Purchase ${amountUsd} USD @ ${rate} from ${account.name}`);
-  res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
+  const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId), eq(walletsTable.currency, "USD")));
+  if (!wallet) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
+
+  let partyName = "";
+  if (partyType === "supplier") {
+    const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, partyId));
+    if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+    partyName = s.name;
+  } else {
+    const [c] = await db.select().from(customersTable).where(eq(customersTable.id, partyId));
+    if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
+    partyName = c.name;
+  }
+
+  const row = await db.transaction(async tx => {
+    const newAcctBal = parseFloat(account.balance) - totalPkr;
+    await tx.update(accountsTable).set({ balance: fmt(newAcctBal) }).where(eq(accountsTable.id, accountId));
+
+    const newWalletBal = parseFloat(wallet.balance) + usd;
+    await tx.update(walletsTable).set({ balance: fmt(newWalletBal) }).where(eq(walletsTable.id, walletId));
+
+    const [r] = await tx.insert(dollarWalletTable).values({
+      entryType: "purchase",
+      amountUsd: fmt(usd),
+      rate: fmt(parseFloat(rate)),
+      totalPkr: fmt(totalPkr),
+      partyName,
+      partyType,
+      partyId,
+      walletId,
+      accountId,
+      notes: notes ?? null,
+      date,
+      userId: String(req.userId),
+    }).returning();
+    return r!;
+  });
+  await logAudit(req.userId, "create", "dollar_wallet", row.id,
+    `Purchase ${amountUsd} USD @ ${rate} from ${partyType} ${partyName} → ${wallet.name}, paid via ${account.name}`);
+  res.status(201).json({ ...row, createdAt: row.createdAt.toISOString(), walletName: wallet.name, accountName: account.name });
 });
 
 router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void> => {
-  const { productId, amountUsd, perCoinUsdRate, coinsPerUsd, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
-    productId?: number; amountUsd?: string; perCoinUsdRate?: string; coinsPerUsd?: string;
+  const { productId, walletId, amountUsd, perCoinUsdRate, coinsPerUsd, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
+    productId?: number; walletId?: number; amountUsd?: string; perCoinUsdRate?: string; coinsPerUsd?: string;
     exchangeRatePkr?: string; costPricePkr?: string | null; salePricePkr?: string | null; wholesalePricePkr?: string | null;
     date?: string; notes?: string | null;
   };
-  if (!productId || !amountUsd || (!perCoinUsdRate && !coinsPerUsd) || !exchangeRatePkr || !date) {
-    res.status(400).json({ error: "productId, amountUsd, perCoinUsdRate or coinsPerUsd, exchangeRatePkr, date required" });
+  if (!productId || !walletId || !amountUsd || (!perCoinUsdRate && !coinsPerUsd) || !exchangeRatePkr || !date) {
+    res.status(400).json({ error: "productId, walletId, amountUsd, perCoinUsdRate or coinsPerUsd, exchangeRatePkr, date required" });
     return;
   }
+  const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId), eq(walletsTable.currency, "USD")));
+  if (!wallet) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
   const usd = parseFloat(amountUsd);
   const fx = parseFloat(exchangeRatePkr);
   let qty = 0;
@@ -140,27 +194,45 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
     updates.wholesalePrice = fmt(parseFloat(wholesalePricePkr));
   }
 
-  await db.update(productsTable)
-    .set(updates)
-    .where(eq(productsTable.id, productId));
+  if (parseFloat(wallet.balance) < usd) {
+    res.status(400).json({ error: `Insufficient balance in ${wallet.name} (have $${wallet.balance}, need $${usd})` });
+    return;
+  }
 
-  const [row] = await db.insert(dollarWalletTable).values({
-    entryType: "topup",
-    amountUsd: fmt(usd),
-    rate: fmt(fx),
-    totalPkr: fmt(totalPkr),
-    partyName: product.name,
-    notes: notes ? `${notes} · ${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin` : `${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin`,
-    date,
-    userId: String(req.userId),
-  }).returning();
+  let row: typeof dollarWalletTable.$inferSelect;
+  try {
+    row = await db.transaction(async tx => {
+      const [freshWallet] = await tx.select().from(walletsTable).where(eq(walletsTable.id, walletId));
+      if (!freshWallet || parseFloat(freshWallet.balance) < usd) {
+        throw new Error(`Insufficient balance in ${wallet.name} (have $${freshWallet?.balance ?? 0}, need $${usd})`);
+      }
+      await tx.update(productsTable).set(updates).where(eq(productsTable.id, productId));
+      const newWalletBal = parseFloat(freshWallet.balance) - usd;
+      await tx.update(walletsTable).set({ balance: fmt(newWalletBal) }).where(eq(walletsTable.id, walletId));
+      const [r] = await tx.insert(dollarWalletTable).values({
+        entryType: "topup",
+        amountUsd: fmt(usd),
+        rate: fmt(fx),
+        totalPkr: fmt(totalPkr),
+        partyName: product.name,
+        walletId,
+        notes: notes ? `${notes} · ${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin · from ${wallet.name}` : `${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin · from ${wallet.name}`,
+        date,
+        userId: String(req.userId),
+      }).returning();
+      return r!;
+    });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Topup failed" });
+    return;
+  }
 
-  await logAudit(req.userId, "create", "dollar_wallet", row!.id,
+  await logAudit(req.userId, "create", "dollar_wallet", row.id,
     `Topup ${qty} ${product.name} for ${amountUsd} USD @ $${perCoinUsdRate}/coin (fx ${exchangeRatePkr})`);
 
   res.status(201).json({
-    ...row!,
-    createdAt: row!.createdAt.toISOString(),
+    ...row,
+    createdAt: row.createdAt.toISOString(),
     qty,
     newStock,
     newCostPerCoin: fmt(newCostPerCoin),
