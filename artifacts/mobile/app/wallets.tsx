@@ -409,7 +409,13 @@ export default function WalletsScreen() {
                   {products.map(p => {
                     const sel = topupForm.productId === String(p.id);
                     return (
-                      <TouchableOpacity key={p.id} onPress={() => setTopupForm(f => ({ ...f, productId: String(p.id) }))}
+                      <TouchableOpacity key={p.id} onPress={() => setTopupForm(f => ({
+                        ...f,
+                        productId: String(p.id),
+                        costPricePkr: parseFloat(p.costPrice || "0") > 0 ? parseFloat(p.costPrice).toFixed(4) : f.costPricePkr,
+                        salePricePkr: parseFloat(p.unitPrice || "0") > 0 ? parseFloat(p.unitPrice).toFixed(4) : f.salePricePkr,
+                        wholesalePricePkr: parseFloat(p.wholesalePrice || "0") > 0 ? parseFloat(p.wholesalePrice).toFixed(4) : f.wholesalePricePkr,
+                      }))}
                         style={[styles.acctChip, { backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : colors.border }]}>
                         <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{p.name}</Text>
                         <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : colors.mutedForeground }}>
@@ -436,7 +442,7 @@ export default function WalletsScreen() {
                       const next = { ...f, coinsPerUsd: v };
                       const cpu = parseFloat(v);
                       const fx = parseFloat(f.exchangeRatePkr || (lastRate > 0 ? String(lastRate) : "0"));
-                      if (cpu > 0 && fx > 0) {
+                      if (cpu > 0 && fx > 0 && !f.salePricePkr) {
                         next.salePricePkr = (fx / cpu).toFixed(4);
                       }
                       return next;
@@ -466,7 +472,7 @@ export default function WalletsScreen() {
                   const next = { ...f, exchangeRatePkr: v };
                   const fx = parseFloat(v);
                   const cpu = parseFloat(f.coinsPerUsd);
-                  if (cpu > 0 && fx > 0) {
+                  if (cpu > 0 && fx > 0 && !f.salePricePkr) {
                     next.salePricePkr = (fx / cpu).toFixed(4);
                   }
                   return next;
