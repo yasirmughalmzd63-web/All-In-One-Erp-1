@@ -44,7 +44,7 @@ function ClassicTabLayout() {
 
   const TAB_BG   = "#FCE7F3";
   const TAB_ACTIVE   = "#2563EB";
-  const TAB_INACTIVE = "#F472B6";
+  const TAB_INACTIVE = "#FFFFFF";
   const TAB_BORDER   = "#F9A8D4";
 
   return (
