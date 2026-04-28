@@ -431,15 +431,41 @@ export default function WalletsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>USD PER COIN</Text>
                   <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
-                    value={topupForm.perCoinUsdRate} onChangeText={v => setTopupForm(f => ({ ...f, perCoinUsdRate: v }))}
+                    value={topupForm.perCoinUsdRate}
+                    onChangeText={v => setTopupForm(f => {
+                      const next = { ...f, perCoinUsdRate: v };
+                      const per = parseFloat(v);
+                      const fx = parseFloat(f.exchangeRatePkr || (lastRate > 0 ? String(lastRate) : "0"));
+                      if (per > 0 && fx > 0) {
+                        next.salePricePkr = (per * fx).toFixed(2);
+                      }
+                      return next;
+                    })}
                     keyboardType="decimal-pad" placeholder="0.05" placeholderTextColor={colors.mutedForeground} />
                 </View>
               </View>
 
+              {topupForm.perCoinUsdRate && parseFloat(topupForm.perCoinUsdRate) > 0 ? (
+                <View style={{ backgroundColor: "#ECFDF5", borderRadius: 8, padding: 8, marginBottom: 12, borderWidth: 1, borderColor: "#10B981", flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Feather name="info" size={14} color="#059669" />
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#065F46" }}>
+                    1 USD = {(1 / parseFloat(topupForm.perCoinUsdRate)).toFixed(2)} coins
+                  </Text>
+                </View>
+              ) : null}
+
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>EXCHANGE RATE PKR/USD (for cost in PKR)</Text>
               <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
                 value={topupForm.exchangeRatePkr}
-                onChangeText={v => setTopupForm(f => ({ ...f, exchangeRatePkr: v }))}
+                onChangeText={v => setTopupForm(f => {
+                  const next = { ...f, exchangeRatePkr: v };
+                  const fx = parseFloat(v);
+                  const per = parseFloat(f.perCoinUsdRate);
+                  if (per > 0 && fx > 0) {
+                    next.salePricePkr = (per * fx).toFixed(2);
+                  }
+                  return next;
+                })}
                 keyboardType="decimal-pad"
                 placeholder={lastRate > 0 ? String(lastRate.toFixed(0)) : "280"}
                 placeholderTextColor={colors.mutedForeground} />
