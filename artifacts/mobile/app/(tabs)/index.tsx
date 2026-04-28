@@ -361,12 +361,9 @@ export default function POSScreen() {
               </View>
             </View>
           )}
-          <View style={{ alignItems: "flex-end", gap: 3 }}>
-            <View style={styles.userBadge}>
-              <Feather name="user" size={12} color={colors.primary} />
-              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.primary }}>{user?.name?.split(" ")[0] ?? "—"}</Text>
-            </View>
-            <Text style={styles.madeBy}>by Yasir Mughal</Text>
+          <View style={styles.userBadge}>
+            <Feather name="user" size={12} color={colors.primary} />
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.primary }}>{user?.name?.split(" ")[0] ?? "—"}</Text>
           </View>
         </View>
       </LinearGradient>
