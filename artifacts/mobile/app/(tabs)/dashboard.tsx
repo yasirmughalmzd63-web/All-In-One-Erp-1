@@ -188,6 +188,20 @@ const breakdownStyles = StyleSheet.create({
   totalValue: { fontFamily: "Inter_700Bold", fontSize: 18, maxWidth: 150 },
 });
 
+const outstandingStyles = StyleSheet.create({
+  card: { borderRadius: 16, padding: 16, gap: 14 },
+  row: { flexDirection: "row", alignItems: "stretch" },
+  col: { flex: 1, alignItems: "center", paddingVertical: 4 },
+  divider: { width: 1, alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.25)", marginHorizontal: 8 },
+  iconWrap: { width: 28, height: 28, borderRadius: 9, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center", marginBottom: 6 },
+  label: { fontFamily: "Inter_500Medium", fontSize: 11, color: "rgba(255,255,255,0.85)", letterSpacing: 0.4, marginBottom: 4 },
+  value: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFFFFF", maxWidth: 130, textAlign: "center" },
+  totalBox: { backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  totalLabel: { fontFamily: "Inter_700Bold", fontSize: 13, color: "#FFFFFF", letterSpacing: 0.3 },
+  totalValue: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFFFFF", maxWidth: 180 },
+  hint: { fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.7)", textAlign: "center", marginTop: -4 },
+});
+
 const locStyles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
   iconBox: { width: 32, height: 32, borderRadius: 9, alignItems: "center", justifyContent: "center" },
@@ -400,6 +414,50 @@ export default function DashboardScreen() {
                 </View>
               </View>
             </View>
+
+            {/* 2.6 Outstanding Balance — Cash Left + Stock Left after transfers */}
+            {(() => {
+              const cashLeft = parseFloat(dash.totalsBreakdown?.cash ?? "0") || 0;
+              const stockLeft = parseFloat(dash.totalsBreakdown?.stock ?? "0") || 0;
+              const outstanding = (cashLeft + stockLeft).toString();
+              return (
+                <View>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Outstanding Balance</Text>
+                  <View style={[outstandingStyles.card, { backgroundColor: colors.primary }]}>
+                    <View style={outstandingStyles.row}>
+                      <View style={outstandingStyles.col}>
+                        <View style={outstandingStyles.iconWrap}>
+                          <Feather name="dollar-sign" size={14} color="#FFFFFF" />
+                        </View>
+                        <Text style={outstandingStyles.label}>Cash Left</Text>
+                        <Text style={outstandingStyles.value} numberOfLines={1} adjustsFontSizeToFit>
+                          {fmtPKRk(cashLeft.toString())}
+                        </Text>
+                      </View>
+                      <View style={outstandingStyles.divider} />
+                      <View style={outstandingStyles.col}>
+                        <View style={outstandingStyles.iconWrap}>
+                          <Feather name="package" size={14} color="#FFFFFF" />
+                        </View>
+                        <Text style={outstandingStyles.label}>Stock Left</Text>
+                        <Text style={outstandingStyles.value} numberOfLines={1} adjustsFontSizeToFit>
+                          {fmtPKRk(stockLeft.toString())}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={outstandingStyles.totalBox}>
+                      <Text style={outstandingStyles.totalLabel}>Outstanding Balance</Text>
+                      <Text style={outstandingStyles.totalValue} numberOfLines={1} adjustsFontSizeToFit>
+                        {fmtPKRk(outstanding)}
+                      </Text>
+                    </View>
+                    <Text style={outstandingStyles.hint}>
+                      Cash + Stock remaining after all transfers
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
 
             {/* 3. Received Stock (period) */}
             <View>
