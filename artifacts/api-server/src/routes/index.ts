@@ -19,6 +19,7 @@ import seedRouter from "./seed";
 import currenciesRouter from "./currencies";
 import cashCountsRouter from "./cash-counts";
 import dollarWalletRouter from "./dollar-wallet";
+import reportsRouter from "./reports.js";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,6 @@ router.use(seedRouter);
 router.use(currenciesRouter);
 router.use(cashCountsRouter);
 router.use(dollarWalletRouter);
+router.use(reportsRouter);
 
 export default router;
