@@ -490,37 +490,71 @@ export default function POSScreen() {
           </View>
         )}
 
-        {/* ── Amount display ───────────────────────────────────────────── */}
+        {/* ── Amount + QTY + Presets (unified card) ───────────────────── */}
         <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.amountSection}>
-            <Text style={[styles.amountLabel, { color: colors.mutedForeground }]}>AMOUNT (8 DECIMALS)</Text>
-            <Text style={[styles.amountValue, { color: colors.text }]}>
-              {typedPart}
-              <Text style={{ color: colors.mutedForeground, opacity: 0.35 }}>{ghostPart}</Text>
-            </Text>
-          </View>
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <View style={styles.qtySection}>
-            <View>
-              <Text style={[styles.qtyLabel, { color: colors.mutedForeground }]}>
-                QTY{selectedProduct ? ` @ ${activePrice.toFixed(2)}/${selectedProduct.unit}` : ""}
-              </Text>
-              <Text style={[styles.qtyValue, {
-                color: stockWarning ? colors.danger : qty > 0 ? colors.success : colors.mutedForeground,
-              }]}>
-                {qty > 0 ? qty.toLocaleString() : "—"}
+
+          {/* Single row: AMOUNT | divider | QTY + copy */}
+          <View style={{ flexDirection: "row", alignItems: "stretch" }}>
+            {/* Amount side */}
+            <View style={{ flex: 1.1, padding: 12, paddingRight: 10 }}>
+              <Text style={[styles.amountLabel, { color: colors.mutedForeground, marginBottom: 2 }]}>AMOUNT</Text>
+              <Text style={[styles.amountValue, { color: colors.text, fontSize: 22 }]} numberOfLines={1} adjustsFontSizeToFit>
+                {typedPart}
+                <Text style={{ color: colors.mutedForeground, opacity: 0.3 }}>{ghostPart}</Text>
               </Text>
             </View>
-            <TouchableOpacity
-              style={[styles.copyBtn, {
-                backgroundColor: copiedQty ? colors.saleBg : colors.secondary,
-                borderColor: copiedQty ? colors.success : colors.border,
-              }]}
-              onPress={handleCopyQty} disabled={qty <= 0}
-            >
-              <Feather name={copiedQty ? "check" : "copy"} size={15} color={copiedQty ? colors.success : colors.primary} />
-              <Text style={[styles.copyText, { color: copiedQty ? colors.success : colors.primary }]}>{copiedQty ? "Copied!" : "Copy QTY"}</Text>
-            </TouchableOpacity>
+
+            {/* Vertical separator */}
+            <View style={{ width: 1, backgroundColor: colors.border, marginVertical: 10 }} />
+
+            {/* QTY side */}
+            <View style={{ flex: 1, padding: 12, paddingLeft: 10 }}>
+              <Text style={[styles.qtyLabel, { color: colors.mutedForeground, marginBottom: 2 }]}>
+                QTY{selectedProduct ? ` @ ${activePrice.toFixed(2)}` : ""}
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
+                <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 32, lineHeight: 38 }, {
+                  color: stockWarning ? colors.danger : qty > 0 ? colors.success : colors.mutedForeground,
+                }]}>
+                  {qty > 0 ? qty.toLocaleString() : "—"}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.copyBtn, {
+                    backgroundColor: copiedQty ? colors.saleBg : colors.secondary,
+                    borderColor: copiedQty ? colors.success : colors.border,
+                    paddingHorizontal: 8, paddingVertical: 6,
+                  }]}
+                  onPress={handleCopyQty} disabled={qty <= 0}
+                >
+                  <Feather name={copiedQty ? "check" : "copy"} size={13} color={copiedQty ? colors.success : colors.primary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+
+          {/* Preset buttons row */}
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          <View style={{ flexDirection: "row", gap: 8, padding: 10 }}>
+            {[500, 1000, 2000, 5000].map(preset => {
+              const isSelected = parseFloat(amount) === preset;
+              return (
+                <TouchableOpacity
+                  key={preset}
+                  style={[styles.presetBtn, {
+                    backgroundColor: isSelected ? colors.primary : colors.secondary,
+                    borderColor: isSelected ? colors.primary : colors.border,
+                  }]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                    setAmount(String(preset));
+                  }}
+                >
+                  <Text style={[styles.presetBtnText, { color: isSelected ? "#FFF" : colors.primary }]}>
+                    {preset >= 1000 ? `${preset / 1000}K` : preset}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -578,33 +612,6 @@ export default function POSScreen() {
             )}
             <Feather name="chevron-right" size={14} color={colors.mutedForeground} />
           </TouchableOpacity>
-        </View>
-
-        {/* ── Quick amount presets ─────────────────────────────────────── */}
-        <View style={[styles.presetRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.presetLabel, { color: colors.mutedForeground }]}>QUICK AMOUNT</Text>
-          <View style={{ flexDirection: "row", gap: 8 }}>
-            {[500, 1000, 2000, 5000].map(preset => {
-              const isSelected = parseFloat(amount) === preset;
-              return (
-                <TouchableOpacity
-                  key={preset}
-                  style={[styles.presetBtn, {
-                    backgroundColor: isSelected ? colors.primary : colors.secondary,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                  }]}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    setAmount(String(preset));
-                  }}
-                >
-                  <Text style={[styles.presetBtnText, { color: isSelected ? "#FFF" : colors.primary }]}>
-                    {preset >= 1000 ? `${preset / 1000}K` : preset}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
         </View>
 
         {/* ── Numpad ──────────────────────────────────────────────────── */}
