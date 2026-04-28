@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { customFetch } from "@workspace/api-client-react";
+import { customFetch, useListAccounts, useListProducts } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
 
@@ -29,7 +29,28 @@ const ENTRY_TYPES: { key: string; label: string; desc: string; sign: 1 | -1; col
   { key: "product",   label: "Sent Product",       desc: "Goods given — deduct USD",    sign: -1, color: "#DC2626", bg: "#FEE2E2", icon: "package" },
   { key: "partial",   label: "Partial Payment",    desc: "Part cash, part credit",      sign:  1, color: "#0891B2", bg: "#ECFEFF", icon: "divide-circle" },
   { key: "recovery",  label: "Credit Recovery",    desc: "Old credit recovered as USD", sign:  1, color: "#7C3AED", bg: "#F3E8FF", icon: "refresh-cw" },
+  { key: "purchase",  label: "Bought USD",         desc: "Bought from market account",   sign:  1, color: "#0EA5E9", bg: "#E0F2FE", icon: "shopping-bag" },
+  { key: "topup",     label: "Coin Top-up",        desc: "USD spent on coin stock",      sign: -1, color: "#9333EA", bg: "#F3E8FF", icon: "zap" },
 ];
+
+type Account = { id: number; name: string; type: string; currency: string; balance: string };
+type Product = { id: number; name: string; unit: string; stock: number; costPrice: string };
+
+const emptyBuyForm = {
+  amountUsd: "",
+  rate: "",
+  accountId: "",
+  notes: "",
+  date: new Date().toISOString().split("T")[0]!,
+};
+const emptyTopupForm = {
+  productId: "",
+  amountUsd: "",
+  perCoinUsdRate: "",
+  exchangeRatePkr: "",
+  notes: "",
+  date: new Date().toISOString().split("T")[0]!,
+};
 
 const emptyForm = {
   entryType: "received",
@@ -65,8 +86,17 @@ export default function WalletsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showBuyModal, setShowBuyModal] = useState(false);
+  const [showTopupModal, setShowTopupModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [buyForm, setBuyForm] = useState(emptyBuyForm);
+  const [topupForm, setTopupForm] = useState(emptyTopupForm);
   const [saving, setSaving] = useState(false);
+
+  const { data: accountsRaw } = useListAccounts();
+  const { data: productsRaw } = useListProducts();
+  const accounts = (accountsRaw ?? []) as unknown as Account[];
+  const products = (productsRaw ?? []) as unknown as Product[];
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -77,6 +107,70 @@ export default function WalletsScreen() {
   };
 
   React.useEffect(() => { load(); }, []);
+
+  const handleBuyUsd = async () => {
+    if (!buyForm.amountUsd || !buyForm.rate || !buyForm.accountId || !buyForm.date) {
+      Alert.alert("Error", "Amount, rate, account and date are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      await customFetch("/api/dollar-wallet/purchase", {
+        method: "POST",
+        body: JSON.stringify({
+          amountUsd: buyForm.amountUsd,
+          rate: buyForm.rate,
+          accountId: parseInt(buyForm.accountId, 10),
+          date: buyForm.date,
+          notes: buyForm.notes || null,
+        }),
+      });
+      setShowBuyModal(false);
+      setBuyForm(emptyBuyForm);
+      load();
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to buy USD");
+    }
+    setSaving(false);
+  };
+
+  const handleTopup = async () => {
+    if (!topupForm.productId || !topupForm.amountUsd || !topupForm.perCoinUsdRate || !topupForm.exchangeRatePkr || !topupForm.date) {
+      Alert.alert("Error", "Coin, USD amount, per-coin USD rate, PKR rate and date are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await customFetch<{ qty: number; newStock: number }>("/api/dollar-wallet/topup", {
+        method: "POST",
+        body: JSON.stringify({
+          productId: parseInt(topupForm.productId, 10),
+          amountUsd: topupForm.amountUsd,
+          perCoinUsdRate: topupForm.perCoinUsdRate,
+          exchangeRatePkr: topupForm.exchangeRatePkr,
+          date: topupForm.date,
+          notes: topupForm.notes || null,
+        }),
+      });
+      Alert.alert("Top-up complete", `Added ${res.qty} coins · new stock ${res.newStock}`);
+      setShowTopupModal(false);
+      setTopupForm(emptyTopupForm);
+      load();
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to top-up coins");
+    }
+    setSaving(false);
+  };
+
+  const topupQty = topupForm.amountUsd && topupForm.perCoinUsdRate
+    ? Math.floor(parseFloat(topupForm.amountUsd) / parseFloat(topupForm.perCoinUsdRate || "0"))
+    : 0;
+  const topupPkr = topupForm.amountUsd && topupForm.exchangeRatePkr
+    ? parseFloat(topupForm.amountUsd) * parseFloat(topupForm.exchangeRatePkr)
+    : 0;
+  const buyPkr = buyForm.amountUsd && buyForm.rate
+    ? parseFloat(buyForm.amountUsd) * parseFloat(buyForm.rate)
+    : 0;
 
   const totalUsd = entries.reduce((sum, e) => {
     const et = ENTRY_TYPES.find(t => t.key === e.entryType);
@@ -185,6 +279,16 @@ export default function WalletsScreen() {
             </Text>
           </View>
         </View>
+        <View style={styles.quickRow}>
+          <TouchableOpacity style={styles.quickBtn} onPress={() => setShowBuyModal(true)}>
+            <Feather name="shopping-bag" size={16} color="#FFF" />
+            <Text style={styles.quickText}>Buy USD</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "rgba(147,51,234,0.85)" }]} onPress={() => setShowTopupModal(true)}>
+            <Feather name="zap" size={16} color="#FFF" />
+            <Text style={styles.quickText}>Top-up Coins</Text>
+          </TouchableOpacity>
+        </View>
       </LinearGradient>
 
       {loading ? (
@@ -209,6 +313,146 @@ export default function WalletsScreen() {
       <TouchableOpacity style={[styles.fab, { backgroundColor: "#0891B2" }]} onPress={() => setShowModal(true)}>
         <Feather name="plus" size={24} color="#FFF" />
       </TouchableOpacity>
+
+      {/* BUY USD MODAL */}
+      <Modal visible={showBuyModal} animationType="slide" transparent onRequestClose={() => setShowBuyModal(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "92%" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Buy USD from Account</Text>
+              <TouchableOpacity onPress={() => setShowBuyModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+            </View>
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PAY FROM ACCOUNT</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {accounts.map(a => {
+                    const sel = buyForm.accountId === String(a.id);
+                    return (
+                      <TouchableOpacity key={a.id} onPress={() => setBuyForm(f => ({ ...f, accountId: String(a.id) }))}
+                        style={[styles.acctChip, { backgroundColor: sel ? "#0EA5E9" : colors.card, borderColor: sel ? "#0EA5E9" : colors.border }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{a.name}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : colors.mutedForeground }}>
+                          ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>USD AMOUNT</Text>
+                  <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={buyForm.amountUsd} onChangeText={v => setBuyForm(f => ({ ...f, amountUsd: v }))}
+                    keyboardType="decimal-pad" placeholder="100" placeholderTextColor={colors.mutedForeground} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>RATE PKR/USD</Text>
+                  <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={buyForm.rate} onChangeText={v => setBuyForm(f => ({ ...f, rate: v }))}
+                    keyboardType="decimal-pad" placeholder="280" placeholderTextColor={colors.mutedForeground} />
+                </View>
+              </View>
+
+              <View style={[styles.totalBox, { backgroundColor: "#E0F2FE", borderColor: "#0EA5E9" }]}>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground }}>Will deduct from account</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: "#0369A1" }}>
+                  ₨{buyPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </Text>
+              </View>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DATE</Text>
+              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
+                value={buyForm.date} onChangeText={v => setBuyForm(f => ({ ...f, date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} />
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>NOTES (OPTIONAL)</Text>
+              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 20 }]}
+                value={buyForm.notes} onChangeText={v => setBuyForm(f => ({ ...f, notes: v }))} placeholder="Any notes..." placeholderTextColor={colors.mutedForeground} multiline />
+
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: "#0EA5E9", opacity: saving ? 0.6 : 1 }]} disabled={saving} onPress={handleBuyUsd}>
+                <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Buy USD"}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* TOPUP COINS MODAL */}
+      <Modal visible={showTopupModal} animationType="slide" transparent onRequestClose={() => setShowTopupModal(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "92%" }}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Top-up Coins with USD</Text>
+              <TouchableOpacity onPress={() => setShowTopupModal(false)}><Feather name="x" size={22} color={colors.mutedForeground} /></TouchableOpacity>
+            </View>
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>COIN PRODUCT</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {products.map(p => {
+                    const sel = topupForm.productId === String(p.id);
+                    return (
+                      <TouchableOpacity key={p.id} onPress={() => setTopupForm(f => ({ ...f, productId: String(p.id) }))}
+                        style={[styles.acctChip, { backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : colors.border }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{p.name}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : colors.mutedForeground }}>
+                          stock {p.stock}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              <View style={{ flexDirection: "row", gap: 12, marginBottom: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>USD AMOUNT</Text>
+                  <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={topupForm.amountUsd} onChangeText={v => setTopupForm(f => ({ ...f, amountUsd: v }))}
+                    keyboardType="decimal-pad" placeholder="100" placeholderTextColor={colors.mutedForeground} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>USD PER COIN</Text>
+                  <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={topupForm.perCoinUsdRate} onChangeText={v => setTopupForm(f => ({ ...f, perCoinUsdRate: v }))}
+                    keyboardType="decimal-pad" placeholder="0.05" placeholderTextColor={colors.mutedForeground} />
+                </View>
+              </View>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>EXCHANGE RATE PKR/USD (for cost in PKR)</Text>
+              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
+                value={topupForm.exchangeRatePkr}
+                onChangeText={v => setTopupForm(f => ({ ...f, exchangeRatePkr: v }))}
+                keyboardType="decimal-pad"
+                placeholder={lastRate > 0 ? String(lastRate.toFixed(0)) : "280"}
+                placeholderTextColor={colors.mutedForeground} />
+
+              <View style={[styles.totalBox, { backgroundColor: "#F3E8FF", borderColor: "#9333EA" }]}>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground }}>You will receive</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: "#7C3AED" }}>{topupQty} coins</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 4 }}>
+                  Stock cost: ₨{topupPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  {topupQty > 0 ? ` (₨${(topupPkr / topupQty).toFixed(2)} / coin)` : ""}
+                </Text>
+              </View>
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DATE</Text>
+              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 12 }]}
+                value={topupForm.date} onChangeText={v => setTopupForm(f => ({ ...f, date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} />
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>NOTES (OPTIONAL)</Text>
+              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 20 }]}
+                value={topupForm.notes} onChangeText={v => setTopupForm(f => ({ ...f, notes: v }))} placeholder="e.g. Hayuki batch from Binance" placeholderTextColor={colors.mutedForeground} multiline />
+
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: "#9333EA", opacity: saving ? 0.6 : 1 }]} disabled={saving} onPress={handleTopup}>
+                <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Top-up Coins"}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showModal} animationType="slide" transparent onRequestClose={() => setShowModal(false)}>
         <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
@@ -332,4 +576,8 @@ const styles = StyleSheet.create({
   totalBox: { borderWidth: 1.5, borderRadius: 12, padding: 16, marginBottom: 16, alignItems: "center", gap: 4 },
   saveBtn: { borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 8 },
   saveBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" },
+  quickRow: { flexDirection: "row", gap: 10, marginTop: 12 },
+  quickBtn: { flex: 1, backgroundColor: "rgba(14,165,233,0.85)", borderRadius: 12, paddingVertical: 12, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
+  quickText: { fontFamily: "Inter_700Bold", fontSize: 13, color: "#FFF" },
+  acctChip: { borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, gap: 2, minWidth: 110 },
 });
