@@ -20,11 +20,12 @@ const MANAGEMENT_ITEMS: MenuItem[] = [
 ];
 
 const INVENTORY_ITEMS: MenuItem[] = [
-  { label: "Topup",            icon: "activity",    route: "/daily-report",     color: "#0F172A", bg: "#F1F5F9", desc: "Stock, bank & credit in PKR/$",       module: "dashboard" },
-  { label: "Inventory Ledger", icon: "package",     route: "/inventory-ledger", color: "#059669", bg: "#ECFDF5", desc: "Opening / Received / Sold / Balance", module: "products" },
-  { label: "App Summary",      icon: "map",         route: "/location-summary", color: "#0891B2", bg: "#ECFEFF", desc: "Per-app sales & profit",              module: "dashboard" },
-  { label: "Cash Flow",        icon: "trending-up", route: "/cash-flow",        color: "#0369A1", bg: "#E0F2FE", desc: "Per-account credits & debits",        module: "accounts" },
-  { label: "Dollar Wallet",    icon: "pocket",      route: "/wallets",          color: "#0369A1", bg: "#E0F2FE", desc: "USD ledger & exchange",               module: "currency" },
+  { label: "Topup",            icon: "activity",    route: "/daily-report",              color: "#0F172A", bg: "#F1F5F9", desc: "Stock, bank & credit in PKR/$",       module: "dashboard" },
+  { label: "Inventory Ledger", icon: "package",     route: "/inventory-ledger",          color: "#059669", bg: "#ECFDF5", desc: "Opening / Received / Sold / Balance", module: "products" },
+  { label: "App Summary",      icon: "map",         route: "/location-summary",          color: "#0891B2", bg: "#ECFEFF", desc: "Per-app sales & profit",              module: "dashboard" },
+  { label: "Cash Flow",        icon: "trending-up", route: "/cash-flow",                 color: "#0369A1", bg: "#E0F2FE", desc: "Per-account credits & debits",        module: "accounts" },
+  { label: "Dollar Wallet",    icon: "pocket",      route: "/wallets",                   color: "#0369A1", bg: "#E0F2FE", desc: "USD ledger & exchange",               module: "currency" },
+  { label: "Cust. $ Report",   icon: "users",       route: "/customer-dollar-report",    color: "#0891B2", bg: "#ECFEFF", desc: "Customer USD activity & balances",    module: "currency" },
 ];
 
 const REPORTS_ITEMS: MenuItem[] = [

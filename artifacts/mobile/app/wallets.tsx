@@ -1,5 +1,5 @@
 import { LinearGradient } from "expo-linear-gradient";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator, Alert, FlatList, Modal, Platform,
@@ -90,6 +90,7 @@ export default function WalletsScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const { user } = useAuth();
+  const router = useRouter();
   const isAdmin = user?.role === "admin";
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
@@ -345,6 +346,9 @@ export default function WalletsScreen() {
           <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "rgba(147,51,234,0.85)" }]} onPress={() => setShowTopupModal(true)}>
             
             <Text style={styles.quickText}>Top-up Coins</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "rgba(2,132,199,0.85)" }]} onPress={() => router.push("/customer-dollar-report" as never)}>
+            <Text style={styles.quickText}>Cust. Report</Text>
           </TouchableOpacity>
         </View>
 

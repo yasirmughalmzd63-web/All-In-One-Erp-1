@@ -4,6 +4,7 @@ import {
   db, locationsTable, accountsTable, productsTable,
   creditsTable, salesTable, saleItemsTable, purchasesTable, purchaseItemsTable,
   expensesTable, usersTable, auditLogsTable, stockTransfersTable,
+  dollarWalletTable, customersTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 
@@ -684,6 +685,127 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
     receivables: { total: recRow?.total ?? "0", count: parseInt(recRow?.count ?? "0") },
     payables:    { total: payRow?.total ?? "0", count: parseInt(payRow?.count ?? "0") },
     recentDeletions: deletions.map(d => ({ ...d, createdAt: d.createdAt.toISOString() })),
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CUSTOMER DOLLAR REPORT  GET /api/reports/customer-dollar-report
+// Per customer: USD received / products sent / net balance — period + lifetime
+// ─────────────────────────────────────────────────────────────────────────────
+const USD_IN_TYPES  = ["received", "partial", "recovery", "purchase"];
+const USD_OUT_TYPES = ["product", "topup"];
+
+router.get("/reports/customer-dollar-report", requireAuth, async (req, res): Promise<void> => {
+  const { start, end, allTime } = parseDateRange(req as never);
+
+  // All customers
+  const customers = await db.select({ id: customersTable.id, name: customersTable.name, phone: customersTable.phone })
+    .from(customersTable)
+    .where(eq(customersTable.isActive, true));
+
+  if (customers.length === 0) {
+    res.json({ customers: [], totals: { periodUsdIn: "0", periodUsdOut: "0", periodNet: "0", lifetimeUsdIn: "0", lifetimeUsdOut: "0", lifetimeNet: "0" }, startDate: start.toISOString(), endDate: end.toISOString(), allTime });
+    return;
+  }
+
+  const customerIds = customers.map(c => c.id);
+
+  // Period aggregation per customer
+  const periodConds = [eq(dollarWalletTable.partyType, "customer"), inArray(dollarWalletTable.partyId, customerIds)];
+  if (!allTime) {
+    periodConds.push(gte(dollarWalletTable.date, localDayString(start)));
+    periodConds.push(lte(dollarWalletTable.date, localDayString(end)));
+  }
+
+  const periodRows = await db.select({
+    partyId: dollarWalletTable.partyId,
+    entryType: dollarWalletTable.entryType,
+    usd: sql<string>`coalesce(sum(cast(${dollarWalletTable.amountUsd} as numeric)), 0)`,
+    pkr: sql<string>`coalesce(sum(cast(${dollarWalletTable.totalPkr} as numeric)), 0)`,
+    count: sql<string>`count(*)`,
+  }).from(dollarWalletTable).where(and(...periodConds)).groupBy(dollarWalletTable.partyId, dollarWalletTable.entryType);
+
+  // Lifetime aggregation per customer
+  const lifetimeRows = await db.select({
+    partyId: dollarWalletTable.partyId,
+    entryType: dollarWalletTable.entryType,
+    usd: sql<string>`coalesce(sum(cast(${dollarWalletTable.amountUsd} as numeric)), 0)`,
+    pkr: sql<string>`coalesce(sum(cast(${dollarWalletTable.totalPkr} as numeric)), 0)`,
+    count: sql<string>`count(*)`,
+  }).from(dollarWalletTable)
+    .where(and(eq(dollarWalletTable.partyType, "customer"), inArray(dollarWalletTable.partyId, customerIds)))
+    .groupBy(dollarWalletTable.partyId, dollarWalletTable.entryType);
+
+  // Build maps: partyId -> { entryType -> { usd, pkr, count } }
+  type AggRow = { usd: number; pkr: number; count: number };
+  const buildMap = (rows: { partyId: number | null; entryType: string; usd: string; pkr: string; count: string }[]) => {
+    const m = new Map<number, Map<string, AggRow>>();
+    for (const r of rows) {
+      if (!r.partyId) continue;
+      if (!m.has(r.partyId)) m.set(r.partyId, new Map());
+      m.get(r.partyId)!.set(r.entryType, { usd: parseFloat(r.usd), pkr: parseFloat(r.pkr), count: parseInt(r.count) });
+    }
+    return m;
+  };
+
+  const periodMap   = buildMap(periodRows);
+  const lifetimeMap = buildMap(lifetimeRows);
+
+  const agg = (byType: Map<string, AggRow>, types: string[]) =>
+    types.reduce((s, t) => ({ usd: s.usd + (byType.get(t)?.usd ?? 0), pkr: s.pkr + (byType.get(t)?.pkr ?? 0), count: s.count + (byType.get(t)?.count ?? 0) }), { usd: 0, pkr: 0, count: 0 });
+
+  const result = customers.map(c => {
+    const pm = periodMap.get(c.id) ?? new Map<string, AggRow>();
+    const lm = lifetimeMap.get(c.id) ?? new Map<string, AggRow>();
+
+    const pIn  = agg(pm, USD_IN_TYPES);
+    const pOut = agg(pm, USD_OUT_TYPES);
+    const lIn  = agg(lm, USD_IN_TYPES);
+    const lOut = agg(lm, USD_OUT_TYPES);
+
+    return {
+      customerId:   c.id,
+      customerName: c.name,
+      phone:        c.phone ?? null,
+      period: {
+        usdIn:    pIn.usd.toFixed(2),
+        usdOut:   pOut.usd.toFixed(2),
+        netUsd:   (pIn.usd - pOut.usd).toFixed(2),
+        pkrTotal: (pIn.pkr + pOut.pkr).toFixed(2),
+        entryCount: pIn.count + pOut.count,
+      },
+      lifetime: {
+        usdIn:    lIn.usd.toFixed(2),
+        usdOut:   lOut.usd.toFixed(2),
+        netUsd:   (lIn.usd - lOut.usd).toFixed(2),
+        pkrTotal: (lIn.pkr + lOut.pkr).toFixed(2),
+        entryCount: lIn.count + lOut.count,
+      },
+    };
+  }).sort((a, b) => parseFloat(b.lifetime.usdIn) - parseFloat(a.lifetime.usdIn));
+
+  const totals = result.reduce((acc, r) => ({
+    periodUsdIn:  acc.periodUsdIn  + parseFloat(r.period.usdIn),
+    periodUsdOut: acc.periodUsdOut + parseFloat(r.period.usdOut),
+    periodNet:    acc.periodNet    + parseFloat(r.period.netUsd),
+    lifetimeUsdIn:  acc.lifetimeUsdIn  + parseFloat(r.lifetime.usdIn),
+    lifetimeUsdOut: acc.lifetimeUsdOut + parseFloat(r.lifetime.usdOut),
+    lifetimeNet:    acc.lifetimeNet    + parseFloat(r.lifetime.netUsd),
+  }), { periodUsdIn: 0, periodUsdOut: 0, periodNet: 0, lifetimeUsdIn: 0, lifetimeUsdOut: 0, lifetimeNet: 0 });
+
+  res.json({
+    startDate: start.toISOString(),
+    endDate:   end.toISOString(),
+    allTime,
+    customers: result,
+    totals: {
+      periodUsdIn:    totals.periodUsdIn.toFixed(2),
+      periodUsdOut:   totals.periodUsdOut.toFixed(2),
+      periodNet:      totals.periodNet.toFixed(2),
+      lifetimeUsdIn:  totals.lifetimeUsdIn.toFixed(2),
+      lifetimeUsdOut: totals.lifetimeUsdOut.toFixed(2),
+      lifetimeNet:    totals.lifetimeNet.toFixed(2),
+    },
   });
 });
 
