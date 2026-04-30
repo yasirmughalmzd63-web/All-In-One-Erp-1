@@ -708,34 +708,36 @@ export default function POSScreen() {
         {/* ── Today / Yesterday / Compare strip (TOP) ───────────────── */}
         <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 14, marginTop: 4, marginBottom: 0 }}>
           {/* Today */}
-          <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#BFDBFE", padding: 10, gap: 2 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Text style={{ fontSize: 13 }}>☀️</Text>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#1D4ED8", letterSpacing: 0.5 }}>TODAY</Text>
+          <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#BFDBFE", paddingHorizontal: 11, paddingVertical: 9 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 }}>
+              <Text style={{ fontSize: 11 }}>☀️</Text>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "#3B82F6", letterSpacing: 0.8, textTransform: "uppercase" }}>Today</Text>
               {todayCount !== null && (
-                <View style={{ marginLeft: "auto", backgroundColor: "#DBEAFE", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#1D4ED8" }}>{todayCount} sales</Text>
+                <View style={{ marginLeft: "auto", backgroundColor: "#DBEAFE", borderRadius: 5, paddingHorizontal: 4, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: "#1D4ED8" }}>{todayCount}×</Text>
                 </View>
               )}
             </View>
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#1E3A8A", marginTop: 1 }}>
-              {todaySales !== null ? `₨${todaySales >= 1000 ? `${(todaySales / 1000).toFixed(1)}K` : todaySales.toFixed(0)}` : "—"}
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 8, color: "#93C5FD", letterSpacing: 0.3, marginBottom: 1 }}>₨</Text>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: "#1E3A8A", lineHeight: 21 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {todaySales !== null ? Math.round(todaySales).toLocaleString() : "—"}
             </Text>
           </View>
 
           {/* Yesterday */}
-          <View style={{ flex: 1, backgroundColor: "#F5F3FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#DDD6FE", padding: 10, gap: 2 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Text style={{ fontSize: 13 }}>🌙</Text>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#6D28D9", letterSpacing: 0.5 }}>YESTERDAY</Text>
+          <View style={{ flex: 1, backgroundColor: "#F5F3FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#DDD6FE", paddingHorizontal: 11, paddingVertical: 9 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 }}>
+              <Text style={{ fontSize: 11 }}>🌙</Text>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "#8B5CF6", letterSpacing: 0.8, textTransform: "uppercase" }}>Yest.</Text>
               {yestCount !== null && (
-                <View style={{ marginLeft: "auto", backgroundColor: "#EDE9FE", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#6D28D9" }}>{yestCount} sales</Text>
+                <View style={{ marginLeft: "auto", backgroundColor: "#EDE9FE", borderRadius: 5, paddingHorizontal: 4, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: "#6D28D9" }}>{yestCount}×</Text>
                 </View>
               )}
             </View>
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#4C1D95", marginTop: 1 }}>
-              {yestSales !== null ? `₨${yestSales >= 1000 ? `${(yestSales / 1000).toFixed(1)}K` : yestSales.toFixed(0)}` : "—"}
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 8, color: "#C4B5FD", letterSpacing: 0.3, marginBottom: 1 }}>₨</Text>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: "#4C1D95", lineHeight: 21 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {yestSales !== null ? Math.round(yestSales).toLocaleString() : "—"}
             </Text>
           </View>
 
@@ -745,17 +747,18 @@ export default function POSScreen() {
               width: 68, backgroundColor: salesDiff >= 0 ? "#ECFDF5" : "#FEF2F2",
               borderRadius: 14, borderWidth: 1.5,
               borderColor: salesDiff >= 0 ? "#6EE7B7" : "#FECACA",
-              padding: 8, alignItems: "center", justifyContent: "center", gap: 2,
+              paddingHorizontal: 6, paddingVertical: 9,
+              alignItems: "center", justifyContent: "center", gap: 2,
             }}>
-              <Text style={{ fontSize: 18 }}>{salesDiff >= 0 ? "📈" : "📉"}</Text>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: salesDiff >= 0 ? "#065F46" : "#991B1B" }}>
-                {salesDiff >= 0 ? "+" : ""}{salesDiff >= 1000 ? `${(salesDiff / 1000).toFixed(1)}K` : salesDiff.toFixed(0)}
-              </Text>
+              <Text style={{ fontSize: 17 }}>{salesDiff >= 0 ? "📈" : "📉"}</Text>
               {salesDiffPct !== null && (
-                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: salesDiff >= 0 ? "#059669" : "#DC2626" }}>
-                  {salesDiff >= 0 ? "▲" : "▼"}{Math.abs(salesDiffPct).toFixed(1)}%
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: salesDiff >= 0 ? "#065F46" : "#991B1B", lineHeight: 15 }}>
+                  {salesDiff >= 0 ? "+" : ""}{Math.abs(salesDiffPct).toFixed(1)}%
                 </Text>
               )}
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 8, color: salesDiff >= 0 ? "#059669" : "#DC2626" }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                {salesDiff >= 0 ? "▲" : "▼"} {Math.abs(salesDiff) >= 1000 ? `${(Math.abs(salesDiff)/1000).toFixed(1)}K` : Math.abs(salesDiff).toFixed(0)}
+              </Text>
             </View>
           ) : (
             <View style={{ width: 68, backgroundColor: colors.secondary, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, padding: 8, alignItems: "center", justifyContent: "center", gap: 3 }}>
