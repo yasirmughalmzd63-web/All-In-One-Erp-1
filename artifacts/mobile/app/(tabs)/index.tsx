@@ -705,20 +705,12 @@ export default function POSScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
 
-        {/* ── Balance tiles ──────────────────────────────────────────── */}
-        <View style={styles.balanceGrid}>
-          <BalanceTile label="BANK" emoji="🏦" value={bankBal} color="#2563EB" accentBg="#EFF6FF" colors={colors} />
-          <BalanceTile label="STOCK" emoji="📦" value={stockVal} color="#D97706" accentBg="#FFF7ED" colors={colors} />
-          <BalanceTile label="CREDIT" emoji="📈" value={creditIn} color="#7C3AED" accentBg="#F3E8FF" colors={colors} />
-          <BalanceTile label="TOTAL" emoji="💰" value={grandTotal} color="#059669" accentBg="#ECFDF5" colors={colors} isTotal />
-        </View>
-
-        {/* ── Today / Yesterday sales strip ─────────────────────────── */}
-        <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 14, marginBottom: 10 }}>
+        {/* ── Today / Yesterday / Compare strip (TOP) ───────────────── */}
+        <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 14, marginTop: 4, marginBottom: 0 }}>
           {/* Today */}
           <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#BFDBFE", padding: 10, gap: 2 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Text style={{ fontSize: 14 }}>☀️</Text>
+              <Text style={{ fontSize: 13 }}>☀️</Text>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#1D4ED8", letterSpacing: 0.5 }}>TODAY</Text>
               {todayCount !== null && (
                 <View style={{ marginLeft: "auto", backgroundColor: "#DBEAFE", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
@@ -726,7 +718,7 @@ export default function POSScreen() {
                 </View>
               )}
             </View>
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#1E3A8A", marginTop: 2 }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#1E3A8A", marginTop: 1 }}>
               {todaySales !== null ? `₨${todaySales >= 1000 ? `${(todaySales / 1000).toFixed(1)}K` : todaySales.toFixed(0)}` : "—"}
             </Text>
           </View>
@@ -734,7 +726,7 @@ export default function POSScreen() {
           {/* Yesterday */}
           <View style={{ flex: 1, backgroundColor: "#F5F3FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#DDD6FE", padding: 10, gap: 2 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-              <Text style={{ fontSize: 14 }}>🌙</Text>
+              <Text style={{ fontSize: 13 }}>🌙</Text>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#6D28D9", letterSpacing: 0.5 }}>YESTERDAY</Text>
               {yestCount !== null && (
                 <View style={{ marginLeft: "auto", backgroundColor: "#EDE9FE", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
@@ -742,35 +734,54 @@ export default function POSScreen() {
                 </View>
               )}
             </View>
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#4C1D95", marginTop: 2 }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#4C1D95", marginTop: 1 }}>
               {yestSales !== null ? `₨${yestSales >= 1000 ? `${(yestSales / 1000).toFixed(1)}K` : yestSales.toFixed(0)}` : "—"}
             </Text>
           </View>
 
-          {/* Diff */}
+          {/* Compare */}
           {salesDiff !== null ? (
             <View style={{
-              width: 72, backgroundColor: salesDiff >= 0 ? "#ECFDF5" : "#FEF2F2",
+              width: 68, backgroundColor: salesDiff >= 0 ? "#ECFDF5" : "#FEF2F2",
               borderRadius: 14, borderWidth: 1.5,
               borderColor: salesDiff >= 0 ? "#6EE7B7" : "#FECACA",
-              padding: 10, alignItems: "center", justifyContent: "center", gap: 3,
+              padding: 8, alignItems: "center", justifyContent: "center", gap: 2,
             }}>
-              <Text style={{ fontSize: 20 }}>{salesDiff >= 0 ? "📈" : "📉"}</Text>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: salesDiff >= 0 ? "#065F46" : "#991B1B" }}>
+              <Text style={{ fontSize: 18 }}>{salesDiff >= 0 ? "📈" : "📉"}</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: salesDiff >= 0 ? "#065F46" : "#991B1B" }}>
                 {salesDiff >= 0 ? "+" : ""}{salesDiff >= 1000 ? `${(salesDiff / 1000).toFixed(1)}K` : salesDiff.toFixed(0)}
               </Text>
               {salesDiffPct !== null && (
                 <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: salesDiff >= 0 ? "#059669" : "#DC2626" }}>
-                  {salesDiff >= 0 ? "▲" : "▼"} {Math.abs(salesDiffPct).toFixed(1)}%
+                  {salesDiff >= 0 ? "▲" : "▼"}{Math.abs(salesDiffPct).toFixed(1)}%
                 </Text>
               )}
             </View>
           ) : (
-            <View style={{ width: 72, backgroundColor: colors.secondary, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, padding: 10, alignItems: "center", justifyContent: "center", gap: 4 }}>
-              <Text style={{ fontSize: 18 }}>📊</Text>
+            <View style={{ width: 68, backgroundColor: colors.secondary, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, padding: 8, alignItems: "center", justifyContent: "center", gap: 3 }}>
+              <Text style={{ fontSize: 16 }}>📊</Text>
               <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: colors.mutedForeground, textAlign: "center" }}>vs prev</Text>
             </View>
           )}
+        </View>
+
+        {/* ── Grid divider line ──────────────────────────────────────── */}
+        <View style={{ marginHorizontal: 14, marginVertical: 8, flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+          <View style={{ flexDirection: "row", gap: 3 }}>
+            {[0,1,2,3].map(i => (
+              <View key={i} style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: colors.border }} />
+            ))}
+          </View>
+          <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+        </View>
+
+        {/* ── Balance tiles (BOTTOM) ─────────────────────────────────── */}
+        <View style={[styles.balanceGrid, { marginTop: 0 }]}>
+          <BalanceTile label="BANK" emoji="🏦" value={bankBal} color="#2563EB" accentBg="#EFF6FF" colors={colors} />
+          <BalanceTile label="STOCK" emoji="📦" value={stockVal} color="#D97706" accentBg="#FFF7ED" colors={colors} />
+          <BalanceTile label="CREDIT" emoji="📈" value={creditIn} color="#7C3AED" accentBg="#F3E8FF" colors={colors} />
+          <BalanceTile label="TOTAL" emoji="💰" value={grandTotal} color="#059669" accentBg="#ECFDF5" colors={colors} isTotal />
         </View>
 
         {/* ── Product picker ───────────────────────────────────────────── */}
