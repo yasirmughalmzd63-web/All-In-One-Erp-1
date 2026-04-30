@@ -729,6 +729,95 @@ router.get("/dollar-wallet/wallets/:id/transactions", requireAuth, async (req, r
   });
 });
 
+// GET /api/dollar-wallet/wallets/:id/summary
+// Detailed view for one dollar wallet — summary stats, breakdown by entry type
+// and by month, plus the full transaction ledger (newest first).
+router.get("/dollar-wallet/wallets/:id/summary", requireAuth, async (req, res): Promise<void> => {
+  const walletId = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  if (isNaN(walletId)) { res.status(400).json({ error: "Invalid wallet id" }); return; }
+
+  const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
+  if (!wallet) { res.status(404).json({ error: "Wallet not found" }); return; }
+
+  const txs = await db.select().from(dollarWalletTable)
+    .where(eq(dollarWalletTable.walletId, walletId))
+    .orderBy(desc(dollarWalletTable.createdAt));
+
+  // Direction map: which entry types are inflows vs outflows for this wallet
+  const IN_TYPES  = new Set(["received", "purchase", "transfer_in"]);
+  const OUT_TYPES = new Set(["product",  "topup",    "transfer_out"]);
+
+  const ENTRY_LABELS: Record<string, { label: string; direction: "in" | "out" | "neutral" }> = {
+    received:     { label: "Received USD",  direction: "in"  },
+    purchase:     { label: "Bought USD",    direction: "in"  },
+    transfer_in:  { label: "Transfer In",   direction: "in"  },
+    product:      { label: "Sent Product",  direction: "out" },
+    topup:        { label: "Coin Top-up",   direction: "out" },
+    transfer_out: { label: "Transfer Out",  direction: "out" },
+  };
+
+  let totalIn = 0, totalOut = 0, totalInPkr = 0, totalOutPkr = 0;
+  const monthMap: Record<string, { in: number; out: number; inPkr: number; outPkr: number; count: number }> = {};
+  const typeMap: Record<string, { count: number; totalUsd: number; totalPkr: number }> = {};
+
+  for (const t of txs) {
+    const amt = parseFloat(t.amountUsd);
+    const pkr = parseFloat(t.totalPkr);
+    const monthKey = t.date.slice(0, 7);
+
+    if (!monthMap[monthKey]) monthMap[monthKey] = { in: 0, out: 0, inPkr: 0, outPkr: 0, count: 0 };
+    monthMap[monthKey]!.count += 1;
+
+    if (!typeMap[t.entryType]) typeMap[t.entryType] = { count: 0, totalUsd: 0, totalPkr: 0 };
+    typeMap[t.entryType]!.count    += 1;
+    typeMap[t.entryType]!.totalUsd += amt;
+    typeMap[t.entryType]!.totalPkr += pkr;
+
+    if (IN_TYPES.has(t.entryType)) {
+      totalIn += amt; totalInPkr += pkr;
+      monthMap[monthKey]!.in += amt; monthMap[monthKey]!.inPkr += pkr;
+    } else if (OUT_TYPES.has(t.entryType)) {
+      totalOut += amt; totalOutPkr += pkr;
+      monthMap[monthKey]!.out += amt; monthMap[monthKey]!.outPkr += pkr;
+    }
+  }
+
+  const monthly = Object.entries(monthMap)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([month, v]) => ({ month, ...v, in: +v.in.toFixed(2), out: +v.out.toFixed(2), inPkr: +v.inPkr.toFixed(2), outPkr: +v.outPkr.toFixed(2) }));
+
+  const byEntryType = Object.entries(typeMap)
+    .sort(([, a], [, b]) => b.totalUsd - a.totalUsd)
+    .map(([entryType, v]) => ({
+      entryType,
+      label: ENTRY_LABELS[entryType]?.label ?? entryType,
+      direction: ENTRY_LABELS[entryType]?.direction ?? "neutral",
+      count: v.count,
+      totalUsd: fmt(v.totalUsd),
+      totalPkr: fmt(v.totalPkr),
+    }));
+
+  res.json({
+    wallet: { ...wallet, createdAt: wallet.createdAt.toISOString() },
+    summary: {
+      currentBalance: wallet.balance,
+      totalIn:    fmt(totalIn),
+      totalOut:   fmt(totalOut),
+      totalInPkr: fmt(totalInPkr),
+      totalOutPkr:fmt(totalOutPkr),
+      netUsd:     fmt(totalIn - totalOut),
+      txCount:    txs.length,
+    },
+    byEntryType,
+    monthly,
+    transactions: txs.map(t => ({
+      ...t,
+      createdAt: t.createdAt.toISOString(),
+      proofVerifiedAt: t.proofVerifiedAt ? t.proofVerifiedAt.toISOString() : null,
+    })),
+  });
+});
+
 router.delete("/dollar-wallet/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [existing] = await db.select().from(dollarWalletTable).where(eq(dollarWalletTable.id, id));
