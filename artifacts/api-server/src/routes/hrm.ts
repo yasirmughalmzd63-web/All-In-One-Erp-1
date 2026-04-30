@@ -2,7 +2,7 @@ import { Router } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import {
   db, employeesTable, attendanceTable, payrollTable,
-  employeeFinesTable, employeeBonusesTable,
+  employeeFinesTable, employeeBonusesTable, leaveRequestsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
@@ -343,6 +343,104 @@ router.get("/hrm/report", requireAuth, async (req, res): Promise<void> => {
     fines: filteredFines.map(f => ({ ...f, createdAt: f.createdAt.toISOString() })),
     bonuses: filteredBonuses.map(b => ({ ...b, createdAt: b.createdAt.toISOString() })),
   });
+});
+
+/* ───────────────────────── LEAVE REQUESTS ───────────────────────────────── */
+
+router.get("/hrm/leave", requireAuth, async (req, res): Promise<void> => {
+  const empId = req.query["employeeId"] ? parseInt(String(req.query["employeeId"]), 10) : null;
+  const status = req.query["status"] as string | undefined;
+
+  let rows = await db.select().from(leaveRequestsTable).orderBy(desc(leaveRequestsTable.createdAt));
+
+  if (!isAdmin(req) && req.userLocationId != null)
+    rows = rows.filter(r => r.locationId === req.userLocationId);
+  if (empId) rows = rows.filter(r => r.employeeId === empId);
+  if (status && status !== "all") rows = rows.filter(r => r.status === status);
+
+  res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString() })));
+});
+
+router.post("/hrm/leave", requireAuth, async (req, res): Promise<void> => {
+  const { employeeId, leaveType, startDate, endDate, totalDays, reason, locationId } = req.body as {
+    employeeId?: number; leaveType?: string; startDate?: string; endDate?: string;
+    totalDays?: string; reason?: string; locationId?: number;
+  };
+
+  if (!employeeId || !startDate || !endDate) {
+    res.status(400).json({ error: "employeeId, startDate, endDate are required" }); return;
+  }
+
+  const effectiveLocationId = !isAdmin(req) && req.userLocationId != null
+    ? req.userLocationId : (locationId ?? null);
+
+  const [row] = await db.insert(leaveRequestsTable).values({
+    employeeId,
+    leaveType: leaveType ?? "annual",
+    startDate,
+    endDate,
+    totalDays: totalDays ?? "1",
+    reason: reason ?? null,
+    status: "pending",
+    submittedBy: req.userId!,
+    locationId: effectiveLocationId,
+  }).returning();
+
+  await logAudit(req.userId, "create", "leave_request", row!.id, `Leave for employee #${employeeId} from ${startDate} to ${endDate}`);
+  res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString(), updatedAt: row!.updatedAt.toISOString() });
+});
+
+router.patch("/hrm/leave/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id!, 10);
+  const { status, reviewNotes, leaveType, startDate, endDate, totalDays, reason } = req.body as {
+    status?: string; reviewNotes?: string;
+    leaveType?: string; startDate?: string; endDate?: string; totalDays?: string; reason?: string;
+  };
+
+  const [existing] = await db.select().from(leaveRequestsTable).where(eq(leaveRequestsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Leave request not found" }); return; }
+
+  const updates: Record<string, unknown> = {};
+  const isReview = status === "approved" || status === "rejected";
+
+  if (isReview && !isAdmin(req)) {
+    const role = req.userRole ?? "";
+    if (role !== "manager" && role !== "admin" && role !== "super_admin") {
+      res.status(403).json({ error: "Only managers and admins can approve/reject leave" }); return;
+    }
+  }
+
+  if (status)      updates.status = status;
+  if (reviewNotes !== undefined) updates.reviewNotes = reviewNotes;
+  if (isReview)    updates.reviewedBy = req.userId;
+  if (leaveType)   updates.leaveType = leaveType;
+  if (startDate)   updates.startDate = startDate;
+  if (endDate)     updates.endDate = endDate;
+  if (totalDays)   updates.totalDays = totalDays;
+  if (reason !== undefined) updates.reason = reason;
+
+  const [row] = await db.update(leaveRequestsTable).set(updates).where(eq(leaveRequestsTable.id, id)).returning();
+  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+
+  if (isReview) await logAudit(req.userId, "update", "leave_request", id, `${status} leave request #${id}`);
+  res.json({ ...row, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() });
+});
+
+router.delete("/hrm/leave/:id", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id!, 10);
+  const [existing] = await db.select().from(leaveRequestsTable).where(eq(leaveRequestsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+
+  if (!isAdmin(req) && existing.submittedBy !== req.userId) {
+    res.status(403).json({ error: "Can only cancel your own leave requests" }); return;
+  }
+
+  if (existing.status === "approved" && !isAdmin(req)) {
+    res.status(422).json({ error: "Cannot cancel an approved leave request" }); return;
+  }
+
+  await db.delete(leaveRequestsTable).where(eq(leaveRequestsTable.id, id));
+  res.sendStatus(204);
 });
 
 export default router;

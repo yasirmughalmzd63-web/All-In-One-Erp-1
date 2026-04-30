@@ -11,8 +11,10 @@ import { useAuth, isAdminOrAbove } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { getApiUrl } from "@/lib/api";
 
-type Tab = "employees" | "attendance" | "payroll" | "report";
+type Tab = "employees" | "attendance" | "payroll" | "report" | "leaves";
 type AttendanceStatus = "present" | "absent" | "late" | "half_day" | "holiday";
+type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
+type LeaveType  = "annual" | "sick" | "casual" | "unpaid" | "emergency";
 type PayrollStatus = "pending" | "paid";
 type EmpStatus = "active" | "inactive";
 
@@ -44,6 +46,15 @@ interface Payroll {
   deductions: string; netSalary: string; status: PayrollStatus;
   paidAt?: string; notes?: string; createdAt: string;
 }
+interface LeaveRequest {
+  id: number; employeeId: number; leaveType: LeaveType;
+  startDate: string; endDate: string; totalDays: string;
+  reason?: string | null; status: LeaveStatus;
+  reviewedBy?: number | null; reviewNotes?: string | null;
+  submittedBy: number; locationId?: number | null;
+  createdAt: string;
+}
+
 interface HrmReport {
   summary: {
     totalEmployees: number; totalSalaryPaid: number; totalSalaryDue: number;
@@ -63,6 +74,22 @@ const NOW = new Date();
 const DEPARTMENTS = ["Sales","Operations","Finance","HR","IT","Management","Marketing","Customer Service","Logistics","Production","Admin"];
 const POSITIONS = ["Director","Manager","Senior Manager","Supervisor","Team Lead","Senior Executive","Executive","Officer","Coordinator","Assistant","Intern"];
 const PAYMENT_METHODS = ["Cash","Bank Transfer","Cheque","Online/Mobile"];
+
+const LEAVE_TYPES: LeaveType[] = ["annual", "sick", "casual", "unpaid", "emergency"];
+const LEAVE_TYPE_LABEL: Record<LeaveType, string> = {
+  annual: "Annual Leave", sick: "Sick Leave", casual: "Casual Leave",
+  unpaid: "Unpaid Leave", emergency: "Emergency Leave",
+};
+const LEAVE_TYPE_COLOR: Record<LeaveType, string> = {
+  annual: "#2563EB", sick: "#DC2626", casual: "#059669",
+  unpaid: "#6B7280", emergency: "#D97706",
+};
+const LEAVE_STATUS_COLOR: Record<LeaveStatus, { bg: string; text: string }> = {
+  pending:   { bg: "#FFF7ED", text: "#92400E" },
+  approved:  { bg: "#ECFDF5", text: "#065F46" },
+  rejected:  { bg: "#FEF2F2", text: "#991B1B" },
+  cancelled: { bg: "#F3F4F6", text: "#6B7280" },
+};
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const ALL_MONTHS = MONTHS.map((m, i) => ({ label: m, value: i + 1 }));
@@ -122,6 +149,21 @@ export default function HrmScreen() {
   const [payForm, setPayForm] = useState({ employeeId: 0, month: NOW.getMonth() + 1, year: NOW.getFullYear(), workingDays: "26", overtimeHours: "0", overtimeRate: "0", notes: "" });
   const [generating, setGenerating] = useState(false);
 
+  // — Leaves
+  const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
+  const [leavesLoading, setLeavesLoading] = useState(false);
+  const [leaveEmpFilter, setLeaveEmpFilter] = useState<number | null>(null);
+  const [leaveStatusFilter, setLeaveStatusFilter] = useState<LeaveStatus | "all">("all");
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
+  const [leaveForm, setLeaveForm] = useState({
+    employeeId: 0, leaveType: "annual" as LeaveType,
+    startDate: NOW.toISOString().slice(0, 10),
+    endDate: NOW.toISOString().slice(0, 10),
+    totalDays: "1", reason: "",
+  });
+  const [reviewModal, setReviewModal] = useState<LeaveRequest | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+
   // — Targets achievement badges
   const [pendingAchievements, setPendingAchievements] = useState<Record<number, number>>({});
 
@@ -179,6 +221,17 @@ export default function HrmScreen() {
     } finally { setPayLoading(false); }
   }, [token, payEmployee, payMonth, payYear]);
 
+  const fetchLeaves = useCallback(async () => {
+    setLeavesLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (leaveEmpFilter) params.set("employeeId", String(leaveEmpFilter));
+      if (leaveStatusFilter !== "all") params.set("status", leaveStatusFilter);
+      const r = await fetch(getApiUrl(`/api/hrm/leave?${params}`), { headers });
+      if (r.ok) setLeaves(await r.json());
+    } finally { setLeavesLoading(false); }
+  }, [token, leaveEmpFilter, leaveStatusFilter]);
+
   const fetchReport = useCallback(async () => {
     setReportLoading(true);
     try {
@@ -202,6 +255,7 @@ export default function HrmScreen() {
   useEffect(() => { if (activeTab === "attendance") fetchAttendance(); }, [activeTab, fetchAttendance]);
   useEffect(() => { if (activeTab === "payroll") { fetchPayroll(); fetchFinesAndBonuses(); } }, [activeTab, fetchPayroll, fetchFinesAndBonuses]);
   useEffect(() => { if (activeTab === "report") fetchReport(); }, [activeTab, fetchReport]);
+  useEffect(() => { if (activeTab === "leaves") fetchLeaves(); }, [activeTab, fetchLeaves]);
 
   /* ─── Employees CRUD ─── */
   const openEmpModal = (emp?: Employee) => {
@@ -386,6 +440,41 @@ export default function HrmScreen() {
     }
     return scores;
   }, [reportActiveEmployees, empPayrollMap, empFinesMap, empBonusMap]);
+
+  /* ─── Leaves ─── */
+  const submitLeave = async () => {
+    if (!leaveForm.employeeId) { Alert.alert("Error", "Select an employee"); return; }
+    if (!leaveForm.startDate || !leaveForm.endDate) { Alert.alert("Error", "Start and end dates are required"); return; }
+    const r = await fetch(getApiUrl("/api/hrm/leave"), {
+      method: "POST", headers,
+      body: JSON.stringify(leaveForm),
+    });
+    if (!r.ok) { Alert.alert("Error", (await r.json()).error ?? "Failed to submit leave"); return; }
+    setShowLeaveModal(false);
+    fetchLeaves();
+  };
+
+  const reviewLeave = async (lv: LeaveRequest, newStatus: "approved" | "rejected") => {
+    const r = await fetch(getApiUrl(`/api/hrm/leave/${lv.id}`), {
+      method: "PATCH", headers,
+      body: JSON.stringify({ status: newStatus, reviewNotes }),
+    });
+    if (!r.ok) { Alert.alert("Error", (await r.json()).error ?? "Failed"); return; }
+    setReviewModal(null);
+    setReviewNotes("");
+    fetchLeaves();
+  };
+
+  const cancelLeave = (lv: LeaveRequest) => {
+    Alert.alert("Cancel Leave", "Cancel this leave request?", [
+      { text: "No", style: "cancel" },
+      { text: "Yes", style: "destructive", onPress: async () => {
+        const r = await fetch(getApiUrl(`/api/hrm/leave/${lv.id}`), { method: "DELETE", headers });
+        if (!r.ok) { Alert.alert("Error", (await r.json()).error ?? "Failed"); return; }
+        fetchLeaves();
+      }},
+    ]);
+  };
 
   /* ─── Export Report CSV ─── */
   const exportReportCsv = async () => {
@@ -1213,10 +1302,143 @@ export default function HrmScreen() {
     );
   };
 
+  const renderLeavesTab = () => {
+    const empMap: Record<number, string> = {};
+    employees.forEach(e => { empMap[e.id] = e.name; });
+
+    const pendingCount  = leaves.filter(l => l.status === "pending").length;
+    const approvedCount = leaves.filter(l => l.status === "approved").length;
+    const rejectedCount = leaves.filter(l => l.status === "rejected").length;
+
+    return (
+      <View style={{ flex: 1 }}>
+        {/* ── Summary pills ── */}
+        <View style={[s.filterRow, { flexWrap: "wrap", gap: 8 }]}>
+          {([["all", "All", "#6B7280"], ["pending", "Pending", "#D97706"], ["approved", "Approved", "#059669"], ["rejected", "Rejected", "#DC2626"]] as [LeaveStatus | "all", string, string][]).map(([k, lbl, col]) => (
+            <TouchableOpacity key={k}
+              style={[s.seg, leaveStatusFilter === k && { backgroundColor: col, borderColor: col }]}
+              onPress={() => setLeaveStatusFilter(k)}>
+              <Text style={[s.segTxt, leaveStatusFilter === k && { color: "#fff" }]}>{lbl}</Text>
+              {k !== "all" && (
+                <View style={{ backgroundColor: leaveStatusFilter === k ? "rgba(255,255,255,0.25)" : col + "20", borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 4 }}>
+                  <Text style={{ fontSize: 9, fontFamily: "Inter_700Bold", color: leaveStatusFilter === k ? "#fff" : col }}>
+                    {k === "pending" ? pendingCount : k === "approved" ? approvedCount : rejectedCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* ── Employee filter ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 6, gap: 6 }}>
+          <TouchableOpacity style={[s.seg, leaveEmpFilter === null && s.segActive]}
+            onPress={() => setLeaveEmpFilter(null)}>
+            <Text style={[s.segTxt, leaveEmpFilter === null && s.segTxtActive]}>All Staff</Text>
+          </TouchableOpacity>
+          {employees.filter(e => e.status === "active").map(e => (
+            <TouchableOpacity key={e.id}
+              style={[s.seg, leaveEmpFilter === e.id && s.segActive]}
+              onPress={() => setLeaveEmpFilter(leaveEmpFilter === e.id ? null : e.id)}>
+              <Text style={[s.segTxt, leaveEmpFilter === e.id && s.segTxtActive]} numberOfLines={1}>{e.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* ── List ── */}
+        <FlatList
+          data={leaves}
+          keyExtractor={l => String(l.id)}
+          refreshControl={<RefreshControl refreshing={leavesLoading} onRefresh={fetchLeaves} />}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120, gap: 8, paddingTop: 4 }}
+          ListEmptyComponent={<Text style={s.empty}>{leavesLoading ? "Loading…" : "No leave requests"}</Text>}
+          renderItem={({ item: lv }) => {
+            const empName = empMap[lv.employeeId] ?? `Employee #${lv.employeeId}`;
+            const typeColor = LEAVE_TYPE_COLOR[lv.leaveType] ?? "#6B7280";
+            const statusStyle = LEAVE_STATUS_COLOR[lv.status] ?? LEAVE_STATUS_COLOR["pending"]!;
+            const canReview = isAdmin || (user?.role === "manager");
+            return (
+              <View style={[s.card, { borderLeftWidth: 4, borderLeftColor: typeColor }]}>
+                <View style={{ flex: 1 }}>
+                  {/* Header row */}
+                  <View style={[s.cardRow, { marginBottom: 4 }]}>
+                    <Text style={s.cardTitle}>{empName}</Text>
+                    <View style={[s.badge, { backgroundColor: statusStyle.bg }]}>
+                      <Text style={[s.badgeTxt, { color: statusStyle.text }]}>{lv.status}</Text>
+                    </View>
+                  </View>
+
+                  {/* Leave type pill */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <View style={{ backgroundColor: typeColor + "18", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_600SemiBold", color: typeColor }}>
+                        {LEAVE_TYPE_LABEL[lv.leaveType]}
+                      </Text>
+                    </View>
+                    <Text style={s.cardSub}>
+                      {lv.totalDays} day{parseFloat(lv.totalDays) !== 1 ? "s" : ""}
+                    </Text>
+                  </View>
+
+                  {/* Dates */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <Feather name="calendar" size={12} color={colors.textSecondary} />
+                    <Text style={s.cardSub}>{lv.startDate} → {lv.endDate}</Text>
+                  </View>
+
+                  {/* Reason */}
+                  {lv.reason ? (
+                    <Text style={[s.cardSub, { fontStyle: "italic" }]} numberOfLines={2}>"{lv.reason}"</Text>
+                  ) : null}
+
+                  {/* Review notes */}
+                  {lv.reviewNotes ? (
+                    <Text style={[s.cardSub, { color: statusStyle.text }]} numberOfLines={2}>
+                      {lv.status === "approved" ? "✓" : "✗"} {lv.reviewNotes}
+                    </Text>
+                  ) : null}
+
+                  {/* Action buttons */}
+                  {lv.status === "pending" && (
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                      {canReview && (
+                        <>
+                          <TouchableOpacity
+                            style={{ backgroundColor: "#ECFDF5", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 }}
+                            onPress={() => { setReviewModal(lv); setReviewNotes(""); }}>
+                            <Feather name="check" size={13} color="#059669" />
+                            <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: "#059669" }}>Approve</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{ backgroundColor: "#FEF2F2", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 4 }}
+                            onPress={() => { setReviewModal(lv); setReviewNotes(""); }}>
+                            <Feather name="x" size={13} color="#DC2626" />
+                            <Text style={{ fontSize: 12, fontFamily: "Inter_700Bold", color: "#DC2626" }}>Reject</Text>
+                          </TouchableOpacity>
+                        </>
+                      )}
+                      <TouchableOpacity
+                        style={{ backgroundColor: colors.card, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.border }}
+                        onPress={() => cancelLeave(lv)}>
+                        <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.textSecondary }}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          }}
+        />
+      </View>
+    );
+  };
+
   const tabs: { key: Tab; label: string; icon: string }[] = [
     { key: "employees",  label: "Staff",      icon: "users" },
     { key: "attendance", label: "Attendance", icon: "calendar" },
     { key: "payroll",    label: "Payroll",    icon: "dollar-sign" },
+    { key: "leaves",     label: "Leaves",     icon: "umbrella" },
     { key: "report",     label: "Report",     icon: "bar-chart-2" },
   ];
 
@@ -1233,6 +1455,15 @@ export default function HrmScreen() {
         </View>
         {activeTab === "employees" && (
           <TouchableOpacity style={s.addBtn} onPress={() => openEmpModal()}>
+            <Feather name="plus" size={20} color="#fff" />
+          </TouchableOpacity>
+        )}
+        {activeTab === "leaves" && (
+          <TouchableOpacity style={s.addBtn}
+            onPress={() => {
+              setLeaveForm({ employeeId: 0, leaveType: "annual", startDate: NOW.toISOString().slice(0, 10), endDate: NOW.toISOString().slice(0, 10), totalDays: "1", reason: "" });
+              setShowLeaveModal(true);
+            }}>
             <Feather name="plus" size={20} color="#fff" />
           </TouchableOpacity>
         )}
@@ -1257,6 +1488,7 @@ export default function HrmScreen() {
       {activeTab === "employees"  && renderEmployeesTab()}
       {activeTab === "attendance" && renderAttendanceTab()}
       {activeTab === "payroll"    && renderPayrollTab()}
+      {activeTab === "leaves"     && renderLeavesTab()}
       {activeTab === "report"     && renderReportTab()}
 
       {/* ─── Add/Edit Employee Modal ─── */}
@@ -1436,6 +1668,123 @@ export default function HrmScreen() {
                 <Text style={s.confirmTxt}>Save</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Apply Leave Modal ─── */}
+      <Modal visible={showLeaveModal} animationType="slide" transparent onRequestClose={() => setShowLeaveModal(false)}>
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Apply Leave</Text>
+
+            <Text style={s.fieldLabel}>Employee *</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                {employees.filter(e => e.status === "active").map(e => {
+                  const sel = leaveForm.employeeId === e.id;
+                  return (
+                    <TouchableOpacity key={e.id} style={[s.pill, sel && s.pillActive]}
+                      onPress={() => setLeaveForm(p => ({ ...p, employeeId: e.id }))}>
+                      <Text style={[s.pillTxt, sel && s.pillTxtActive]}>{e.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <Text style={s.fieldLabel}>Leave Type</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+              <View style={{ flexDirection: "row", gap: 6 }}>
+                {LEAVE_TYPES.map(lt => {
+                  const sel = leaveForm.leaveType === lt;
+                  const col = LEAVE_TYPE_COLOR[lt];
+                  return (
+                    <TouchableOpacity key={lt}
+                      style={[s.pill, sel && { backgroundColor: col, borderColor: col }]}
+                      onPress={() => setLeaveForm(p => ({ ...p, leaveType: lt }))}>
+                      <Text style={[s.pillTxt, sel && { color: "#fff" }]}>{LEAVE_TYPE_LABEL[lt]}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            {([
+              { key: "startDate", label: "Start Date (YYYY-MM-DD) *" },
+              { key: "endDate",   label: "End Date (YYYY-MM-DD) *" },
+              { key: "totalDays", label: "Total Days" },
+              { key: "reason",    label: "Reason (optional)" },
+            ] as { key: string; label: string }[]).map(f => (
+              <View key={f.key} style={s.fieldRow}>
+                <Text style={s.fieldLabel}>{f.label}</Text>
+                <TextInput style={s.fieldInput}
+                  value={(leaveForm as unknown as Record<string, string>)[f.key]}
+                  onChangeText={v => setLeaveForm(p => ({ ...p, [f.key]: v }))}
+                  keyboardType={f.key === "totalDays" ? "numeric" : "default"}
+                  placeholder={f.label}
+                  placeholderTextColor={colors.textSecondary} />
+              </View>
+            ))}
+
+            <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+              <TouchableOpacity style={s.cancelBtn} onPress={() => setShowLeaveModal(false)}>
+                <Text style={s.cancelTxt}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.confirmBtn} onPress={submitLeave}>
+                <Text style={s.confirmTxt}>Submit</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Review Leave Modal ─── */}
+      <Modal visible={!!reviewModal} animationType="slide" transparent onRequestClose={() => setReviewModal(null)}>
+        <View style={s.overlay}>
+          <View style={s.sheet}>
+            <Text style={s.sheetTitle}>Review Leave Request</Text>
+            {reviewModal && (
+              <>
+                <Text style={[s.fieldLabel, { marginBottom: 4 }]}>
+                  {employees.find(e => e.id === reviewModal.employeeId)?.name ?? `#${reviewModal.employeeId}`}
+                </Text>
+                <Text style={[s.cardSub, { marginBottom: 8 }]}>
+                  {LEAVE_TYPE_LABEL[reviewModal.leaveType]} · {reviewModal.totalDays} day(s){"\n"}
+                  {reviewModal.startDate} → {reviewModal.endDate}
+                </Text>
+                {reviewModal.reason ? (
+                  <Text style={[s.cardSub, { marginBottom: 12, fontStyle: "italic" }]}>"{reviewModal.reason}"</Text>
+                ) : null}
+
+                <View style={s.fieldRow}>
+                  <Text style={s.fieldLabel}>Review Notes (optional)</Text>
+                  <TextInput style={[s.fieldInput, { height: 64 }]}
+                    multiline value={reviewNotes}
+                    onChangeText={setReviewNotes}
+                    placeholder="Add notes..."
+                    placeholderTextColor={colors.textSecondary} />
+                </View>
+
+                <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                  <TouchableOpacity
+                    style={[s.confirmBtn, { flex: 1, backgroundColor: "#DC2626" }]}
+                    onPress={() => reviewLeave(reviewModal, "rejected")}>
+                    <Text style={s.confirmTxt}>Reject</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.confirmBtn, { flex: 1, backgroundColor: "#059669" }]}
+                    onPress={() => reviewLeave(reviewModal, "approved")}>
+                    <Text style={s.confirmTxt}>Approve</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[s.cancelBtn, { marginTop: 8 }]}
+                  onPress={() => setReviewModal(null)}>
+                  <Text style={s.cancelTxt}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
