@@ -55,12 +55,27 @@ router.post("/accounts/transfer", requireAuth, async (req, res): Promise<void> =
 
   if (fromAccountId) {
     const [from] = await db.select().from(accountsTable).where(eq(accountsTable.id, fromAccountId));
-    if (!from) { res.status(404).json({ error: "Source account not found" }); return; }
-    await db.update(accountsTable).set({ balance: (parseFloat(from.balance) - amt).toFixed(8) }).where(eq(accountsTable.id, fromAccountId));
+    if (!from) { res.status(404).json({ error: "Source account not found." }); return; }
+    if (!from.isActive) {
+      res.status(422).json({ error: `Source account "${from.name}" is inactive and cannot send funds.` });
+      return;
+    }
+    const fromBal = parseFloat(from.balance);
+    if (fromBal < amt) {
+      res.status(422).json({
+        error: `Insufficient funds in "${from.name}". Available: ₨${fromBal.toFixed(2)}, Required: ₨${amt.toFixed(2)}.`,
+      });
+      return;
+    }
+    await db.update(accountsTable).set({ balance: (fromBal - amt).toFixed(8) }).where(eq(accountsTable.id, fromAccountId));
   }
   if (toAccountId) {
     const [to] = await db.select().from(accountsTable).where(eq(accountsTable.id, toAccountId));
-    if (!to) { res.status(404).json({ error: "Destination account not found" }); return; }
+    if (!to) { res.status(404).json({ error: "Destination account not found." }); return; }
+    if (!to.isActive) {
+      res.status(422).json({ error: `Destination account "${to.name}" is inactive and cannot receive funds.` });
+      return;
+    }
     await db.update(accountsTable).set({ balance: (parseFloat(to.balance) + amt).toFixed(8) }).where(eq(accountsTable.id, toAccountId));
   }
   await logAudit(req.userId, "transfer", "account", undefined, `Transfer ${amount} from account #${fromAccountId ?? "external"} to #${toAccountId ?? "external"}${notes ? ": " + notes : ""}`);

@@ -97,10 +97,21 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
   const totalPkr = usd * r;
 
   const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
-  if (!account) { res.status(404).json({ error: "Account not found" }); return; }
+  if (!account) { res.status(404).json({ error: "Account not found." }); return; }
+  if (!account.isActive) {
+    res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for USD purchases.` });
+    return;
+  }
+  const acctBal = parseFloat(account.balance);
+  if (acctBal < totalPkr) {
+    res.status(422).json({
+      error: `Insufficient funds in "${account.name}". Available: ₨${acctBal.toFixed(2)}, Required: ₨${totalPkr.toFixed(2)} ($${usd} × ₨${r}).`,
+    });
+    return;
+  }
 
   const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId), eq(walletsTable.currency, "USD")));
-  if (!wallet) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
+  if (!wallet) { res.status(404).json({ error: "Dollar wallet not found." }); return; }
 
   let partyName = "";
   if (partyType === "supplier") {

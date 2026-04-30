@@ -122,9 +122,20 @@ router.post("/hrm/fines", requireAuth, async (req, res): Promise<void> => {
     employeeId: number; amount: string; reason: string; date: string; locationId?: number;
   };
   if (!employeeId || !amount || !reason || !date) { res.status(400).json({ error: "employeeId, amount, reason, date required" }); return; }
+  const fineAmt = parseFloat(amount);
+  if (isNaN(fineAmt) || fineAmt <= 0) {
+    res.status(422).json({ error: "Fine amount must be greater than zero." });
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) {
+    res.status(422).json({ error: `Invalid date "${date}". Use YYYY-MM-DD format.` });
+    return;
+  }
+  const [empCheck] = await db.select({ id: employeesTable.id, name: employeesTable.name }).from(employeesTable).where(eq(employeesTable.id, employeeId));
+  if (!empCheck) { res.status(404).json({ error: "Employee not found." }); return; }
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? null);
   const [row] = await db.insert(employeeFinesTable).values({
-    employeeId, amount: parseFloat(amount).toFixed(2), reason, date, locationId: effectiveLocationId,
+    employeeId, amount: fineAmt.toFixed(2), reason, date, locationId: effectiveLocationId,
   }).returning();
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
@@ -150,9 +161,20 @@ router.post("/hrm/bonuses", requireAuth, async (req, res): Promise<void> => {
     employeeId: number; amount: string; reason: string; date: string; locationId?: number;
   };
   if (!employeeId || !amount || !reason || !date) { res.status(400).json({ error: "employeeId, amount, reason, date required" }); return; }
+  const bonusAmt = parseFloat(amount);
+  if (isNaN(bonusAmt) || bonusAmt <= 0) {
+    res.status(422).json({ error: "Bonus amount must be greater than zero." });
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) {
+    res.status(422).json({ error: `Invalid date "${date}". Use YYYY-MM-DD format.` });
+    return;
+  }
+  const [empCheckB] = await db.select({ id: employeesTable.id }).from(employeesTable).where(eq(employeesTable.id, employeeId));
+  if (!empCheckB) { res.status(404).json({ error: "Employee not found." }); return; }
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? null);
   const [row] = await db.insert(employeeBonusesTable).values({
-    employeeId, amount: parseFloat(amount).toFixed(2), reason, date, locationId: effectiveLocationId,
+    employeeId, amount: bonusAmt.toFixed(2), reason, date, locationId: effectiveLocationId,
   }).returning();
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
@@ -183,8 +205,22 @@ router.post("/hrm/payroll/generate", requireAuth, async (req, res): Promise<void
   };
   if (!employeeId || !month || !year) { res.status(400).json({ error: "employeeId, month, year required" }); return; }
 
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    res.status(422).json({ error: `Month must be between 1 and 12 (got ${month}).` });
+    return;
+  }
+  const currentYear = new Date().getFullYear();
+  if (!Number.isInteger(year) || year < 2000 || year > currentYear + 1) {
+    res.status(422).json({ error: `Year must be between 2000 and ${currentYear + 1} (got ${year}).` });
+    return;
+  }
+  if (workingDays !== undefined && (workingDays <= 0 || workingDays > 31)) {
+    res.status(422).json({ error: `Working days must be between 1 and 31 (got ${workingDays}).` });
+    return;
+  }
+
   const [emp] = await db.select().from(employeesTable).where(eq(employeesTable.id, employeeId));
-  if (!emp) { res.status(404).json({ error: "Employee not found" }); return; }
+  if (!emp) { res.status(404).json({ error: "Employee not found." }); return; }
 
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? emp.locationId ?? null);
 

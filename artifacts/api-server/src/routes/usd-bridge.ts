@@ -48,6 +48,20 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
 
   const usdAmt  = parseFloat(dollarAmount);
   const rate    = parseFloat(dollarRate);
+
+  if (isNaN(usdAmt) || usdAmt <= 0) {
+    res.status(422).json({ error: "Dollar amount must be greater than zero." });
+    return;
+  }
+  if (isNaN(rate) || rate <= 0) {
+    res.status(422).json({ error: "Exchange rate must be greater than zero." });
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) {
+    res.status(422).json({ error: `Invalid date "${date}". Use YYYY-MM-DD format.` });
+    return;
+  }
+
   const totalPkr = usdAmt * rate;
   const coinsVal = parseFloat(coinsPkr ?? "0");
   const cashVal  = parseFloat(cashPkr ?? "0");
@@ -55,12 +69,63 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
   const settledPkr = coinsVal + cashVal + creditVal;
 
   if (settledPkr <= 0) {
-    res.status(400).json({ error: "At least one payment method (coins, cash or credit) is required" });
+    res.status(400).json({ error: "At least one payment method (coins, cash or credit) is required." });
+    return;
+  }
+
+  const tolerance = 0.01;
+  if (Math.abs(settledPkr - totalPkr) > tolerance) {
+    res.status(422).json({
+      error: `Payment total (₨${settledPkr.toFixed(2)}) does not match the USD value at the given rate (₨${totalPkr.toFixed(2)}). Please reconcile before saving.`,
+    });
     return;
   }
 
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null
     ? req.userLocationId : (locationId ?? null);
+
+  /* Pre-flight checks outside the transaction so we can return clean errors */
+  if (coinsVal > 0 && coinsProductId) {
+    const qty = parseFloat(coinsQty ?? "0");
+    if (qty <= 0) {
+      res.status(422).json({ error: "Coin quantity must be greater than zero." });
+      return;
+    }
+    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock })
+      .from(productsTable).where(eq(productsTable.id, coinsProductId));
+    if (!product) {
+      res.status(422).json({ error: "Selected coin product does not exist." });
+      return;
+    }
+    if ((product.stock ?? 0) < qty) {
+      res.status(422).json({
+        error: `Insufficient coin stock for "${product.name}". Available: ${product.stock ?? 0}, Required: ${qty}.`,
+      });
+      return;
+    }
+  }
+
+  if (cashVal > 0 && cashAccountId) {
+    const [acct] = await db.select().from(accountsTable).where(eq(accountsTable.id, cashAccountId));
+    if (!acct) {
+      res.status(422).json({ error: "Selected cash account does not exist." });
+      return;
+    }
+    if (!acct.isActive) {
+      res.status(422).json({ error: `Account "${acct.name}" is inactive and cannot be used for payments.` });
+      return;
+    }
+    const acctBal = parseFloat(acct.balance);
+    if (acctBal < cashVal) {
+      res.status(422).json({
+        error: `Insufficient funds in "${acct.name}". Available: ₨${acctBal.toFixed(2)}, Required: ₨${cashVal.toFixed(2)}.`,
+      });
+      return;
+    }
+  } else if (cashVal > 0 && !cashAccountId) {
+    res.status(422).json({ error: "A cash account must be selected when using cash payment." });
+    return;
+  }
 
   let coinsProductName: string | null = null;
   let creditId: number | null = null;
@@ -84,17 +149,17 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
     /* 2 ── Coins: deduct product stock */
     if (coinsVal > 0 && coinsProductId) {
       const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, coinsProductId));
-      if (!product) throw new Error("Product not found");
+      if (!product) throw new Error("Coin product not found");
       coinsProductName = product.name;
       const qty = parseFloat(coinsQty ?? "0");
-      const newStock = Math.max(0, (product.stock ?? 0) - qty);
+      const newStock = (product.stock ?? 0) - qty;
       await tx.update(productsTable).set({ stock: newStock }).where(eq(productsTable.id, coinsProductId));
     }
 
     /* 3 ── Cash: deduct from account balance */
     if (cashVal > 0 && cashAccountId) {
       const [acct] = await tx.select().from(accountsTable).where(eq(accountsTable.id, cashAccountId));
-      if (!acct) throw new Error("Account not found");
+      if (!acct) throw new Error("Cash account not found");
       cashAccountName = acct.name;
       const newBal = parseFloat(acct.balance) - cashVal;
       await tx.update(accountsTable).set({ balance: fmt8(newBal) }).where(eq(accountsTable.id, cashAccountId));

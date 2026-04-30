@@ -37,14 +37,44 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
     userId: number; notes?: string | null; date: string;
   };
   if (!title || !amount || !userId || !date) { res.status(400).json({ error: "title, amount, userId, date required" }); return; }
+
+  const amtNum = parseFloat(amount);
+  if (isNaN(amtNum) || amtNum <= 0) {
+    res.status(422).json({ error: "Expense amount must be greater than zero." });
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) {
+    res.status(422).json({ error: `Invalid date "${date}". Use YYYY-MM-DD format.` });
+    return;
+  }
+
+  if (accountId) {
+    const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (!account) {
+      res.status(422).json({ error: "Selected account does not exist." });
+      return;
+    }
+    if (!account.isActive) {
+      res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for expenses.` });
+      return;
+    }
+    const currentBal = parseFloat(account.balance);
+    if (currentBal < amtNum) {
+      res.status(422).json({
+        error: `Insufficient funds in "${account.name}". Available: ₨${currentBal.toFixed(2)}, Required: ₨${amtNum.toFixed(2)}.`,
+      });
+      return;
+    }
+  }
+
   const [row] = await db.insert(expensesTable).values({
-    title, amount, categoryId: categoryId ?? null, accountId: accountId ?? null, userId, notes: notes ?? null, date,
+    title, amount: amtNum.toFixed(8), categoryId: categoryId ?? null, accountId: accountId ?? null, userId, notes: notes ?? null, date,
   }).returning();
 
   if (accountId) {
     const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
     if (account) {
-      const newBal = parseFloat(account.balance) - parseFloat(amount);
+      const newBal = parseFloat(account.balance) - amtNum;
       await db.update(accountsTable).set({ balance: newBal.toFixed(8) }).where(eq(accountsTable.id, accountId));
     }
   }

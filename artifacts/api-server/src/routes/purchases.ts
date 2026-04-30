@@ -85,6 +85,35 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
     ? req.userLocationId
     : (locationId ?? null);
 
+  // Per-item validation
+  for (const item of items) {
+    if (!item.productId) {
+      res.status(422).json({ error: "Each item must have a productId." });
+      return;
+    }
+    if (item.qty <= 0 || !Number.isFinite(item.qty)) {
+      res.status(422).json({ error: `Item quantity must be greater than zero (got ${item.qty}).` });
+      return;
+    }
+    const costNum = parseFloat(item.unitCost);
+    if (isNaN(costNum) || costNum <= 0) {
+      res.status(422).json({ error: `Unit cost must be greater than zero (got "${item.unitCost}").` });
+      return;
+    }
+  }
+
+  const discountAmt = parseFloat(discount ?? "0");
+  if (isNaN(discountAmt) || discountAmt < 0) {
+    res.status(422).json({ error: "Discount must be zero or a positive number." });
+    return;
+  }
+
+  const paid = parseFloat(amountPaid ?? "0");
+  if (isNaN(paid) || paid < 0) {
+    res.status(422).json({ error: "Amount paid must be zero or a positive number." });
+    return;
+  }
+
   // Validate account belongs to user's location for non-admin
   if (!isAdmin(req) && req.userLocationId != null && accountId) {
     const [account] = await db.select({ locationId: accountsTable.locationId }).from(accountsTable).where(eq(accountsTable.id, accountId));
@@ -101,9 +130,31 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
     return { ...item, total: lineTotal.toFixed(8) };
   });
 
-  const discountAmt = parseFloat(discount ?? "0");
   const total = subtotal - discountAmt;
-  const paid = parseFloat(amountPaid ?? "0");
+
+  if (paid > 0 && !accountId) {
+    res.status(422).json({ error: "An account must be selected when recording a payment." });
+    return;
+  }
+
+  if (accountId && paid > 0) {
+    const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (!account) {
+      res.status(422).json({ error: "Selected account does not exist." });
+      return;
+    }
+    if (!account.isActive) {
+      res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for payments.` });
+      return;
+    }
+    const currentBal = parseFloat(account.balance);
+    if (currentBal < paid) {
+      res.status(422).json({
+        error: `Insufficient funds in "${account.name}". Available: ₨${currentBal.toFixed(2)}, Required: ₨${paid.toFixed(2)}.`,
+      });
+      return;
+    }
+  }
 
   const invoiceNo = genInvoiceNo();
   const [purchase] = await db.insert(purchasesTable).values({
@@ -120,10 +171,10 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
-  if (accountId) {
+  if (accountId && paid > 0) {
     const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
     if (account) {
-      const newBal = parseFloat(account.balance) - total;
+      const newBal = parseFloat(account.balance) - paid;
       await db.update(accountsTable).set({ balance: formatAmount(newBal) }).where(eq(accountsTable.id, accountId));
     }
   }

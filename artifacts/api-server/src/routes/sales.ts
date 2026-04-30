@@ -142,7 +142,29 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
     return;
   }
 
+  // Per-item validation
+  for (const item of items) {
+    if (!item.productId) {
+      res.status(422).json({ error: "Each item must include a productId." });
+      return;
+    }
+    if (item.qty <= 0 || !Number.isFinite(item.qty)) {
+      res.status(422).json({ error: `Item quantity must be greater than zero (got ${item.qty}).` });
+      return;
+    }
+    const price = parseFloat(item.unitPrice);
+    if (isNaN(price) || price <= 0) {
+      res.status(422).json({ error: `Unit price must be greater than zero (got "${item.unitPrice}").` });
+      return;
+    }
+  }
+
   const paid = parseFloat(amountPaid ?? "0");
+  if (isNaN(paid) || paid < 0) {
+    res.status(422).json({ error: "Amount paid must be zero or a positive number." });
+    return;
+  }
+
   const isCash = paymentMethod !== "credit";
 
   // Rule 1: Account required for cash payments
@@ -203,7 +225,21 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
   });
 
   const discountAmt = parseFloat(discount ?? "0");
+  if (isNaN(discountAmt) || discountAmt < 0) {
+    res.status(422).json({ error: "Discount must be zero or a positive number." });
+    return;
+  }
+  if (discountAmt > subtotal) {
+    res.status(422).json({
+      error: `Discount (₨${discountAmt.toFixed(2)}) cannot exceed the order subtotal (₨${subtotal.toFixed(2)}).`,
+    });
+    return;
+  }
   const taxAmt = parseFloat(tax ?? "0");
+  if (isNaN(taxAmt) || taxAmt < 0) {
+    res.status(422).json({ error: "Tax must be zero or a positive number." });
+    return;
+  }
   const total = subtotal - discountAmt + taxAmt;
   const change = paid - total;
 
