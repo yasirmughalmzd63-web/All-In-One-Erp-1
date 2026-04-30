@@ -17,6 +17,7 @@ type MenuItem = {
 
 const MANAGEMENT_ITEMS: MenuItem[] = [
   { label: "Credits",    icon: "clock",        route: "/credits",    color: "#7C3AED", bg: "#F3E8FF", desc: "Receivables & payables",    module: "credits" },
+  { label: "HRM",        icon: "briefcase",    route: "/hrm",        color: "#059669", bg: "#ECFDF5", desc: "Staff, attendance & payroll", module: "users" },
 ];
 
 const INVENTORY_ITEMS: MenuItem[] = [

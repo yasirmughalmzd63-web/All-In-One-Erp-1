@@ -23,6 +23,7 @@ import reportsRouter from "./reports.js";
 import uploadRouter from "./upload.js";
 import registrationsRouter from "./registrations.js";
 import businessesRouter from "./businesses.js";
+import hrmRouter from "./hrm.js";
 
 const router: IRouter = Router();
 
@@ -50,5 +51,6 @@ router.use(reportsRouter);
 router.use(uploadRouter);
 router.use(registrationsRouter);
 router.use(businessesRouter);
+router.use(hrmRouter);
 
 export default router;
