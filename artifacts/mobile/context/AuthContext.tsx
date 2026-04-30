@@ -16,7 +16,7 @@ export interface AuthUser {
 export const ALL_MODULES = [
   "dashboard", "pos", "sales", "purchases", "expenses", "credits",
   "inventory", "customers", "suppliers", "accounts", "locations",
-  "categories", "users", "audit", "currency", "cash_count",
+  "categories", "users", "audit", "currency", "cash_count", "reconciliation",
   "pos_product", "pos_location", "pos_account", "pos_credit_customer",
 ] as const;
 

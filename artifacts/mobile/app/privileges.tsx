@@ -36,6 +36,7 @@ const MODULE_META: Record<AppModule, ModuleMeta> = {
   audit:               { label: "Audit Log",            icon: "shield",           group: "Reports",       desc: "View system activity history" },
   currency:            { label: "Currency / Dollar",    icon: "dollar-sign",      group: "Reports",       desc: "Forex & dollar wallet" },
   cash_count:          { label: "Cash Count",           icon: "archive",          group: "Reports",       desc: "Balance sheet & reconciliation" },
+  reconciliation:      { label: "Reconciliation",       icon: "check-circle",     group: "Reports",       desc: "Full daily reconciliation with dollar & exchange" },
   pos_product:         { label: "All Products",         icon: "package",          group: "POS Controls",  desc: "Can select any product (overrides per-product)" },
   pos_location:        { label: "All Apps",              icon: "map-pin",          group: "POS Controls",  desc: "Can use any app" },
   pos_account:         { label: "All Accounts",         icon: "credit-card",      group: "POS Controls",  desc: "Can use any payment account (overrides per-account)" },
