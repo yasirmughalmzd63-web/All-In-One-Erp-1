@@ -24,6 +24,7 @@ import uploadRouter from "./upload.js";
 import registrationsRouter from "./registrations.js";
 import businessesRouter from "./businesses.js";
 import hrmRouter from "./hrm.js";
+import usdBridgeRouter from "./usd-bridge.js";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(uploadRouter);
 router.use(registrationsRouter);
 router.use(businessesRouter);
 router.use(hrmRouter);
+router.use(usdBridgeRouter);
 
 export default router;
