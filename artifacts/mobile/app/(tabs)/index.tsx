@@ -446,25 +446,16 @@ export default function POSScreen() {
     return { errors, warnings, canSell: errors.length === 0 };
   }, [selectedProduct, qty, parsedAmount]);
 
-  const accountBalance = selectedAccount ? parseFloat(selectedAccount.balance) : null;
-  const balanceShortfall = accountBalance !== null && parsedAmount > 0 && parsedAmount > accountBalance
-    ? parsedAmount - accountBalance
-    : 0;
+  // For sales, cash is received INTO the account — no balance check needed
+  const balanceShortfall = 0;
 
   const cashValidations = useMemo(() => {
     const errors = [...validations.errors];
     if (!selectedAccount) {
       errors.push("Select an account to receive payment");
-    } else {
-      const bal = parseFloat(selectedAccount.balance);
-      if (parsedAmount > bal) {
-        errors.push(
-          `Insufficient balance in "${selectedAccount.name}" — need ₨${parsedAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}, have ₨${bal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-        );
-      }
     }
     return { errors, canComplete: errors.length === 0 };
-  }, [validations.errors, selectedAccount, parsedAmount]);
+  }, [validations.errors, selectedAccount]);
 
   // ── Dashboard figures (location/user-filtered for non-admin) ───────────
   const dashParams = isAdmin
