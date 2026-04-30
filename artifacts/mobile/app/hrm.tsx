@@ -121,6 +121,7 @@ export default function HrmScreen() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportMonth, setReportMonth] = useState(NOW.getMonth() + 1);
   const [reportYear, setReportYear] = useState(NOW.getFullYear());
+  const [reportView, setReportView] = useState<"app" | "employee">("app");
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
@@ -310,6 +311,26 @@ export default function HrmScreen() {
   const filteredBonuses = useMemo(() =>
     fbEmployee ? bonuses.filter(b => b.employeeId === fbEmployee) : bonuses,
     [bonuses, fbEmployee]);
+
+  // ── Per-employee aggregation for Employee Wise report view ──
+  const empPayrollMap = useMemo(() => {
+    const m: Record<number, Payroll> = {};
+    report?.payroll.forEach(p => { m[p.employeeId] = p; });
+    return m;
+  }, [report]);
+  const empFinesMap = useMemo(() => {
+    const m: Record<number, number> = {};
+    report?.fines.forEach(f => { m[f.employeeId] = (m[f.employeeId] ?? 0) + parseFloat(f.amount); });
+    return m;
+  }, [report]);
+  const empBonusMap = useMemo(() => {
+    const m: Record<number, number> = {};
+    report?.bonuses.forEach(b => { m[b.employeeId] = (m[b.employeeId] ?? 0) + parseFloat(b.amount); });
+    return m;
+  }, [report]);
+  const reportActiveEmployees = useMemo(() =>
+    report?.employees.filter(e => e.status === "active") ?? [],
+    [report]);
 
   /* ─── Export Report CSV ─── */
   const exportReportCsv = async () => {
@@ -596,8 +617,31 @@ export default function HrmScreen() {
 
   const renderReportTab = () => {
     const s2 = report?.summary;
+
     return (
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }} refreshControl={<RefreshControl refreshing={reportLoading} onRefresh={fetchReport} />}>
+
+        {/* ── Top Filter Toggle ── */}
+        <View style={{ flexDirection: "row", gap: 0, marginTop: 12, marginBottom: 12, borderRadius: 14, overflow: "hidden", borderWidth: 1.5, borderColor: colors.border }}>
+          <TouchableOpacity
+            onPress={() => setReportView("app")}
+            style={{ flex: 1, paddingVertical: 12, alignItems: "center", justifyContent: "center", gap: 4, flexDirection: "row",
+              backgroundColor: reportView === "app" ? colors.primary : colors.card }}
+          >
+            <Feather name="bar-chart-2" size={15} color={reportView === "app" ? "#FFF" : colors.textSecondary} />
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: reportView === "app" ? "#FFF" : colors.textSecondary }}>App Wise</Text>
+          </TouchableOpacity>
+          <View style={{ width: 1.5, backgroundColor: colors.border }} />
+          <TouchableOpacity
+            onPress={() => setReportView("employee")}
+            style={{ flex: 1, paddingVertical: 12, alignItems: "center", justifyContent: "center", gap: 4, flexDirection: "row",
+              backgroundColor: reportView === "employee" ? colors.primary : colors.card }}
+          >
+            <Feather name="users" size={15} color={reportView === "employee" ? "#FFF" : colors.textSecondary} />
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: reportView === "employee" ? "#FFF" : colors.textSecondary }}>Employee Wise</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Month/Year picker */}
         <View style={[s.filterRow, { marginBottom: 12 }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -612,9 +656,9 @@ export default function HrmScreen() {
 
         {reportLoading && <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />}
 
-        {s2 && (
+        {/* ══════════════ APP WISE VIEW ══════════════ */}
+        {reportView === "app" && s2 && (
           <>
-            {/* Overview cards */}
             <Text style={s.sectionTitle}>Overview — {MONTHS[reportMonth - 1]} {reportYear}</Text>
             <View style={s.statsGrid}>
               <StatCard label="Employees" value={String(s2.totalEmployees)} color="#2563EB" icon="users" />
@@ -624,7 +668,6 @@ export default function HrmScreen() {
               <StatCard label="Fines" value={PKR(s2.totalFines)} color="#DC2626" icon="alert-circle" />
             </View>
 
-            {/* Attendance overview */}
             <Text style={s.sectionTitle}>Attendance Summary</Text>
             <View style={s.attSummaryRow}>
               <View style={[s.attSummaryCard, { backgroundColor: "#DCFCE7" }]}>
@@ -641,7 +684,6 @@ export default function HrmScreen() {
               </View>
             </View>
 
-            {/* Top earners */}
             {report!.payroll.length > 0 && (
               <>
                 <Text style={s.sectionTitle}>Payroll Detail</Text>
@@ -662,7 +704,6 @@ export default function HrmScreen() {
               </>
             )}
 
-            {/* Fines breakdown */}
             {report!.fines.length > 0 && (
               <>
                 <Text style={s.sectionTitle}>Fines Breakdown</Text>
@@ -678,7 +719,6 @@ export default function HrmScreen() {
               </>
             )}
 
-            {/* Bonuses breakdown */}
             {report!.bonuses.length > 0 && (
               <>
                 <Text style={s.sectionTitle}>Bonuses Breakdown</Text>
@@ -693,6 +733,112 @@ export default function HrmScreen() {
                 ))}
               </>
             )}
+
+            <TouchableOpacity style={s.exportBtn} onPress={exportReportCsv}>
+              <Feather name="share-2" size={16} color="#fff" />
+              <Text style={s.exportBtnTxt}>Export CSV</Text>
+            </TouchableOpacity>
+          </>
+        )}
+
+        {/* ══════════════ EMPLOYEE WISE VIEW ══════════════ */}
+        {reportView === "employee" && report && (
+          <>
+            <Text style={s.sectionTitle}>Employee Report — {MONTHS[reportMonth - 1]} {reportYear}</Text>
+            {reportActiveEmployees.length === 0 && (
+              <Text style={s.empty}>No active employees found</Text>
+            )}
+            {reportActiveEmployees.map(emp => {
+              const pay = empPayrollMap[emp.id];
+              const fineAmt = empFinesMap[emp.id] ?? 0;
+              const bonusAmt = empBonusMap[emp.id] ?? 0;
+              const netSalary = pay ? parseFloat(pay.netSalary) : null;
+              const attendancePct = pay ? Math.round((pay.presentDays / Math.max(pay.workingDays, 1)) * 100) : null;
+              return (
+                <View key={emp.id} style={[s.card, { marginBottom: 12, padding: 0, overflow: "hidden" }]}>
+                  {/* Employee header */}
+                  <View style={{ flexDirection: "row", alignItems: "center", padding: 14, gap: 10, backgroundColor: colors.primary + "10", borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: colors.primary, alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" }}>
+                        {emp.name.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.cardTitle, { fontSize: 15 }]}>{emp.name}</Text>
+                      {emp.position ? <Text style={s.cardSub}>{emp.department ? `${emp.position} · ${emp.department}` : emp.position}</Text> : null}
+                    </View>
+                    <View style={[s.badge, { backgroundColor: emp.status === "active" ? "#DCFCE7" : "#F3F4F6" }]}>
+                      <Text style={[s.badgeTxt, { color: emp.status === "active" ? "#059669" : "#6B7280" }]}>{emp.status}</Text>
+                    </View>
+                  </View>
+
+                  {/* Stats row */}
+                  <View style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                    {/* Attendance */}
+                    <View style={{ flex: 1, padding: 12, alignItems: "center", borderRightWidth: 1, borderRightColor: colors.border }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: attendancePct !== null ? (attendancePct >= 80 ? "#059669" : attendancePct >= 60 ? "#D97706" : "#DC2626") : colors.textSecondary }}>
+                        {attendancePct !== null ? `${attendancePct}%` : "—"}
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.textSecondary, textAlign: "center" }}>
+                        {pay ? `${pay.presentDays}/${pay.workingDays} days` : "No payroll"}
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.textSecondary }}>Attendance</Text>
+                    </View>
+                    {/* Salary */}
+                    <View style={{ flex: 1.4, padding: 12, alignItems: "center", borderRightWidth: 1, borderRightColor: colors.border }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: netSalary !== null ? colors.primary : colors.textSecondary }}>
+                        {netSalary !== null ? PKR(netSalary) : "—"}
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.textSecondary }}>Base: {PKR(parseFloat(emp.baseSalary))}</Text>
+                      {pay && (
+                        <View style={[s.badge, { marginTop: 3, backgroundColor: pay.status === "paid" ? "#DCFCE7" : "#FFF7ED" }]}>
+                          <Text style={[s.badgeTxt, { fontSize: 9, color: pay.status === "paid" ? "#059669" : "#D97706" }]}>{pay.status}</Text>
+                        </View>
+                      )}
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.textSecondary, marginTop: 2 }}>Net Salary</Text>
+                    </View>
+                    {/* Fine / Bonus */}
+                    <View style={{ flex: 1, padding: 12, alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#DC2626" }}>
+                        {fineAmt > 0 ? `-${PKR(fineAmt)}` : "—"}
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.textSecondary }}>Fines</Text>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#059669", marginTop: 4 }}>
+                        {bonusAmt > 0 ? `+${PKR(bonusAmt)}` : "—"}
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: colors.textSecondary }}>Bonuses</Text>
+                    </View>
+                  </View>
+
+                  {/* Fines list */}
+                  {report.fines.filter(f => f.employeeId === emp.id).map(f => (
+                    <View key={`f${f.id}`} style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 8 }}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#DC2626" }} />
+                      <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 12, color: colors.text }}>{f.reason}</Text>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.textSecondary }}>{f.date}</Text>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#DC2626" }}>-{PKR(parseFloat(f.amount))}</Text>
+                    </View>
+                  ))}
+
+                  {/* Bonuses list */}
+                  {report.bonuses.filter(b => b.employeeId === emp.id).map(b => (
+                    <View key={`b${b.id}`} style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 8 }}>
+                      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: "#059669" }} />
+                      <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 12, color: colors.text }}>{b.reason}</Text>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: colors.textSecondary }}>{b.date}</Text>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#059669" }}>+{PKR(parseFloat(b.amount))}</Text>
+                    </View>
+                  ))}
+
+                  {/* No payroll note */}
+                  {!pay && (
+                    <View style={{ padding: 12, alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textSecondary }}>No payroll generated for this month</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
 
             <TouchableOpacity style={s.exportBtn} onPress={exportReportCsv}>
               <Feather name="share-2" size={16} color="#fff" />
