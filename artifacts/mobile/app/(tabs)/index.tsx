@@ -318,6 +318,99 @@ function CustomerPickerModal({ visible, customers, locations, onSelect, onClose 
   );
 }
 
+const LOCATION_PALETTES = [
+  { bg: "#EFF6FF", border: "#3B82F6", text: "#1E40AF", emoji: "🏪" },
+  { bg: "#ECFDF5", border: "#10B981", text: "#065F46", emoji: "🏬" },
+  { bg: "#FFF7ED", border: "#F97316", text: "#9A3412", emoji: "🛒" },
+  { bg: "#F3E8FF", border: "#8B5CF6", text: "#4C1D95", emoji: "🏷️" },
+  { bg: "#FEF2F2", border: "#EF4444", text: "#7F1D1D", emoji: "🏢" },
+  { bg: "#F0FDF4", border: "#22C55E", text: "#14532D", emoji: "🏦" },
+  { bg: "#FDF4FF", border: "#D946EF", text: "#701A75", emoji: "🏩" },
+  { bg: "#FFFBEB", border: "#F59E0B", text: "#78350F", emoji: "⭐" },
+];
+
+function LocationPickerModal({ visible, locations, onSelect, onClose }: {
+  visible: boolean;
+  locations: Location[];
+  onSelect: (l: Location) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+
+  if (!visible) return null;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28 }}>
+
+          {/* Header */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 14 }}>
+            <View>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Select App</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                {locations.length} location{locations.length !== 1 ? "s" : ""} available
+              </Text>
+            </View>
+            <TouchableOpacity style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 20, lineHeight: 22 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Horizontal brand cards */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingBottom: 32 }}
+          >
+            {locations.map((loc, idx) => {
+              const p = LOCATION_PALETTES[idx % LOCATION_PALETTES.length]!;
+              return (
+                <TouchableOpacity
+                  key={loc.id}
+                  onPress={() => { onSelect(loc); onClose(); }}
+                  activeOpacity={0.75}
+                  style={{
+                    width: 130,
+                    backgroundColor: p.bg,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    borderColor: p.border,
+                    alignItems: "center",
+                    paddingVertical: 20,
+                    paddingHorizontal: 10,
+                    gap: 10,
+                  }}
+                >
+                  {/* Brand icon */}
+                  <View style={{ width: 60, height: 60, borderRadius: 18, backgroundColor: "#fff", borderWidth: 2, borderColor: p.border, alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontSize: 30 }}>{p.emoji}</Text>
+                  </View>
+                  {/* Location name */}
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: p.text, textAlign: "center" }} numberOfLines={2}>
+                    {loc.name}
+                  </Text>
+                  {/* Address */}
+                  {loc.address ? (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: p.text, textAlign: "center", opacity: 0.7 }} numberOfLines={2}>
+                      📍 {loc.address}
+                    </Text>
+                  ) : null}
+                  {/* Select label */}
+                  <View style={{ backgroundColor: p.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 5 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#fff" }}>SELECT</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function PickerModal<T extends { id: number; name: string }>({
   visible, title, items, onSelect, onClose, renderSub,
 }: { visible: boolean; title: string; items: T[]; onSelect: (item: T | null) => void; onClose: () => void; renderSub?: (item: T) => string }) {
@@ -1461,10 +1554,9 @@ export default function POSScreen() {
         visible={showAccountModal} accounts={allowedAccounts}
         onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)}
       />
-      <PickerModal<Location>
-        visible={showLocationModal} title="Select App" items={allowedLocations}
+      <LocationPickerModal
+        visible={showLocationModal} locations={allowedLocations}
         onSelect={setSelectedLocation} onClose={() => setShowLocationModal(false)}
-        renderSub={l => l.address ?? ""}
       />
     </View>
   );
