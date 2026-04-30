@@ -1006,15 +1006,17 @@ export default function POSScreen() {
                   )}
                 </View>
                 <TouchableOpacity
-                  style={[styles.copyBtn, {
-                    backgroundColor: copyError ? "#FEF2F2" : copiedQty ? "#D1FAE5" : "#FFF",
-                    borderColor: copyError ? colors.danger : copiedQty ? "#059669" : "#A7F3D0",
-                    paddingHorizontal: 10, paddingVertical: 8, gap: 4,
-                  }]}
+                  style={{
+                    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
+                    backgroundColor: copyError ? "#FEF2F2" : copiedQty ? "#F0FDF4" : "transparent",
+                    borderColor: copyError ? "#FECACA" : copiedQty ? "#BBF7D0" : colors.border,
+                    opacity: qty <= 0 ? 0.35 : 1,
+                  }}
                   onPress={handleCopyQty} disabled={qty <= 0}
+                  activeOpacity={0.5}
                 >
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: copyError ? colors.danger : copiedQty ? "#059669" : "#065F46" }}>
-                    {copyError ? "Error!" : copiedQty ? "✓ Copied" : "Copy"}
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: copyError ? "#EF4444" : copiedQty ? "#16A34A" : colors.mutedForeground }}>
+                    {copyError ? "Error" : copiedQty ? "✓ Copied" : "Copy QTY"}
                   </Text>
                 </TouchableOpacity>
               </View>
