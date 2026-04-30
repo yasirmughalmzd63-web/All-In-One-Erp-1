@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
-  useListCredits, usePayCredit, useListAccounts, useListLocations, useListProducts,
+  customFetch, useListCredits, useListAccounts, useListLocations, useListProducts,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth, isAdminOrAbove } from "@/context/AuthContext";
@@ -25,6 +25,16 @@ type MainTab  = "list" | "report";
 type TypeFilter   = "all" | "receivable" | "payable";
 type StatusFilter = "all" | "pending" | "partial" | "paid";
 type PayMethod    = "account" | "dollar" | "coins_withdraw";
+type PayLeg = {
+  id: string;
+  method: PayMethod;
+  amount: string;
+  accountId: string;
+  dollarAmount: string;
+  dollarRate: string;
+  product: Product | null;
+  productQty: string;
+};
 
 const fmt = (n: number) => {
   if (isNaN(n)) return "₨0";
@@ -48,22 +58,17 @@ export default function CreditsScreen() {
   const [locationFilter, setLocationFilter] = useState<number | "all">("all");
   const [search, setSearch]           = useState("");
 
-  const [selected, setSelected]         = useState<Credit | null>(null);
-  const [payMethod, setPayMethod]       = useState<PayMethod>("account");
-  const [payAmount, setPayAmount]       = useState("");
-  const [selectedAccountId, setSelectedAccountId] = useState("");
-  const [dollarAmount, setDollarAmount] = useState("");
-  const [dollarRate, setDollarRate]     = useState("");
-  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [productQty, setProductQty]     = useState("");
-  const [payNotes, setPayNotes]         = useState("");
+  const newLeg = (): PayLeg => ({ id: Math.random().toString(36).slice(2), method: "account", amount: "", accountId: "", dollarAmount: "", dollarRate: "", product: null, productQty: "" });
+
+  const [selected, setSelected]   = useState<Credit | null>(null);
+  const [payLegs, setPayLegs]     = useState<PayLeg[]>([newLeg()]);
+  const [payNotes, setPayNotes]   = useState("");
+  const [saving, setSaving]       = useState(false);
 
   const { data: raw, isLoading, refetch } = useListCredits();
   const { data: accountsRaw }  = useListAccounts();
   const { data: locationsRaw } = useListLocations();
   const { data: productsRaw }  = useListProducts();
-  const payMut = usePayCredit();
-
   const credits       = (raw ?? []) as unknown as Credit[];
   const accounts      = (accountsRaw ?? []) as unknown as Account[];
   const locations     = (locationsRaw ?? []) as unknown as Location[];
@@ -88,68 +93,66 @@ export default function CreditsScreen() {
 
   const openPayModal = (c: Credit) => {
     setSelected(c);
-    setPayMethod("account");
-    setPayAmount(parseFloat(c.remainingAmount).toFixed(2));
-    setSelectedAccountId("");
-    setDollarAmount("");
-    setDollarRate("");
-    setSelectedProduct(null);
-    setProductQty("");
+    setPayLegs([{ ...newLeg(), amount: parseFloat(c.remainingAmount).toFixed(2) }]);
     setPayNotes("");
   };
 
-  const dollarPkrValue = dollarAmount && dollarRate
-    ? (parseFloat(dollarAmount) * parseFloat(dollarRate)).toFixed(2) : "";
-  const coinsValue = selectedProduct && productQty
-    ? (parseFloat(productQty) * parseFloat(selectedProduct.unitPrice)).toFixed(2) : "";
+  const updateLeg = (id: string, patch: Partial<PayLeg>) =>
+    setPayLegs(legs => legs.map(l => l.id === id ? { ...l, ...patch } : l));
 
-  const handlePay = async () => {
+  const legPkrAmount = (leg: PayLeg): number => {
+    if (leg.method === "account") return parseFloat(leg.amount || "0");
+    if (leg.method === "dollar" && leg.dollarAmount && leg.dollarRate)
+      return parseFloat(leg.dollarAmount) * parseFloat(leg.dollarRate);
+    if (leg.method === "coins_withdraw" && leg.product && leg.productQty)
+      return parseFloat(leg.productQty) * parseFloat(leg.product.unitPrice);
+    return 0;
+  };
+
+  const handleMultiPay = async () => {
     if (!selected) return;
-    let finalAmount = "0";
-    if (payMethod === "account") {
-      if (!payAmount || parseFloat(payAmount) <= 0) { Alert.alert("Error", "Enter valid amount"); return; }
-      finalAmount = parseFloat(payAmount).toFixed(8);
-    } else if (payMethod === "dollar") {
-      if (!dollarAmount || !dollarRate || parseFloat(dollarAmount) <= 0 || parseFloat(dollarRate) <= 0) {
-        Alert.alert("Error", "Enter valid dollar amount and rate"); return;
-      }
-      finalAmount = (parseFloat(dollarAmount) * parseFloat(dollarRate)).toFixed(8);
-    } else if (payMethod === "coins_withdraw") {
-      if (!selectedProduct || !productQty || parseFloat(productQty) <= 0) {
-        Alert.alert("Error", "Select product and enter quantity"); return;
-      }
-      finalAmount = (parseFloat(productQty) * parseFloat(selectedProduct.unitPrice)).toFixed(8);
+    const validLegs = payLegs.filter(l => legPkrAmount(l) > 0);
+    if (validLegs.length === 0) { Alert.alert("Validation", "Add at least one payment with a valid amount"); return; }
+
+    const totalPkr = validLegs.reduce((s, l) => s + legPkrAmount(l), 0);
+    if (totalPkr > parseFloat(selected.remainingAmount) + 0.01) {
+      Alert.alert("Validation", `Total ₨${totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} exceeds remaining ₨${parseFloat(selected.remainingAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })}`);
+      return;
     }
 
-    if (parseFloat(finalAmount) > parseFloat(selected.remainingAmount) + 0.01) {
-      Alert.alert("Error", "Amount exceeds remaining balance"); return;
-    }
-
+    setSaving(true);
     try {
-      const body: Record<string, unknown> = {
-        payAmount: finalAmount, paymentMethod: payMethod, notes: payNotes || null,
-      };
-      if (payMethod === "account" && selectedAccountId) body.accountId = parseInt(selectedAccountId);
-      if (payMethod === "dollar") {
-        body.dollarAmount = parseFloat(dollarAmount).toFixed(8);
-        body.dollarRate   = parseFloat(dollarRate).toFixed(8);
-      }
-      if (payMethod === "coins_withdraw" && selectedProduct) {
-        body.productId       = selectedProduct.id;
-        body.productName     = selectedProduct.name;
-        body.productQty      = parseFloat(productQty).toFixed(8);
-        body.productValuePkr = finalAmount;
-      }
-
-      await (payMut as unknown as { mutateAsync: (a: { id: number; data: unknown }) => Promise<unknown> }).mutateAsync({ id: selected.id, data: body });
+      await customFetch(`/api/credits/${selected.id}/pay/multi`, {
+        method: "POST",
+        body: JSON.stringify({
+          notes: payNotes || null,
+          legs: validLegs.map(l => {
+            const pkr = legPkrAmount(l);
+            const leg: Record<string, unknown> = { paymentMethod: l.method, amount: pkr.toFixed(8) };
+            if (l.method === "account" && l.accountId) leg.accountId = parseInt(l.accountId);
+            if (l.method === "dollar") {
+              leg.dollarAmount = parseFloat(l.dollarAmount).toFixed(8);
+              leg.dollarRate   = parseFloat(l.dollarRate).toFixed(8);
+            }
+            if (l.method === "coins_withdraw" && l.product) {
+              leg.productId       = l.product.id;
+              leg.productName     = l.product.name;
+              leg.productQty      = parseFloat(l.productQty).toFixed(8);
+              leg.productValuePkr = pkr.toFixed(8);
+            }
+            return leg;
+          }),
+        }),
+      });
       queryClient.invalidateQueries();
       setSelected(null);
       Alert.alert("✅ Payment Recorded",
-        payMethod === "account" ? `₨${parseFloat(finalAmount).toLocaleString()} via account`
-        : payMethod === "dollar" ? `$${dollarAmount} @ ₨${dollarRate} = ₨${parseFloat(finalAmount).toLocaleString()}`
-        : `${productQty} ${selectedProduct?.unit} of ${selectedProduct?.name} → ₨${parseFloat(finalAmount).toLocaleString()}`
+        validLegs.length === 1
+          ? `₨${totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} recorded via ${validLegs[0]!.method.replace("_", " ")}`
+          : `₨${totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} across ${validLegs.length} payment methods`
       );
-    } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Failed"); }
+    } catch (e) { Alert.alert("Error", e instanceof Error ? e.message : "Payment failed"); }
+    setSaving(false);
   };
 
   const statusMeta = (c: Credit) => {
@@ -317,7 +320,7 @@ export default function CreditsScreen() {
 
                     {canPay && (
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border }}>
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.primary }}>💳 Tap to pay · Account · Dollar · Coins</Text>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.primary }}>💳 Tap to pay · Mix account, dollar & coins in one</Text>
                       </View>
                     )}
                   </TouchableOpacity>
@@ -358,169 +361,190 @@ export default function CreditsScreen() {
                 </View>
 
                 <View style={{ padding: 16 }}>
-                  {/* Payment method tabs */}
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text, marginBottom: 10 }}>Payment Method</Text>
-                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 18 }}>
-                    {([
-                      ["account",       "🏦 Account",       colors.primary],
-                      ["dollar",        "💵 Dollar",         "#059669"],
-                      ["coins_withdraw","🪙 Coins Withdraw", "#D97706"],
-                    ] as [PayMethod, string, string][]).map(([k, label, color]) => (
-                      <TouchableOpacity key={k} onPress={() => setPayMethod(k)}
-                        style={{ flex: 1, paddingVertical: 10, borderRadius: 12, borderWidth: 2,
-                          backgroundColor: payMethod === k ? color : colors.input,
-                          borderColor: payMethod === k ? color : colors.border, alignItems: "center" }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: payMethod === k ? "#FFF" : colors.mutedForeground, textAlign: "center" }}>{label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
 
-                  {/* ─── Account ─────────────────────────────────────────── */}
-                  {payMethod === "account" && (
-                    <>
-                      <ModalLabel text="Amount (₨)" />
-                      <AmountInput value={payAmount} onChange={setPayAmount} remaining={parseFloat(selected.remainingAmount)} colors={colors} />
-                      {accounts.length > 0 && (
-                        <>
-                          <ModalLabel text="Receive into Account (optional)" />
-                          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
-                              <AccountChip label="Cash / None" selected={selectedAccountId === ""} onPress={() => setSelectedAccountId("")} colors={colors} />
-                              {accounts.map(a => (
-                                <AccountChip key={a.id} label={`${a.name}`} sub={fmt(parseFloat(a.balance))} selected={selectedAccountId === String(a.id)} onPress={() => setSelectedAccountId(String(a.id))} colors={colors} />
-                              ))}
+                  {/* ─── Payment Legs ─────────────────────────────────────── */}
+                  {payLegs.map((leg, idx) => {
+                    const pkr = legPkrAmount(leg);
+                    const methodColor = leg.method === "account" ? colors.primary : leg.method === "dollar" ? "#059669" : "#D97706";
+                    return (
+                      <View key={leg.id} style={{ backgroundColor: colors.card, borderRadius: 14, borderWidth: 1.5, borderColor: methodColor + "55", padding: 14, marginBottom: 14 }}>
+                        {/* Leg header */}
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                          <View style={{ flexDirection: "row", gap: 6 }}>
+                            {([
+                              ["account",        "🏦 Account",   colors.primary],
+                              ["dollar",         "💵 Dollar",    "#059669"],
+                              ["coins_withdraw", "🪙 Coins",     "#D97706"],
+                            ] as [PayMethod, string, string][]).map(([k, label, col]) => (
+                              <TouchableOpacity key={k}
+                                onPress={() => updateLeg(leg.id, { method: k, amount: "", accountId: "", dollarAmount: "", dollarRate: "", product: null, productQty: "" })}
+                                style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1.5,
+                                  backgroundColor: leg.method === k ? col : colors.input,
+                                  borderColor: leg.method === k ? col : colors.border }}>
+                                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: leg.method === k ? "#FFF" : colors.mutedForeground }}>{label}</Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                            {pkr > 0 && (
+                              <View style={{ backgroundColor: methodColor + "22", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: methodColor }}>₨{pkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+                              </View>
+                            )}
+                            {payLegs.length > 1 && (
+                              <TouchableOpacity onPress={() => setPayLegs(ls => ls.filter(l => l.id !== leg.id))}>
+                                <Text style={{ color: "#DC2626", fontSize: 20, lineHeight: 22 }}>×</Text>
+                              </TouchableOpacity>
+                            )}
+                          </View>
+                        </View>
+
+                        {/* Account fields */}
+                        {leg.method === "account" && (
+                          <>
+                            <ModalLabel text="Amount (₨)" />
+                            <AmountInput value={leg.amount} onChange={v => updateLeg(leg.id, { amount: v })} remaining={parseFloat(selected.remainingAmount)} colors={colors} />
+                            {accounts.length > 0 && (
+                              <>
+                                <ModalLabel text="Receive into Account (optional)" />
+                                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                                  <View style={{ flexDirection: "row", gap: 8 }}>
+                                    <AccountChip label="Cash / None" selected={leg.accountId === ""} onPress={() => updateLeg(leg.id, { accountId: "" })} colors={colors} />
+                                    {accounts.map(a => (
+                                      <AccountChip key={a.id} label={a.name} sub={fmt(parseFloat(a.balance))} selected={leg.accountId === String(a.id)} onPress={() => updateLeg(leg.id, { accountId: String(a.id) })} colors={colors} />
+                                    ))}
+                                  </View>
+                                </ScrollView>
+                              </>
+                            )}
+                          </>
+                        )}
+
+                        {/* Dollar fields */}
+                        {leg.method === "dollar" && (
+                          <>
+                            <View style={{ flexDirection: "row", gap: 10 }}>
+                              <View style={{ flex: 1 }}>
+                                <ModalLabel text="Amount (USD $)" />
+                                <TextInput
+                                  style={[styles.modalInput, { borderColor: "#059669" }]}
+                                  value={leg.dollarAmount}
+                                  onChangeText={v => updateLeg(leg.id, { dollarAmount: v })}
+                                  keyboardType="decimal-pad" placeholder="0.00" placeholderTextColor={colors.mutedForeground} />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <ModalLabel text="Rate (₨ per $)" />
+                                <TextInput
+                                  style={[styles.modalInput, { borderColor: "#059669" }]}
+                                  value={leg.dollarRate}
+                                  onChangeText={v => updateLeg(leg.id, { dollarRate: v })}
+                                  keyboardType="decimal-pad" placeholder="278.00" placeholderTextColor={colors.mutedForeground} />
+                              </View>
                             </View>
-                          </ScrollView>
-                        </>
-                      )}
-                    </>
-                  )}
+                            {leg.dollarAmount && leg.dollarRate && (
+                              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#EFF6FF", borderRadius: 10, padding: 10, marginTop: 6 }}>
+                                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: "#1D4ED8" }}>{fmtUsd(parseFloat(leg.dollarAmount || "0"))} × ₨{leg.dollarRate}</Text>
+                                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#1D4ED8" }}>₨{(parseFloat(leg.dollarAmount) * parseFloat(leg.dollarRate)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+                              </View>
+                            )}
+                          </>
+                        )}
 
-                  {/* ─── Dollar ──────────────────────────────────────────── */}
-                  {payMethod === "dollar" && (
-                    <>
-                      <View style={{ backgroundColor: "#F0FDF4", borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: "#DCFCE7" }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#059669", marginBottom: 4 }}>💵 Dollar Payment</Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#065F46" }}>
-                          Customer pays in USD. Enter amount and exchange rate — PKR value auto-calculates and reduces the credit.
-                        </Text>
-                      </View>
-                      <View style={{ flexDirection: "row", gap: 10 }}>
-                        <View style={{ flex: 1 }}>
-                          <ModalLabel text="Amount (USD $)" />
-                          <TextInput
-                            style={[styles.modalInput, { borderColor: "#059669" }]}
-                            value={dollarAmount}
-                            onChangeText={v => { setDollarAmount(v); if (v && dollarRate) setPayAmount((parseFloat(v) * parseFloat(dollarRate)).toFixed(2)); }}
-                            keyboardType="decimal-pad" placeholder="0.00"
-                            placeholderTextColor={colors.mutedForeground}
-                          />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <ModalLabel text="Rate (₨ per $)" />
-                          <TextInput
-                            style={[styles.modalInput, { borderColor: "#059669" }]}
-                            value={dollarRate}
-                            onChangeText={v => { setDollarRate(v); if (dollarAmount && v) setPayAmount((parseFloat(dollarAmount) * parseFloat(v)).toFixed(2)); }}
-                            keyboardType="decimal-pad" placeholder="278.00"
-                            placeholderTextColor={colors.mutedForeground}
-                          />
-                        </View>
-                      </View>
-                      {dollarPkrValue && (
-                        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#EFF6FF", borderRadius: 10, padding: 12, marginBottom: 14 }}>
-                          <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: "#1D4ED8" }}>
-                            {fmtUsd(parseFloat(dollarAmount))} × ₨{dollarRate} =
-                          </Text>
-                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: "#1D4ED8" }}>
-                            ₨{parseFloat(dollarPkrValue).toLocaleString()}
-                          </Text>
-                        </View>
-                      )}
-                    </>
-                  )}
+                        {/* Coins fields */}
+                        {leg.method === "coins_withdraw" && (
+                          <>
+                            <ModalLabel text="Select Product" />
+                            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                              <View style={{ flexDirection: "row", gap: 8 }}>
+                                {stockProducts.length === 0
+                                  ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>No products in stock</Text>
+                                  : stockProducts.map(p => (
+                                    <TouchableOpacity key={p.id} onPress={() => updateLeg(leg.id, { product: p, productQty: "" })}
+                                      style={{ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 2, minWidth: 90,
+                                        backgroundColor: leg.product?.id === p.id ? "#D97706" : colors.input,
+                                        borderColor: leg.product?.id === p.id ? "#D97706" : colors.border }}>
+                                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: leg.product?.id === p.id ? "#FFF" : colors.text }} numberOfLines={1}>{p.name}</Text>
+                                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: leg.product?.id === p.id ? "rgba(255,255,255,0.8)" : colors.mutedForeground }}>{fmt(parseFloat(p.unitPrice))}/{p.unit}</Text>
+                                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: leg.product?.id === p.id ? "rgba(255,255,255,0.7)" : colors.mutedForeground }}>🏪 {p.stock}</Text>
+                                    </TouchableOpacity>
+                                  ))
+                                }
+                              </View>
+                            </ScrollView>
+                            {leg.product && (
+                              <>
+                                <ModalLabel text={`Quantity (${leg.product.unit})`} />
+                                <TextInput
+                                  style={[styles.modalInput, { borderColor: "#D97706" }]}
+                                  value={leg.productQty}
+                                  onChangeText={v => updateLeg(leg.id, { productQty: v })}
+                                  keyboardType="decimal-pad" placeholder="0" placeholderTextColor={colors.mutedForeground} />
+                                {leg.productQty && (
+                                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#FFFBEB", borderRadius: 10, padding: 10, marginTop: 6 }}>
+                                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 12, color: "#D97706" }}>{leg.productQty} × {fmt(parseFloat(leg.product.unitPrice))}</Text>
+                                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#D97706" }}>₨{(parseFloat(leg.productQty) * parseFloat(leg.product.unitPrice)).toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+                                  </View>
+                                )}
+                              </>
+                            )}
+                          </>
+                        )}
 
-                  {/* ─── Coins Withdraw ──────────────────────────────────── */}
-                  {payMethod === "coins_withdraw" && (
-                    <>
-                      <View style={{ backgroundColor: "#FFFBEB", borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: "#FEF3C7" }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#D97706", marginBottom: 4 }}>🪙 Coins / Stock Withdrawal</Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#92400E" }}>
-                          Customer returns product as payment. Qty × unit price = credit reduction. Stock is deducted automatically.
-                        </Text>
+                        {idx === payLegs.length - 1 && payLegs.length > 1 && (
+                          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground, marginTop: 6 }}>Leg {idx + 1} of {payLegs.length}</Text>
+                        )}
                       </View>
-                      <ModalLabel text="Select Product" />
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
-                          {stockProducts.length === 0 ? (
-                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>No products in stock</Text>
-                          ) : stockProducts.map(p => (
-                            <TouchableOpacity key={p.id} onPress={() => setSelectedProduct(p)}
-                              style={{ paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, borderWidth: 2,
-                                backgroundColor: selectedProduct?.id === p.id ? "#D97706" : colors.input,
-                                borderColor: selectedProduct?.id === p.id ? "#D97706" : colors.border, minWidth: 100 }}>
-                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: selectedProduct?.id === p.id ? "#FFF" : colors.text }} numberOfLines={1}>{p.name}</Text>
-                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: selectedProduct?.id === p.id ? "rgba(255,255,255,0.8)" : colors.mutedForeground }}>
-                                {fmt(parseFloat(p.unitPrice))}/{p.unit}
-                              </Text>
-                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: selectedProduct?.id === p.id ? "rgba(255,255,255,0.7)" : colors.mutedForeground }}>
-                                🏪 {p.stock} in stock
-                              </Text>
-                            </TouchableOpacity>
-                          ))}
+                    );
+                  })}
+
+                  {/* Add leg button */}
+                  <TouchableOpacity
+                    onPress={() => setPayLegs(ls => [...ls, newLeg()])}
+                    style={{ borderWidth: 1.5, borderColor: colors.primary, borderStyle: "dashed", borderRadius: 10, paddingVertical: 12, alignItems: "center", marginBottom: 16 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.primary }}>+ Add Another Payment Method</Text>
+                  </TouchableOpacity>
+
+                  {/* Total summary when multiple legs */}
+                  {payLegs.length > 1 && (() => {
+                    const total = payLegs.reduce((s, l) => s + legPkrAmount(l), 0);
+                    const remaining = parseFloat(selected.remainingAmount);
+                    const over = total > remaining + 0.01;
+                    return (
+                      <View style={{ backgroundColor: over ? "#FEF2F2" : "#F0FDF4", borderRadius: 12, padding: 14, marginBottom: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <View>
+                          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>Combined total</Text>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: over ? "#DC2626" : "#059669" }}>₨{total.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
                         </View>
-                      </ScrollView>
-                      {selectedProduct && (
-                        <>
-                          <ModalLabel text={`Quantity (${selectedProduct.unit})`} />
-                          <TextInput
-                            style={[styles.modalInput, { borderColor: "#D97706", marginBottom: 8 }]}
-                            value={productQty}
-                            onChangeText={setProductQty}
-                            keyboardType="decimal-pad" placeholder="0"
-                            placeholderTextColor={colors.mutedForeground}
-                          />
-                          {coinsValue && (
-                            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FFFBEB", borderRadius: 10, padding: 12, marginBottom: 14 }}>
-                              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: "#D97706" }}>
-                                {productQty} × {fmt(parseFloat(selectedProduct.unitPrice))} =
-                              </Text>
-                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: "#D97706" }}>
-                                ₨{parseFloat(coinsValue).toLocaleString()}
-                              </Text>
-                            </View>
-                          )}
-                        </>
-                      )}
-                    </>
-                  )}
+                        <View style={{ alignItems: "flex-end" }}>
+                          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>Remaining</Text>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>₨{remaining.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+                          {over && <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#DC2626", marginTop: 2 }}>⚠ Exceeds balance</Text>}
+                        </View>
+                      </View>
+                    );
+                  })()}
 
                   {/* Notes */}
                   <ModalLabel text="Notes (optional)" />
                   <TextInput
-                    style={[styles.modalInput, { marginBottom: 20 }]}
+                    style={[styles.modalInput, { marginBottom: 16 }]}
                     value={payNotes} onChangeText={setPayNotes}
                     placeholder="Payment notes..."
                     placeholderTextColor={colors.mutedForeground}
                   />
 
-                  {/* Confirm */}
+                  {/* Submit */}
                   <TouchableOpacity
-                    style={{ backgroundColor: payMethod === "account" ? "#059669" : payMethod === "dollar" ? "#1D4ED8" : "#D97706",
-                      paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 8 }}
-                    onPress={handlePay}
+                    style={{ backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 14, alignItems: "center", marginBottom: 8, opacity: saving ? 0.6 : 1 }}
+                    disabled={saving}
+                    onPress={handleMultiPay}
                   >
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" }}>
-                      {payMethod === "account" ? "✅ Confirm Payment" : payMethod === "dollar" ? "💵 Confirm Dollar Receipt" : "🪙 Confirm Coins Withdraw"}
+                      {saving ? "Saving…" : `✅ Confirm Payment${payLegs.length > 1 ? ` (${payLegs.length} methods)` : ""}`}
                     </Text>
-                    {payMethod === "dollar" && dollarPkrValue && (
-                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 3 }}>
-                        {fmtUsd(parseFloat(dollarAmount || "0"))} → ₨{parseFloat(dollarPkrValue).toLocaleString()}
-                      </Text>
-                    )}
-                    {payMethod === "coins_withdraw" && coinsValue && (
-                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 3 }}>
-                        {productQty} {selectedProduct?.unit} of {selectedProduct?.name}
+                    {payLegs.length > 1 && (
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.85)", marginTop: 2 }}>
+                        ₨{payLegs.reduce((s, l) => s + legPkrAmount(l), 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} combined
                       </Text>
                     )}
                   </TouchableOpacity>

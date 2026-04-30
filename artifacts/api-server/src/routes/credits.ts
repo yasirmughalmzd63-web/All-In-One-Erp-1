@@ -241,6 +241,138 @@ router.post("/credits/:id/pay", requireAuth, async (req, res): Promise<void> => 
   });
 });
 
+// POST /api/credits/:id/pay/multi — settle a credit with multiple payment methods atomically
+router.post("/credits/:id/pay/multi", requireAuth, async (req, res): Promise<void> => {
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  const { notes, legs } = req.body as {
+    notes?: string;
+    legs?: Array<{
+      paymentMethod: "account" | "dollar" | "coins_withdraw";
+      amount: string;
+      accountId?: number | null;
+      dollarAmount?: string;
+      dollarRate?: string;
+      productId?: number;
+      productQty?: string;
+      productName?: string;
+      productValuePkr?: string;
+    }>;
+  };
+
+  if (!legs || legs.length === 0) { res.status(400).json({ error: "At least one payment leg is required" }); return; }
+
+  const [credit] = await db.select().from(creditsTable).where(eq(creditsTable.id, id));
+  if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (credit.status === "paid") { res.status(400).json({ error: "Credit is already fully paid" }); return; }
+
+  // Validate + compute each leg's PKR amount
+  const legAmounts: number[] = [];
+  for (const leg of legs) {
+    const amt = parseFloat(leg.amount);
+    if (isNaN(amt) || amt <= 0) {
+      res.status(400).json({ error: `Each leg must have a positive amount. Got: ${leg.amount}` }); return;
+    }
+    if (leg.paymentMethod === "dollar" && (!leg.dollarAmount || !leg.dollarRate)) {
+      res.status(400).json({ error: "Dollar legs require dollarAmount and dollarRate" }); return;
+    }
+    if (leg.paymentMethod === "coins_withdraw" && (!leg.productId || !leg.productQty)) {
+      res.status(400).json({ error: "Coins withdraw legs require productId and productQty" }); return;
+    }
+    legAmounts.push(amt);
+  }
+
+  const totalPaid = legAmounts.reduce((s, a) => s + a, 0);
+  const remaining = parseFloat(credit.remainingAmount);
+  if (totalPaid > remaining + 0.01) {
+    res.status(400).json({ error: `Total payment ₨${totalPaid.toFixed(2)} exceeds remaining balance ₨${remaining.toFixed(2)}` }); return;
+  }
+
+  const newPaid = parseFloat(credit.paidAmount) + totalPaid;
+  const newRemaining = Math.max(0, parseFloat(credit.amount) - newPaid);
+  const status = newRemaining <= 0.001 ? "paid" : "partial";
+  const info = await getPartyInfo(credit.partyId, credit.partyType);
+
+  const payments: (typeof creditPaymentsTable.$inferSelect)[] = [];
+  try {
+    await db.transaction(async tx => {
+      // Update credit
+      await tx.update(creditsTable).set({
+        paidAmount: newPaid.toFixed(8),
+        remainingAmount: newRemaining.toFixed(8),
+        status,
+      }).where(eq(creditsTable.id, id));
+
+      for (let i = 0; i < legs.length; i++) {
+        const leg = legs[i]!;
+        const amt = legAmounts[i]!;
+        const today = new Date().toISOString().slice(0, 10);
+
+        if (leg.paymentMethod === "account" && leg.accountId) {
+          const [account] = await tx.select().from(accountsTable).where(eq(accountsTable.id, leg.accountId));
+          if (account) {
+            const direction = credit.type === "receivable" ? 1 : -1;
+            const newBal = parseFloat(account.balance) + direction * amt;
+            await tx.update(accountsTable).set({ balance: newBal.toFixed(8) }).where(eq(accountsTable.id, leg.accountId));
+          }
+        }
+
+        if (leg.paymentMethod === "dollar" && leg.dollarAmount && leg.dollarRate) {
+          await tx.insert(dollarWalletTable).values({
+            entryType: "received",
+            amountUsd: parseFloat(leg.dollarAmount).toFixed(8),
+            rate: parseFloat(leg.dollarRate).toFixed(8),
+            totalPkr: amt.toFixed(8),
+            partyType: credit.partyType,
+            partyId: credit.partyId,
+            notes: `Multi-pay credit #${id} leg ${i + 1}${notes ? ` · ${notes}` : ""}`,
+            date: today,
+            userId: String(req.userId),
+          });
+        }
+
+        if (leg.paymentMethod === "coins_withdraw" && leg.productId && leg.productQty) {
+          const qty = Math.floor(parseFloat(leg.productQty));
+          const [product] = await tx.select().from(productsTable).where(eq(productsTable.id, leg.productId));
+          if (product) {
+            const newStock = Math.max(0, (product.stock ?? 0) - qty);
+            await tx.update(productsTable).set({ stock: newStock }).where(eq(productsTable.id, leg.productId));
+          }
+        }
+
+        const [payRec] = await tx.insert(creditPaymentsTable).values({
+          creditId: id,
+          amount: amt.toFixed(8),
+          paymentMethod: leg.paymentMethod,
+          accountId: leg.paymentMethod === "account" ? (leg.accountId ?? null) : null,
+          dollarAmount: leg.dollarAmount ? parseFloat(leg.dollarAmount).toFixed(8) : null,
+          dollarRate: leg.dollarRate ? parseFloat(leg.dollarRate).toFixed(8) : null,
+          productId: leg.productId ?? null,
+          productName: leg.productName ?? null,
+          productQty: leg.productQty ? parseFloat(leg.productQty).toFixed(8) : null,
+          productValuePkr: leg.productValuePkr ? parseFloat(leg.productValuePkr).toFixed(8) : null,
+          notes: notes ?? null,
+          userId: req.userId!,
+          locationId: info.locationId,
+        }).returning();
+        payments.push(payRec!);
+      }
+    });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Multi-payment failed" }); return;
+  }
+
+  await logAudit(req.userId, "payment", "credit", id,
+    `Multi-pay ₨${totalPaid.toFixed(2)} across ${legs.length} methods (${legs.map(l => l.paymentMethod).join(", ")})`);
+
+  const [updated] = await db.select().from(creditsTable).where(eq(creditsTable.id, id));
+  res.json({
+    credit: { ...updated!, partyName: info.name, locationId: info.locationId, createdAt: updated!.createdAt.toISOString() },
+    payments: payments.map(p => ({ ...p, createdAt: p.createdAt.toISOString() })),
+    totalPaid: totalPaid.toFixed(2),
+    legsCount: legs.length,
+  });
+});
+
 router.delete("/credits/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [existing] = await db.select({ userId: creditsTable.userId }).from(creditsTable).where(eq(creditsTable.id, id));
