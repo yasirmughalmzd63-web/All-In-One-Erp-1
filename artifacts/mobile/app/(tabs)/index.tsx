@@ -25,6 +25,22 @@ function formatK(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+type MyTargetProgress = {
+  targetId: number;
+  title: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  targetAmount: string;
+  achievedAmount: string;
+  achievedPct: string;
+  commissionType: string;
+  commissionValue: string;
+  maxBonus: string;
+  earnedBonus: string;
+  leftBonus: string;
+};
+
 type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null; categoryName?: string | null; locationId?: number | null };
 type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null; locationId?: number | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string; locationId?: number | null };
@@ -715,6 +731,14 @@ export default function POSScreen() {
   const { data: accountsRaw } = useListAccounts();
   const { data: locationsRaw } = useListLocations();
   const createSaleMutation = useCreateSale();
+
+  // ── My Target Progress (each user sees only their own assigned target) ──
+  const { data: myTargetProgress } = useQuery<MyTargetProgress | null>({
+    queryKey: ["my-target-progress", user?.id],
+    queryFn: () => customFetch<MyTargetProgress | null>("/api/targets/my-progress"),
+    refetchInterval: 30_000,
+    enabled: !!user?.id,
+  });
 
   React.useEffect(() => {
     customFetch<{ entryType: string; amountUsd: string; rate: string }[]>("/api/dollar-wallet")
@@ -1674,89 +1698,74 @@ export default function POSScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Validation Checklist ─────────────────────────────────────── */}
-        {(strictMode || cashRules.some(r => !r.pass)) && (
-          <View style={[styles.validationBox, {
-            backgroundColor: strictMode
-              ? (cashValidations.canComplete ? "#F0FDF4" : "#FEF2F2")
-              : colors.card,
-            borderColor: strictMode
-              ? (cashValidations.canComplete ? "#A7F3D0" : "#FCA5A5")
-              : colors.border,
-          }]}>
-            {/* Header row */}
-            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-                <Text style={{ fontSize: 11 }}>{strictMode ? "🔒" : "🔓"}</Text>
-                <Text style={[styles.validationTitle, {
-                  color: strictMode
-                    ? (cashValidations.canComplete ? "#065F46" : "#991B1B")
-                    : colors.mutedForeground,
-                }]}>
-                  {strictMode ? "STRICT MODE — ALL RULES ENFORCED" : "VALIDATION CHECKLIST"}
+        {/* ── My Target Progress (each user sees only their own) ─────────── */}
+        {myTargetProgress ? (
+          <View style={[styles.targetWrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={styles.targetHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.targetHeaderTitle, { color: colors.foreground }]} numberOfLines={1}>
+                  🎯 {myTargetProgress.title}
+                </Text>
+                <Text style={[styles.targetHeaderSub, { color: colors.mutedForeground }]} numberOfLines={1}>
+                  {myTargetProgress.type === "weekly" ? "Weekly" : "Daily"} · Target ₨{formatK(parseFloat(myTargetProgress.targetAmount))} · {myTargetProgress.commissionType === "percentage"
+                    ? `${parseFloat(myTargetProgress.commissionValue).toFixed(1)}% commission`
+                    : `flat ₨${formatK(parseFloat(myTargetProgress.commissionValue))} bonus`}
                 </Text>
               </View>
-              <TouchableOpacity
-                onPress={toggleStrictMode}
-                style={{
-                  paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7, borderWidth: 1,
-                  borderColor: strictMode ? "#FCA5A5" : "#A7F3D0",
-                  backgroundColor: strictMode ? "#FEE2E2" : "#ECFDF5",
-                }}
-              >
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 8, color: strictMode ? "#991B1B" : "#065F46" }}>
-                  {strictMode ? "DISABLE STRICT" : "ENABLE STRICT"}
-                </Text>
-              </TouchableOpacity>
             </View>
 
-            {/* Cash sale rules */}
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: colors.mutedForeground, letterSpacing: 0.8, marginBottom: 4 }}>CASH SALE REQUIREMENTS</Text>
-            {cashRules.map(rule => (
-              <View key={rule.id} style={[styles.validationRow, {
-                backgroundColor: rule.pass ? "transparent" : rule.severity === "error" ? "#FEF2F2" : "#FFFBEB",
-                borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3, marginBottom: 2,
-              }]}>
-                <Text style={{ fontSize: 12, width: 18 }}>
-                  {rule.pass ? "✅" : rule.severity === "error" ? "❌" : "⚠️"}
+            {/* Progress bar */}
+            <View style={styles.progressBarTrack}>
+              <View style={[styles.progressBarFill, {
+                width: `${Math.min(100, parseFloat(myTargetProgress.achievedPct))}%`,
+                backgroundColor: parseFloat(myTargetProgress.achievedPct) >= 100 ? "#16A34A" : "#2563EB",
+              }]} />
+            </View>
+
+            <View style={styles.targetTilesRow}>
+              {/* Tile 1 — Target Achieved % */}
+              <View style={[styles.targetTile, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" }]}>
+                <Text style={[styles.targetTileLabel, { color: "#1E40AF" }]}>TARGET %</Text>
+                <Text style={[styles.targetTileValue, { color: "#1E3A8A" }]}>
+                  {parseFloat(myTargetProgress.achievedPct).toFixed(0)}%
                 </Text>
-                <Text style={[styles.validationText, {
-                  fontSize: 11,
-                  color: rule.pass ? (strictMode ? "#065F46" : colors.mutedForeground) : rule.severity === "error" ? colors.danger : "#D97706",
-                  fontFamily: rule.pass ? "Inter_400Regular" : "Inter_600SemiBold",
-                }]}>
-                  {rule.label}
+                <Text style={[styles.targetTileSub, { color: "#3730A3" }]} numberOfLines={1}>
+                  ₨{formatK(parseFloat(myTargetProgress.achievedAmount))}
                 </Text>
               </View>
-            ))}
 
-            {/* Credit sale extra rule */}
-            {canCreditSale && (
-              <>
-                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: colors.mutedForeground, letterSpacing: 0.8, marginTop: 6, marginBottom: 4 }}>CREDIT SALE (EXTRA)</Text>
-                <View style={[styles.validationRow, {
-                  backgroundColor: selectedCustomer ? "transparent" : "#FFFBEB",
-                  borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3,
-                }]}>
-                  <Text style={{ fontSize: 12, width: 18 }}>{selectedCustomer ? "✅" : "⚠️"}</Text>
-                  <Text style={[styles.validationText, {
-                    fontSize: 11,
-                    color: selectedCustomer ? (strictMode ? "#065F46" : colors.mutedForeground) : "#D97706",
-                    fontFamily: selectedCustomer ? "Inter_400Regular" : "Inter_600SemiBold",
-                  }]}>
-                    Customer selected for credit sale
-                  </Text>
-                </View>
-              </>
-            )}
-
-            {cashValidations.canComplete && (
-              <View style={{ marginTop: 6, paddingHorizontal: 6, paddingVertical: 4, backgroundColor: "#ECFDF5", borderRadius: 8, alignItems: "center" }}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#065F46", letterSpacing: 0.5 }}>
-                  ✅ ALL CLEAR — READY TO COMPLETE SALE
+              {/* Tile 2 — Bonus Earned */}
+              <View style={[styles.targetTile, { backgroundColor: "#F0FDF4", borderColor: "#86EFAC" }]}>
+                <Text style={[styles.targetTileLabel, { color: "#065F46" }]}>BONUS EARNED</Text>
+                <Text style={[styles.targetTileValue, { color: "#064E3B" }]}>
+                  ₨{formatK(parseFloat(myTargetProgress.earnedBonus))}
+                </Text>
+                <Text style={[styles.targetTileSub, { color: "#065F46" }]} numberOfLines={1}>
+                  so far
                 </Text>
               </View>
-            )}
+
+              {/* Tile 3 — Left Balance Bonus */}
+              <View style={[styles.targetTile, { backgroundColor: "#FFFBEB", borderColor: "#FCD34D" }]}>
+                <Text style={[styles.targetTileLabel, { color: "#92400E" }]}>LEFT BONUS</Text>
+                <Text style={[styles.targetTileValue, { color: "#78350F" }]}>
+                  ₨{formatK(parseFloat(myTargetProgress.leftBonus))}
+                </Text>
+                <Text style={[styles.targetTileSub, { color: "#92400E" }]} numberOfLines={1}>
+                  still possible
+                </Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <View style={[styles.noTargetBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={styles.noTargetEmoji}>🎯</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.noTargetText, { color: colors.foreground }]}>No active target assigned</Text>
+              <Text style={[styles.noTargetSub, { color: colors.mutedForeground }]}>
+                {isAdmin ? "Set a sales target with bonus from the Targets screen" : "Ask your admin to set a sales target with bonus"}
+              </Text>
+            </View>
           </View>
         )}
 
@@ -1914,10 +1923,21 @@ const styles = StyleSheet.create({
   completeBtn: { height: 56, borderRadius: 14, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8 },
   actionBtnText: { fontFamily: "Inter_700Bold", fontSize: 15, color: "#FFFFFF" },
   // Validation
-  validationBox: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, padding: 14, gap: 8 },
-  validationTitle: { fontFamily: "Inter_600SemiBold", fontSize: 10, letterSpacing: 1, marginBottom: 2 },
-  validationRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  validationText: { fontFamily: "Inter_500Medium", fontSize: 13, flex: 1 },
+  targetWrap: { marginHorizontal: 14, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 12, gap: 10 },
+  targetHeader: { flexDirection: "row", alignItems: "center", gap: 8 },
+  targetHeaderTitle: { fontFamily: "Inter_700Bold", fontSize: 13 },
+  targetHeaderSub: { fontFamily: "Inter_500Medium", fontSize: 10, marginTop: 1 },
+  progressBarTrack: { height: 6, borderRadius: 4, backgroundColor: "#E5E7EB", overflow: "hidden" },
+  progressBarFill: { height: "100%", borderRadius: 4 },
+  targetTilesRow: { flexDirection: "row", gap: 6 },
+  targetTile: { flex: 1, borderRadius: 10, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 8, alignItems: "center" },
+  targetTileLabel: { fontFamily: "Inter_700Bold", fontSize: 8, letterSpacing: 0.6, marginBottom: 3 },
+  targetTileValue: { fontFamily: "Inter_700Bold", fontSize: 16 },
+  targetTileSub: { fontFamily: "Inter_500Medium", fontSize: 9, marginTop: 2 },
+  noTargetBox: { marginHorizontal: 14, marginTop: 10, borderRadius: 14, borderWidth: 1, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  noTargetEmoji: { fontSize: 22 },
+  noTargetText: { fontFamily: "Inter_700Bold", fontSize: 12 },
+  noTargetSub: { fontFamily: "Inter_400Regular", fontSize: 10, marginTop: 1 },
   // Priv notice
   privNotice: { marginHorizontal: 14, marginTop: 8, borderRadius: 12, borderWidth: 1, padding: 12, flexDirection: "row", alignItems: "flex-start", gap: 8 },
 });

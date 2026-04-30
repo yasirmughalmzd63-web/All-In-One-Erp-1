@@ -20,6 +20,73 @@ router.get("/targets/pending-achievements", requireAuth, async (req, res): Promi
   res.json(byEmp);
 });
 
+/* ═══ MY TARGET PROGRESS (read-only, for current user) ════════════════════ */
+router.get("/targets/my-progress", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!;
+  const todayStr = today();
+
+  // Find the user's active user-scoped target whose date window covers today.
+  // If multiple, prefer the most recently created.
+  const myTargets = await db
+    .select()
+    .from(targetsTable)
+    .where(and(
+      eq(targetsTable.scope, "user"),
+      eq(targetsTable.userId, userId),
+      eq(targetsTable.status, "active"),
+    ));
+
+  const inWindow = myTargets
+    .filter(t => t.startDate <= todayStr && t.endDate >= todayStr)
+    .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+
+  const target = inWindow[0] ?? null;
+  if (!target) { res.json(null); return; }
+
+  // Read-only achievement calc — does NOT mutate target row.
+  const conditions = [
+    sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') >= ${target.startDate}::date`,
+    sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') <= ${target.endDate}::date`,
+    eq(salesTable.status, "completed"),
+    eq(salesTable.userId, userId),
+  ];
+  if (target.locationId) conditions.push(eq(salesTable.locationId, target.locationId));
+
+  const [agg] = await db
+    .select({ total: sql<string>`COALESCE(SUM(CAST(${salesTable.total} AS NUMERIC)), 0)` })
+    .from(salesTable)
+    .where(and(...conditions));
+
+  const targetAmount    = parseFloat(target.targetAmount);
+  const achievedAmount  = parseFloat(agg?.total ?? "0");
+  const commissionValue = parseFloat(target.commissionValue);
+
+  const maxBonus = target.commissionType === "percentage"
+    ? (targetAmount * commissionValue) / 100
+    : commissionValue;
+
+  const progressFraction = targetAmount > 0 ? Math.min(1, achievedAmount / targetAmount) : 0;
+  const earnedBonus = maxBonus * progressFraction;
+  const leftBonus   = Math.max(0, maxBonus - earnedBonus);
+  const achievedPct = targetAmount > 0 ? (achievedAmount / targetAmount) * 100 : 0;
+
+  res.json({
+    targetId:        target.id,
+    title:           target.title,
+    type:            target.type,
+    startDate:       target.startDate,
+    endDate:         target.endDate,
+    targetAmount:    targetAmount.toFixed(2),
+    achievedAmount:  achievedAmount.toFixed(2),
+    achievedPct:     achievedPct.toFixed(1),
+    commissionType:  target.commissionType,
+    commissionValue: target.commissionValue,
+    maxBonus:        maxBonus.toFixed(2),
+    earnedBonus:     earnedBonus.toFixed(2),
+    leftBonus:       leftBonus.toFixed(2),
+  });
+});
+
 /* ═══ LIST ════════════════════════════════════════════════════════════════ */
 router.get("/targets", requireAuth, async (req, res): Promise<void> => {
   const { type, scope, status, employeeId } = req.query as Record<string, string>;
