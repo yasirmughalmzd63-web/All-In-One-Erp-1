@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, dollarWalletTable, accountsTable, productsTable, walletsTable, suppliersTable, customersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
@@ -288,6 +288,167 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
     qty,
     newStock,
     newCostPerCoin: fmt(newCostPerCoin),
+  });
+});
+
+// POST /api/dollar-wallet/topup/split — atomic split topup across multiple products
+router.post("/dollar-wallet/topup/split", requireAuth, async (req, res): Promise<void> => {
+  const { walletId, paymentMode, partyType, partyId, date, notes, splits } = req.body as {
+    walletId?: number | null;
+    paymentMode?: "wallet" | "direct";
+    partyType?: "supplier" | "customer";
+    partyId?: number;
+    date?: string;
+    notes?: string | null;
+    splits?: Array<{
+      productId: number;
+      amountUsd: string;
+      coinsPerUsd: string;
+      exchangeRatePkr: string;
+    }>;
+  };
+
+  if (!splits || splits.length < 1) {
+    res.status(400).json({ error: "At least one split is required" });
+    return;
+  }
+  if (!partyType || !partyId || (partyType !== "supplier" && partyType !== "customer")) {
+    res.status(400).json({ error: "partyType (supplier|customer) and partyId are required" });
+    return;
+  }
+  if (!date) {
+    res.status(400).json({ error: "date is required" });
+    return;
+  }
+
+  const useWallet = paymentMode !== "direct" && !!walletId;
+
+  // Validate each split
+  for (const s of splits) {
+    if (!s.productId || !s.amountUsd || !s.coinsPerUsd || !s.exchangeRatePkr) {
+      res.status(400).json({ error: "Each split needs productId, amountUsd, coinsPerUsd, exchangeRatePkr" });
+      return;
+    }
+    if (!(parseFloat(s.amountUsd) > 0) || !(parseFloat(s.coinsPerUsd) > 0) || !(parseFloat(s.exchangeRatePkr) > 0)) {
+      res.status(400).json({ error: "amountUsd, coinsPerUsd, exchangeRatePkr must all be positive in every split" });
+      return;
+    }
+  }
+
+  const totalUsd = splits.reduce((sum, s) => sum + parseFloat(s.amountUsd), 0);
+
+  // Look up party
+  let partyName = "";
+  if (partyType === "supplier") {
+    const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, partyId));
+    if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+    partyName = s.name;
+  } else {
+    const [c] = await db.select().from(customersTable).where(eq(customersTable.id, partyId));
+    if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
+    partyName = c.name;
+  }
+
+  // Look up wallet if needed
+  let wallet: typeof walletsTable.$inferSelect | null = null;
+  if (useWallet) {
+    const [w] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId!), eq(walletsTable.currency, "USD")));
+    if (!w) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
+    if (parseFloat(w.balance) < totalUsd) {
+      res.status(400).json({ error: `Insufficient balance in ${w.name} — have $${parseFloat(w.balance).toFixed(2)}, need $${totalUsd.toFixed(2)} across ${splits.length} splits` });
+      return;
+    }
+    wallet = w;
+  }
+
+  // Pre-load all products
+  const productIds = [...new Set(splits.map(s => s.productId))];
+  const products = await db.select().from(productsTable).where(inArray(productsTable.id, productIds));
+  const productMap = new Map(products.map(p => [p.id, p]));
+
+  for (const s of splits) {
+    if (!productMap.has(s.productId)) {
+      res.status(404).json({ error: `Product ${s.productId} not found` });
+      return;
+    }
+  }
+
+  const modeLabel = wallet ? wallet.name : "Direct/Cash";
+
+  // Execute everything in a single DB transaction
+  const results: Array<{ productId: number; productName: string; qty: number; newStock: number; ledgerId: number }> = [];
+  try {
+    await db.transaction(async tx => {
+      // Re-check wallet balance inside transaction
+      if (useWallet && wallet) {
+        const [freshWallet] = await tx.select().from(walletsTable).where(eq(walletsTable.id, wallet.id));
+        if (!freshWallet || parseFloat(freshWallet.balance) < totalUsd) {
+          throw new Error(`Insufficient balance in ${wallet.name} (have $${freshWallet?.balance ?? 0}, need $${totalUsd.toFixed(2)})`);
+        }
+        await tx.update(walletsTable)
+          .set({ balance: fmt(parseFloat(freshWallet.balance) - totalUsd) })
+          .where(eq(walletsTable.id, wallet.id));
+      }
+
+      for (const s of splits) {
+        const product = productMap.get(s.productId)!;
+        const usd = parseFloat(s.amountUsd);
+        const fx = parseFloat(s.exchangeRatePkr);
+        const cpu = parseFloat(s.coinsPerUsd);
+        const qty = Math.floor(usd * cpu);
+        const totalPkr = usd * fx;
+        const newCostPerCoin = totalPkr / qty;
+
+        if (qty <= 0) throw new Error(`Computed qty is zero for ${product.name} — increase USD or lower per-coin rate`);
+
+        const oldStock = product.stock ?? 0;
+        const oldCost = parseFloat(product.costPrice || "0");
+        const newStock = oldStock + qty;
+        const weightedCost = newStock > 0 ? (oldStock * oldCost + qty * newCostPerCoin) / newStock : newCostPerCoin;
+
+        await tx.update(productsTable).set({
+          stock: newStock,
+          costPrice: fmt(weightedCost),
+        }).where(eq(productsTable.id, s.productId));
+
+        const noteText = notes
+          ? `${notes} · ${qty} ${product.unit} @ ₨${(1 / cpu).toFixed(8)} USD/coin via ${modeLabel}`
+          : `Split: ${qty} ${product.unit} from ${partyType} ${partyName} @ ₨${(1 / cpu).toFixed(8)} USD/coin via ${modeLabel}`;
+
+        const [row] = await tx.insert(dollarWalletTable).values({
+          entryType: "topup",
+          amountUsd: fmt(usd),
+          rate: fmt(fx),
+          totalPkr: fmt(totalPkr),
+          partyName: `${partyName} → ${product.name}`,
+          walletId: wallet?.id ?? null,
+          partyType,
+          partyId,
+          productId: s.productId,
+          qty,
+          paymentMode: wallet ? "wallet" : "direct",
+          notes: noteText,
+          date,
+          userId: String(req.userId),
+        }).returning();
+
+        results.push({ productId: s.productId, productName: product.name, qty, newStock, ledgerId: row!.id });
+      }
+    });
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Split topup failed" });
+    return;
+  }
+
+  await logAudit(req.userId, "create", "dollar_wallet", 0,
+    `Split topup: $${totalUsd.toFixed(2)} across ${splits.length} apps from ${partyType} ${partyName} via ${modeLabel}`);
+
+  res.status(201).json({
+    totalUsd: fmt(totalUsd),
+    splits: results,
+    paymentMode: wallet ? "wallet" : "direct",
+    walletName: wallet?.name ?? null,
+    partyName,
   });
 });
 

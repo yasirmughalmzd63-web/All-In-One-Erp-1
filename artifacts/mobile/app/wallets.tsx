@@ -105,10 +105,16 @@ export default function WalletsScreen() {
   const [showModal, setShowModal] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showTopupModal, setShowTopupModal] = useState(false);
+  const [showSplitModal, setShowSplitModal] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [buyForm, setBuyForm] = useState(emptyBuyForm);
   const [topupForm, setTopupForm] = useState(emptyTopupForm);
   const [saving, setSaving] = useState(false);
+
+  type SplitRow = { id: string; productId: string; amountUsd: string; coinsPerUsd: string; exchangeRatePkr: string };
+  const newSplitRow = (): SplitRow => ({ id: Math.random().toString(36).slice(2), productId: "", amountUsd: "", coinsPerUsd: "6000", exchangeRatePkr: "333.33" });
+  const [splitHeader, setSplitHeader] = useState({ partyType: "supplier" as "supplier" | "customer", partyId: "", walletId: "", paymentMode: "wallet" as "wallet" | "direct", date: new Date().toISOString().split("T")[0]!, notes: "" });
+  const [splitRows, setSplitRows] = useState<SplitRow[]>([newSplitRow()]);
 
   const { data: accountsRaw } = useListAccounts();
   const { data: productsRaw } = useListProducts();
@@ -276,6 +282,43 @@ export default function WalletsScreen() {
     }
   };
 
+  const handleSplitSubmit = async () => {
+    if (!splitHeader.partyId) { Alert.alert("Validation", "Select a party"); return; }
+    if (splitHeader.paymentMode === "wallet" && !splitHeader.walletId) { Alert.alert("Validation", "Select a dollar wallet"); return; }
+    const validRows = splitRows.filter(r => r.productId && parseFloat(r.amountUsd) > 0 && parseFloat(r.coinsPerUsd) > 0 && parseFloat(r.exchangeRatePkr) > 0);
+    if (validRows.length === 0) { Alert.alert("Validation", "Add at least one complete split row (product, amount, coins/USD, rate)"); return; }
+    setSaving(true);
+    try {
+      await customFetch("/api/dollar-wallet/topup/split", {
+        method: "POST",
+        body: JSON.stringify({
+          walletId: splitHeader.paymentMode === "wallet" ? parseInt(splitHeader.walletId) : null,
+          paymentMode: splitHeader.paymentMode,
+          partyType: splitHeader.partyType,
+          partyId: parseInt(splitHeader.partyId),
+          date: splitHeader.date,
+          notes: splitHeader.notes || null,
+          splits: validRows.map(r => ({
+            productId: parseInt(r.productId),
+            amountUsd: r.amountUsd,
+            coinsPerUsd: r.coinsPerUsd,
+            exchangeRatePkr: r.exchangeRatePkr,
+          })),
+        }),
+      });
+      const totalUsdSplit = validRows.reduce((s, r) => s + parseFloat(r.amountUsd || "0"), 0);
+      Alert.alert("Split Complete!", `$${totalUsdSplit.toFixed(2)} split across ${validRows.length} app${validRows.length > 1 ? "s" : ""} — all inventory updated atomically.`);
+      setShowSplitModal(false);
+      setSplitHeader({ partyType: "supplier", partyId: "", walletId: "", paymentMode: "wallet", date: new Date().toISOString().split("T")[0]!, notes: "" });
+      setSplitRows([newSplitRow()]);
+      load();
+      loadWallets();
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Split topup failed");
+    }
+    setSaving(false);
+  };
+
   const topupQty = topupForm.amountUsd && topupForm.coinsPerUsd
     ? Math.floor(parseFloat(topupForm.amountUsd) * parseFloat(topupForm.coinsPerUsd))
     : 0;
@@ -416,6 +459,9 @@ export default function WalletsScreen() {
           <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "rgba(147,51,234,0.85)" }]} onPress={() => setShowTopupModal(true)}>
             
             <Text style={styles.quickText}>Top-up Coins</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "rgba(234,88,12,0.85)" }]} onPress={() => setShowSplitModal(true)}>
+            <Text style={styles.quickText}>🔀 Rapid Split</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.quickBtn, { backgroundColor: "rgba(2,132,199,0.85)" }]} onPress={() => router.push("/customer-dollar-report" as never)}>
             <Text style={styles.quickText}>Cust. Report</Text>
@@ -976,6 +1022,271 @@ export default function WalletsScreen() {
                       disabled={saving || walletBlocked}
                       onPress={handleTopup}>
                       <Text style={styles.saveBtnText}>{btnLabel}</Text>
+                    </TouchableOpacity>
+                  </>
+                );
+              })()}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Rapid Split Modal ─── */}
+      <Modal visible={showSplitModal} animationType="slide" transparent onRequestClose={() => setShowSplitModal(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "95%" }}>
+            {/* Header */}
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <View>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>🔀 Rapid Split Topup</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>One USD batch → multiple apps, atomically</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowSplitModal(false)}>
+                <Text style={{ color: "#6B7280", fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+              {/* Party */}
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PARTY (COIN SELLER)</Text>
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 8 }}>
+                {(["supplier", "customer"] as const).map(t => {
+                  const sel = splitHeader.partyType === t;
+                  return (
+                    <TouchableOpacity key={t} onPress={() => setSplitHeader(h => ({ ...h, partyType: t, partyId: "" }))}
+                      style={{ flex: 1, backgroundColor: sel ? "#EA580C" : colors.card, borderColor: sel ? "#EA580C" : colors.border, borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>
+                        {t === "supplier" ? "Supplier" : "Customer"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {(splitHeader.partyType === "supplier" ? suppliers : customers).map(p => {
+                    const sel = splitHeader.partyId === String(p.id);
+                    return (
+                      <TouchableOpacity key={p.id} onPress={() => setSplitHeader(h => ({ ...h, partyId: String(p.id) }))}
+                        style={[styles.acctChip, { backgroundColor: sel ? "#EA580C" : colors.card, borderColor: sel ? "#EA580C" : colors.border }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{p.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {(splitHeader.partyType === "supplier" ? suppliers : customers).length === 0 && (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, padding: 8 }}>No {splitHeader.partyType}s yet</Text>
+                  )}
+                </View>
+              </ScrollView>
+
+              {/* Payment Mode */}
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PAYMENT METHOD</Text>
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+                {([{ k: "wallet", label: "Dollar Wallet", icon: "💳" }, { k: "direct", label: "Direct/Cash", icon: "💵" }] as const).map(opt => {
+                  const sel = splitHeader.paymentMode === opt.k;
+                  return (
+                    <TouchableOpacity key={opt.k}
+                      onPress={() => setSplitHeader(h => ({ ...h, paymentMode: opt.k, walletId: opt.k === "direct" ? "" : h.walletId }))}
+                      style={[styles.acctChip, { flex: 1, backgroundColor: sel ? "#EA580C" : colors.card, borderColor: sel ? "#EA580C" : colors.border, paddingVertical: 10 }]}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: sel ? "#FFF" : colors.text, textAlign: "center" }}>{opt.icon} {opt.label}</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.8)" : colors.mutedForeground, textAlign: "center" }}>
+                        {opt.k === "wallet" ? "Deducts total USD from wallet" : "No wallet deduction"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Wallet Selector */}
+              {splitHeader.paymentMode === "wallet" && (
+                <>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DOLLAR WALLET</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {dollarWallets.map(w => {
+                        const sel = splitHeader.walletId === String(w.id);
+                        const totalSplitUsd = splitRows.reduce((s, r) => s + parseFloat(r.amountUsd || "0"), 0);
+                        const insufficient = totalSplitUsd > 0 && parseFloat(w.balance) < totalSplitUsd;
+                        return (
+                          <TouchableOpacity key={w.id} onPress={() => setSplitHeader(h => ({ ...h, walletId: String(w.id) }))}
+                            style={[styles.acctChip, { backgroundColor: sel ? "#EA580C" : colors.card, borderColor: sel ? "#EA580C" : insufficient ? "#DC2626" : colors.border }]}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{w.name}</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : insufficient ? "#DC2626" : colors.mutedForeground }}>
+                              ${parseFloat(w.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </>
+              )}
+
+              {/* Date + Notes */}
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DATE</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={splitHeader.date} onChangeText={v => setSplitHeader(h => ({ ...h, date: v }))}
+                    placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} />
+                </View>
+                <View style={{ flex: 2 }}>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>NOTES (OPTIONAL)</Text>
+                  <TextInput
+                    style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
+                    value={splitHeader.notes} onChangeText={v => setSplitHeader(h => ({ ...h, notes: v }))}
+                    placeholder="e.g. bulk purchase" placeholderTextColor={colors.mutedForeground} />
+                </View>
+              </View>
+
+              {/* Divider + section header */}
+              <View style={{ borderTopWidth: 1, borderTopColor: colors.border, marginBottom: 14, paddingTop: 14 }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text, marginBottom: 4 }}>SPLIT ROWS</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>Each row = one app's coin topup. All rows are saved in one atomic transaction.</Text>
+              </View>
+
+              {/* Split Rows */}
+              {splitRows.map((row, idx) => {
+                const qty = row.amountUsd && row.coinsPerUsd ? Math.floor(parseFloat(row.amountUsd) * parseFloat(row.coinsPerUsd)) : 0;
+                const pkr = row.amountUsd && row.exchangeRatePkr ? parseFloat(row.amountUsd) * parseFloat(row.exchangeRatePkr) : 0;
+                const selectedProduct = products.find(p => String(p.id) === row.productId);
+                return (
+                  <View key={row.id} style={{ backgroundColor: colors.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, marginBottom: 12 }}>
+                    {/* Row header */}
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                      <View style={{ backgroundColor: "#EA580C", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#FFF" }}>SPLIT {idx + 1}</Text>
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        {qty > 0 && (
+                          <View style={{ backgroundColor: "#F3E8FF", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#9333EA" }}>
+                              {qty.toLocaleString()} {selectedProduct?.unit ?? "coins"}  ·  ₨{pkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </Text>
+                          </View>
+                        )}
+                        {splitRows.length > 1 && (
+                          <TouchableOpacity onPress={() => setSplitRows(rows => rows.filter(r => r.id !== row.id))}>
+                            <Text style={{ color: "#DC2626", fontSize: 20, lineHeight: 22, fontFamily: "Inter_700Bold" }}>×</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Product selector */}
+                    <Text style={[styles.formLabel, { color: colors.mutedForeground, fontSize: 9 }]}>APP / PRODUCT</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        {products.map(p => {
+                          const sel = row.productId === String(p.id);
+                          return (
+                            <TouchableOpacity key={p.id}
+                              onPress={() => setSplitRows(rows => rows.map(r => r.id === row.id ? {
+                                ...r,
+                                productId: String(p.id),
+                                coinsPerUsd: p.topupCoinsPerUsd && parseFloat(p.topupCoinsPerUsd) > 0 ? p.topupCoinsPerUsd : r.coinsPerUsd,
+                                exchangeRatePkr: p.topupExchangeRatePkr && parseFloat(p.topupExchangeRatePkr) > 0 ? p.topupExchangeRatePkr : r.exchangeRatePkr,
+                              } : r))}
+                              style={[styles.acctChip, { backgroundColor: sel ? "#EA580C" : colors.background, borderColor: sel ? "#EA580C" : colors.border, paddingVertical: 5 }]}>
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: sel ? "#FFF" : colors.text }}>{p.name}</Text>
+                              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: sel ? "rgba(255,255,255,0.8)" : colors.mutedForeground }}>stk {p.stock}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
+
+                    {/* USD + Rates row */}
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.formLabel, { color: colors.mutedForeground, fontSize: 9 }]}>USD AMOUNT</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, paddingVertical: 7 }]}
+                          value={row.amountUsd} keyboardType="numeric"
+                          onChangeText={v => setSplitRows(rows => rows.map(r => r.id === row.id ? { ...r, amountUsd: v } : r))}
+                          placeholder="50" placeholderTextColor={colors.mutedForeground} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.formLabel, { color: colors.mutedForeground, fontSize: 9 }]}>COINS / USD</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, paddingVertical: 7 }]}
+                          value={row.coinsPerUsd} keyboardType="numeric"
+                          onChangeText={v => setSplitRows(rows => rows.map(r => r.id === row.id ? { ...r, coinsPerUsd: v } : r))}
+                          placeholder="6000" placeholderTextColor={colors.mutedForeground} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.formLabel, { color: colors.mutedForeground, fontSize: 9 }]}>FX RATE (₨/$)</Text>
+                        <TextInput
+                          style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, paddingVertical: 7 }]}
+                          value={row.exchangeRatePkr} keyboardType="numeric"
+                          onChangeText={v => setSplitRows(rows => rows.map(r => r.id === row.id ? { ...r, exchangeRatePkr: v } : r))}
+                          placeholder="333.33" placeholderTextColor={colors.mutedForeground} />
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+
+              {/* Add Row button */}
+              <TouchableOpacity
+                onPress={() => setSplitRows(rows => [...rows, newSplitRow()])}
+                style={{ borderWidth: 1.5, borderColor: "#EA580C", borderStyle: "dashed", borderRadius: 10, paddingVertical: 12, alignItems: "center", marginBottom: 20 }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#EA580C" }}>+ Add Another App</Text>
+              </TouchableOpacity>
+
+              {/* Summary + Submit */}
+              {(() => {
+                const totalSplitUsd = splitRows.reduce((s, r) => s + parseFloat(r.amountUsd || "0"), 0);
+                const totalSplitCoins = splitRows.reduce((s, r) => {
+                  const q = r.amountUsd && r.coinsPerUsd ? Math.floor(parseFloat(r.amountUsd) * parseFloat(r.coinsPerUsd)) : 0;
+                  return s + q;
+                }, 0);
+                const validCount = splitRows.filter(r => r.productId && parseFloat(r.amountUsd) > 0).length;
+                const walletBalance = splitHeader.walletId ? parseFloat(dollarWallets.find(w => String(w.id) === splitHeader.walletId)?.balance ?? "0") : 0;
+                const walletBlocked = splitHeader.paymentMode === "wallet" && splitHeader.walletId && walletBalance < totalSplitUsd;
+
+                return (
+                  <>
+                    {totalSplitUsd > 0 && (
+                      <View style={{ backgroundColor: "#1E1B4B", borderRadius: 12, padding: 14, marginBottom: 16 }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "rgba(255,255,255,0.6)", letterSpacing: 0.5, marginBottom: 8 }}>SPLIT SUMMARY</Text>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                          <View style={{ alignItems: "center" }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFF" }}>${totalSplitUsd.toFixed(2)}</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>Total USD</Text>
+                          </View>
+                          <View style={{ width: 1, backgroundColor: "rgba(255,255,255,0.15)" }} />
+                          <View style={{ alignItems: "center" }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFF" }}>{totalSplitCoins.toLocaleString()}</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>Total Coins</Text>
+                          </View>
+                          <View style={{ width: 1, backgroundColor: "rgba(255,255,255,0.15)" }} />
+                          <View style={{ alignItems: "center" }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFF" }}>{validCount}</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>Apps</Text>
+                          </View>
+                        </View>
+                        {splitHeader.paymentMode === "wallet" && splitHeader.walletId && (
+                          <View style={{ marginTop: 10, flexDirection: "row", justifyContent: "space-between" }}>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "rgba(255,255,255,0.65)" }}>
+                              Wallet balance after: ${(walletBalance - totalSplitUsd).toFixed(2)}
+                            </Text>
+                            {walletBlocked ? (
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#FCA5A5" }}>⚠ Insufficient</Text>
+                            ) : (
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#86EFAC" }}>✓ OK</Text>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    <TouchableOpacity
+                      style={[styles.saveBtn, { backgroundColor: walletBlocked ? "#9CA3AF" : "#EA580C", opacity: saving ? 0.6 : 1, marginBottom: 32 }]}
+                      disabled={!!saving || !!walletBlocked}
+                      onPress={handleSplitSubmit}>
+                      <Text style={styles.saveBtnText}>{saving ? "Saving…" : `Submit Split (${validCount} app${validCount !== 1 ? "s" : ""})`}</Text>
                     </TouchableOpacity>
                   </>
                 );
