@@ -8,6 +8,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   useListProducts, useListCustomers, useListAccounts, useListLocations,
   useCreateSale, customFetch,
@@ -321,6 +322,7 @@ export default function POSScreen() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [dollarBalance, setDollarBalance] = useState<{ usd: number; pkr: number; rate: number } | null>(null);
+  const [defaults, setDefaults] = useState<{ locationId?: number; accountId?: number; productId?: number }>({});
 
   const { data: productsRaw } = useListProducts();
   const { data: customersRaw } = useListCustomers();
@@ -340,6 +342,45 @@ export default function POSScreen() {
         setDollarBalance({ usd, pkr: usd * lastRate, rate: lastRate });
       }).catch(() => {});
   }, []);
+
+  // ── Load persisted defaults ────────────────────────────────────────────
+  React.useEffect(() => {
+    AsyncStorage.getItem("pos_defaults").then(raw => {
+      if (raw) {
+        try { setDefaults(JSON.parse(raw)); } catch {}
+      }
+    }).catch(() => {});
+  }, []);
+
+  // ── Auto-apply defaults once data has loaded ───────────────────────────
+  const defaultsAppliedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (defaultsAppliedRef.current) return;
+    const p = (productsRaw ?? []) as unknown as Product[];
+    const a = (accountsRaw ?? []) as unknown as Account[];
+    const l = (locationsRaw ?? []) as unknown as Location[];
+    if (!p.length && !a.length && !l.length) return;
+    defaultsAppliedRef.current = true;
+    if (defaults.productId) {
+      const found = p.find(x => x.id === defaults.productId && x.isActive !== false);
+      if (found) setSelectedProduct(found);
+    }
+    if (defaults.accountId) {
+      const found = a.find(x => x.id === defaults.accountId);
+      if (found) setSelectedAccount(found);
+    }
+    if (defaults.locationId) {
+      const found = l.find(x => x.id === defaults.locationId);
+      if (found) setSelectedLocation(found);
+    }
+  }, [defaults, productsRaw, accountsRaw, locationsRaw]);
+
+  const saveDefault = async (key: "locationId" | "accountId" | "productId", id: number) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    const next = { ...defaults, [key]: id };
+    setDefaults(next);
+    try { await AsyncStorage.setItem("pos_defaults", JSON.stringify(next)); } catch {}
+  };
 
   const products = (productsRaw ?? []) as unknown as Product[];
   const customers = (customersRaw ?? []) as unknown as Customer[];
@@ -634,10 +675,26 @@ export default function POSScreen() {
           </Text>
         </View>
         {selectedLocation ? (
-          <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#A7F3D0" }}>
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#065F46" }}>
-              {isAdmin ? "ACTIVE ›" : "ASSIGNED"}
-            </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            {selectedLocation.id !== defaults.locationId && (
+              <TouchableOpacity
+                onPress={e => { e.stopPropagation?.(); saveDefault("locationId", selectedLocation.id); }}
+                style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#FDE68A" }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#92400E" }}>★ Set Default</Text>
+              </TouchableOpacity>
+            )}
+            {selectedLocation.id === defaults.locationId && (
+              <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#A7F3D0" }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#065F46" }}>★ Default</Text>
+              </View>
+            )}
+            <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#A7F3D0" }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#065F46" }}>
+                {isAdmin ? "ACTIVE ›" : "ASSIGNED"}
+              </Text>
+            </View>
           </View>
         ) : isAdmin ? (
           <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
@@ -761,6 +818,21 @@ export default function POSScreen() {
                       <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct.stock}</Text>
                     </View>
                   )}
+                  {/* Set Default button for product */}
+                  <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
+                    {selectedProduct.id !== defaults.productId ? (
+                      <TouchableOpacity
+                        onPress={e => { e.stopPropagation?.(); saveDefault("productId", selectedProduct.id); }}
+                        style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#FDE68A", alignSelf: "flex-start" }}
+                      >
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#92400E" }}>★ Set Default</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#BBF7D0", alignSelf: "flex-start" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#166534" }}>★ Default</Text>
+                      </View>
+                    )}
+                  </View>
                 </>
               ) : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -1070,9 +1142,25 @@ export default function POSScreen() {
                 </Text>
               )}
               {selectedAccount && (
-                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
-                  Balance: ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </Text>
+                <>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                    Balance: ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </Text>
+                  <View style={{ marginTop: 6 }}>
+                    {selectedAccount.id !== defaults.accountId ? (
+                      <TouchableOpacity
+                        onPress={e => { e.stopPropagation?.(); saveDefault("accountId", selectedAccount.id); }}
+                        style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#FDE68A", alignSelf: "flex-start" }}
+                      >
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#92400E" }}>★ Set Default</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#BBF7D0", alignSelf: "flex-start" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#166534" }}>★ Default</Text>
+                      </View>
+                    )}
+                  </View>
+                </>
               )}
             </View>
             <Text style={{ fontFamily: "Inter_500Medium", fontSize: 18, color: colors.mutedForeground }}>›</Text>
