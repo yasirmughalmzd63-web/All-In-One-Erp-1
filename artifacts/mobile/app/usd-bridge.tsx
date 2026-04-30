@@ -29,13 +29,27 @@ interface Summary {
   totalUsd: number; totalPkr: number;
   totalCoins: number; totalCash: number; totalCredit: number; count: number;
 }
+interface WalletData { id: number; name: string; currency: string; balance: string; isActive: boolean; }
+interface WalletTx {
+  id: number; entryType: string; amountUsd: string; rate: string; totalPkr: string;
+  partyName?: string; partyType?: string; notes?: string; date: string; createdAt: string;
+}
+interface WalletSummary {
+  totalIn: string; totalOut: string; totalInPkr: string; totalOutPkr: string;
+  netUsd: string; txCount: number;
+}
+interface MonthStat { month: string; in: number; out: number; inPkr: number; outPkr: number; count: number; }
+interface WalletDetail {
+  wallet: WalletData; transactions: WalletTx[];
+  summary: WalletSummary; monthly: MonthStat[];
+}
 
 const PKR = (n: number) =>
   "₨" + n.toLocaleString("en-PK", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const USD = (n: number) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const TODAY = new Date().toISOString().slice(0, 10);
 
-type Tab = "buy" | "history";
+type Tab = "buy" | "history" | "wallets";
 
 export default function UsdBridgeScreen() {
   const router  = useRouter();
@@ -79,6 +93,12 @@ export default function UsdBridgeScreen() {
   // Credit — auto-filled from remainder
   const [creditPkr, setCreditPkr] = useState("");
 
+  /* ─── Wallets ─── */
+  const [wallets,            setWallets]            = useState<WalletData[]>([]);
+  const [walletDetail,       setWalletDetail]       = useState<WalletDetail | null>(null);
+  const [walletDetailLoading, setWalletDetailLoading] = useState(false);
+  const [showWalletDetail,   setShowWalletDetail]   = useState(false);
+
   /* ─── Modals ─── */
   const [showCustPicker, setShowCustPicker] = useState(false);
   const [showProdPicker, setShowProdPicker] = useState(false);
@@ -92,20 +112,33 @@ export default function UsdBridgeScreen() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [hr, sr, cr, ar, pr] = await Promise.all([
-        fetch(getApiUrl("/api/usd-bridge"),          { headers }),
-        fetch(getApiUrl("/api/usd-bridge/summary"),  { headers }),
-        fetch(getApiUrl("/api/customers"),            { headers }),
-        fetch(getApiUrl("/api/accounts"),             { headers }),
-        fetch(getApiUrl("/api/products"),             { headers }),
+      const [hr, sr, cr, ar, pr, wr] = await Promise.all([
+        fetch(getApiUrl("/api/usd-bridge"),               { headers }),
+        fetch(getApiUrl("/api/usd-bridge/summary"),       { headers }),
+        fetch(getApiUrl("/api/customers"),                 { headers }),
+        fetch(getApiUrl("/api/accounts"),                  { headers }),
+        fetch(getApiUrl("/api/products"),                  { headers }),
+        fetch(getApiUrl("/api/dollar-wallet/wallets"),     { headers }),
       ]);
       if (hr.ok) setHistory(await hr.json());
       if (sr.ok) setSummary(await sr.json());
       if (cr.ok) setCustomers(await cr.json());
       if (ar.ok) setAccounts(await ar.json());
       if (pr.ok) setProducts(await pr.json());
+      if (wr.ok) setWallets(await wr.json());
     } finally { setLoading(false); }
   }, [token]);
+
+  const fetchWalletDetail = async (walletId: number) => {
+    setWalletDetailLoading(true);
+    setWalletDetail(null);
+    setShowWalletDetail(true);
+    try {
+      const r = await fetch(getApiUrl(`/api/dollar-wallet/wallets/${walletId}/transactions`), { headers });
+      if (r.ok) setWalletDetail(await r.json());
+    } catch (_) {}
+    setWalletDetailLoading(false);
+  };
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -521,6 +554,82 @@ export default function UsdBridgeScreen() {
     />
   );
 
+  /* ═══════════════ WALLETS TAB ═══════════════ */
+  const renderWalletsTab = () => (
+    <ScrollView
+      contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={fetchAll} />}
+    >
+      {/* Section header */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <Feather name="briefcase" size={18} color="#0891B2" />
+        <Text style={{ fontSize: 16, fontWeight: "700", color: "#0891B2" }}>USD Wallets</Text>
+        <View style={{ marginLeft: "auto", backgroundColor: "#EFF6FF", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#2563EB" }}>{wallets.length} wallets</Text>
+        </View>
+      </View>
+
+      {wallets.length === 0 ? (
+        <View style={{ alignItems: "center", marginTop: 60, gap: 10 }}>
+          <Feather name="briefcase" size={40} color="#D1D5DB" />
+          <Text style={{ color: "#9CA3AF", fontSize: 15 }}>No wallets found</Text>
+          <Text style={{ color: "#9CA3AF", fontSize: 12, textAlign: "center" }}>
+            USD wallets are created automatically when you record purchases
+          </Text>
+        </View>
+      ) : (
+        wallets.map(w => (
+          <View key={w.id} style={{
+            backgroundColor: "#fff",
+            borderRadius: 16, borderWidth: 1, borderColor: "#E5E7EB",
+            marginBottom: 12, overflow: "hidden",
+            shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
+          }}>
+            {/* Wallet color bar */}
+            <View style={{ height: 4, backgroundColor: w.isActive ? "#0891B2" : "#9CA3AF" }} />
+            <View style={{ padding: 16 }}>
+              {/* Name + active badge */}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#E0F2FE", alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontSize: 18 }}>💼</Text>
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 15, fontWeight: "700", color: "#111827" }}>{w.name}</Text>
+                    <Text style={{ fontSize: 11, color: "#6B7280" }}>{w.currency} Wallet</Text>
+                  </View>
+                </View>
+                <View style={{ backgroundColor: w.isActive ? "#DCFCE7" : "#F3F4F6", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: w.isActive ? "#059669" : "#6B7280" }}>
+                    {w.isActive ? "Active" : "Inactive"}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Balance */}
+              <View style={{ backgroundColor: "#F0F9FF", borderRadius: 12, padding: 14, marginBottom: 14, alignItems: "center" }}>
+                <Text style={{ fontSize: 11, color: "#0891B2", fontWeight: "600", marginBottom: 2 }}>Current Balance</Text>
+                <Text style={{ fontSize: 32, fontWeight: "800", color: "#0891B2" }}>
+                  {USD(parseFloat(w.balance || "0"))}
+                </Text>
+              </View>
+
+              {/* View Transactions button */}
+              <TouchableOpacity
+                style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+                  backgroundColor: "#0891B2", borderRadius: 12, paddingVertical: 12 }}
+                onPress={() => fetchWalletDetail(w.id)}
+              >
+                <Feather name="list" size={16} color="#fff" />
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>View Transactions</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))
+      )}
+    </ScrollView>
+  );
+
   /* ═══════════════ MAIN ═══════════════ */
   return (
     <View style={[s.container, { paddingTop: insets.top }]}>
@@ -537,7 +646,7 @@ export default function UsdBridgeScreen() {
 
       {/* Tab bar */}
       <View style={s.tabBar}>
-        {([["buy", "💰 Buy USD"], ["history", "📜 History"]] as [Tab, string][]).map(([k, l]) => (
+        {([["buy", "💰 Buy"], ["history", "📜 History"], ["wallets", "💼 Wallets"]] as [Tab, string][]).map(([k, l]) => (
           <TouchableOpacity key={k} style={[s.tabItem, tab === k && s.tabItemActive]} onPress={() => setTab(k)}>
             <Text style={[s.tabLabel, tab === k && { color: colors.primary, fontWeight: "700" }]}>{l}</Text>
           </TouchableOpacity>
@@ -546,6 +655,181 @@ export default function UsdBridgeScreen() {
 
       {tab === "buy"     && renderBuyTab()}
       {tab === "history" && renderHistoryTab()}
+      {tab === "wallets" && renderWalletsTab()}
+
+      {/* ─── Wallet Detail Modal ─── */}
+      <Modal visible={showWalletDetail} animationType="slide" onRequestClose={() => setShowWalletDetail(false)}>
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+          {/* Modal header */}
+          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0891B2", paddingHorizontal: 16, paddingVertical: 14, paddingTop: insets.top + 14, gap: 12 }}>
+            <TouchableOpacity onPress={() => setShowWalletDetail(false)}>
+              <Feather name="x" size={22} color="#fff" />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700" }}>
+                {walletDetail?.wallet.name ?? "Wallet"}
+              </Text>
+              <Text style={{ color: "#CFFAFE", fontSize: 12 }}>Transaction History</Text>
+            </View>
+            {walletDetail && (
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={{ color: "#fff", fontSize: 20, fontWeight: "800" }}>
+                  {USD(parseFloat(walletDetail.wallet.balance || "0"))}
+                </Text>
+                <Text style={{ color: "#CFFAFE", fontSize: 11 }}>Current Balance</Text>
+              </View>
+            )}
+          </View>
+
+          {walletDetailLoading ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+              <ActivityIndicator size="large" color="#0891B2" />
+              <Text style={{ color: colors.textSecondary }}>Loading transactions…</Text>
+            </View>
+          ) : !walletDetail ? (
+            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: colors.textSecondary }}>Failed to load wallet data</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={walletDetail.transactions}
+              keyExtractor={t => String(t.id)}
+              contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+              ListHeaderComponent={(
+                <View>
+                  {/* Summary grid */}
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
+                    <View style={{ flex: 1, backgroundColor: "#ECFDF5", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Feather name="arrow-down-circle" size={16} color="#059669" style={{ marginBottom: 4 }} />
+                      <Text style={{ fontSize: 16, fontWeight: "800", color: "#059669" }}>
+                        {USD(parseFloat(walletDetail.summary.totalIn))}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>Total In</Text>
+                      <Text style={{ fontSize: 10, color: "#9CA3AF" }}>{PKR(parseFloat(walletDetail.summary.totalInPkr))}</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: "#FEF2F2", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Feather name="arrow-up-circle" size={16} color="#DC2626" style={{ marginBottom: 4 }} />
+                      <Text style={{ fontSize: 16, fontWeight: "800", color: "#DC2626" }}>
+                        {USD(parseFloat(walletDetail.summary.totalOut))}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>Total Out</Text>
+                      <Text style={{ fontSize: 10, color: "#9CA3AF" }}>{PKR(parseFloat(walletDetail.summary.totalOutPkr))}</Text>
+                    </View>
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 8, marginBottom: 16 }}>
+                    <View style={{ flex: 1.2, backgroundColor: "#F0F9FF", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Feather name="trending-up" size={16} color="#0891B2" style={{ marginBottom: 4 }} />
+                      <Text style={{ fontSize: 18, fontWeight: "800", color: "#0891B2" }}>
+                        {USD(parseFloat(walletDetail.summary.netUsd))}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>Net USD Flow</Text>
+                    </View>
+                    <View style={{ flex: 0.8, backgroundColor: "#F9FAFB", borderRadius: 14, padding: 14, alignItems: "center" }}>
+                      <Feather name="activity" size={16} color="#6B7280" style={{ marginBottom: 4 }} />
+                      <Text style={{ fontSize: 18, fontWeight: "800", color: "#374151" }}>
+                        {walletDetail.summary.txCount}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>Transactions</Text>
+                    </View>
+                  </View>
+
+                  {/* Monthly breakdown */}
+                  {walletDetail.monthly.length > 0 && (
+                    <View style={{ backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, marginBottom: 16, overflow: "hidden" }}>
+                      <View style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Feather name="calendar" size={14} color="#0891B2" />
+                        <Text style={{ fontWeight: "700", color: colors.text, fontSize: 13 }}>Monthly Breakdown</Text>
+                      </View>
+                      {walletDetail.monthly.map((m, i) => (
+                        <View key={m.month} style={[{ padding: 12, flexDirection: "row", alignItems: "center", gap: 10 }, i > 0 && { borderTopWidth: 1, borderTopColor: colors.border }]}>
+                          <Text style={{ fontWeight: "700", color: colors.text, width: 60, fontSize: 12 }}>{m.month}</Text>
+                          <View style={{ flex: 1 }}>
+                            {m.in > 0 && (
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                                <Feather name="arrow-down" size={10} color="#059669" />
+                                <Text style={{ fontSize: 12, color: "#059669", fontWeight: "600" }}>+{USD(m.in)}</Text>
+                                <Text style={{ fontSize: 10, color: "#9CA3AF" }}>{PKR(m.inPkr)}</Text>
+                              </View>
+                            )}
+                            {m.out > 0 && (
+                              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                                <Feather name="arrow-up" size={10} color="#DC2626" />
+                                <Text style={{ fontSize: 12, color: "#DC2626", fontWeight: "600" }}>-{USD(m.out)}</Text>
+                                <Text style={{ fontSize: 10, color: "#9CA3AF" }}>{PKR(m.outPkr)}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <View style={{ backgroundColor: "#F3F4F6", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
+                            <Text style={{ fontSize: 11, color: "#6B7280" }}>{m.count} tx</Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <Text style={{ fontWeight: "700", color: colors.text, fontSize: 13, marginBottom: 10 }}>
+                    All Transactions ({walletDetail.transactions.length})
+                  </Text>
+                </View>
+              )}
+              ListEmptyComponent={
+                <View style={{ alignItems: "center", padding: 40, gap: 10 }}>
+                  <Feather name="inbox" size={36} color="#D1D5DB" />
+                  <Text style={{ color: "#9CA3AF" }}>No transactions yet</Text>
+                </View>
+              }
+              renderItem={({ item: t }) => {
+                const isIn = t.entryType === "purchase";
+                const amt = parseFloat(t.amountUsd);
+                const pkr = parseFloat(t.totalPkr);
+                const rate = parseFloat(t.rate);
+                return (
+                  <View style={{ backgroundColor: colors.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4, borderLeftColor: isIn ? "#059669" : "#DC2626", padding: 14, marginBottom: 10 }}>
+                    {/* Top row */}
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <View style={{ backgroundColor: isIn ? "#DCFCE7" : "#FEE2E2", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                          <Feather name={isIn ? "arrow-down-circle" : "arrow-up-circle"} size={11} color={isIn ? "#059669" : "#DC2626"} />
+                          <Text style={{ fontSize: 11, fontWeight: "700", color: isIn ? "#059669" : "#DC2626" }}>
+                            {isIn ? "IN" : "OUT"}
+                          </Text>
+                        </View>
+                        <Text style={{ fontSize: 11, color: colors.textSecondary }}>{t.entryType}</Text>
+                      </View>
+                      <Text style={{ fontSize: 12, color: colors.textSecondary }}>{t.date}</Text>
+                    </View>
+                    {/* Amounts */}
+                    <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
+                      <Text style={{ fontSize: 20, fontWeight: "800", color: isIn ? "#059669" : "#DC2626" }}>
+                        {isIn ? "+" : "-"}{USD(amt)}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: colors.text, fontWeight: "600" }}>
+                        = {PKR(pkr)}
+                      </Text>
+                      {rate > 0 && (
+                        <Text style={{ fontSize: 11, color: colors.textSecondary }}>@ ₨{rate.toFixed(0)}</Text>
+                      )}
+                    </View>
+                    {/* Party */}
+                    {t.partyName && (
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <Feather name={t.partyType === "supplier" ? "truck" : "user"} size={11} color={colors.textSecondary} />
+                        <Text style={{ fontSize: 12, color: colors.textSecondary }}>{t.partyName}</Text>
+                      </View>
+                    )}
+                    {/* Notes */}
+                    {t.notes && (
+                      <Text style={{ fontSize: 11, color: colors.textSecondary, fontStyle: "italic" }} numberOfLines={2}>
+                        📝 {t.notes}
+                      </Text>
+                    )}
+                  </View>
+                );
+              }}
+            />
+          )}
+        </View>
+      </Modal>
 
       {/* ─── Customer Picker Modal ─── */}
       <Modal visible={showCustPicker} animationType="slide" transparent onRequestClose={() => setShowCustPicker(false)}>
