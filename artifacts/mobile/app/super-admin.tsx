@@ -39,6 +39,7 @@ export default function SuperAdminScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const topPad = Platform.OS === "web" ? 20 : insets.top;
+  const isSuperAdmin = user?.role === "super_admin";
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +93,23 @@ export default function SuperAdminScreen() {
   const revenueFormatted = revenue >= 1000
     ? `₨${(revenue / 1000).toFixed(1)}K`
     : `₨${revenue.toFixed(0)}`;
+
+  if (!isSuperAdmin) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: 32 }]}>
+        <Text style={{ fontSize: 56, marginBottom: 16 }}>🔒</Text>
+        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: colors.foreground, textAlign: "center", marginBottom: 8 }}>
+          Super Admin Only
+        </Text>
+        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: colors.mutedForeground, textAlign: "center", marginBottom: 24 }}>
+          This dashboard is reserved for the super admin.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: "#7C3AED", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}>
+          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#FFF" }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

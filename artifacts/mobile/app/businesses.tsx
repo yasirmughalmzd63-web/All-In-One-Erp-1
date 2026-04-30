@@ -10,7 +10,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { customFetch } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
-import { ALL_MODULES, type AppModule } from "@/context/AuthContext";
+import { ALL_MODULES, useAuth, type AppModule } from "@/context/AuthContext";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type Business = {
@@ -89,7 +89,9 @@ export default function BusinessesScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const router = useRouter();
+  const { user } = useAuth();
   const topPad = Platform.OS === "web" ? 20 : insets.top;
+  const isSuperAdmin = user?.role === "super_admin";
 
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
@@ -326,6 +328,23 @@ export default function BusinessesScreen() {
   const totalFree = businesses.filter(b => !PKG_IS_PAID[b.package]).length;
   const totalPaid = businesses.filter(b => PKG_IS_PAID[b.package]).length;
   const totalActive = businesses.filter(b => b.adminUser?.isActive).length;
+
+  if (!isSuperAdmin) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: 32 }]}>
+        <Text style={{ fontSize: 56, marginBottom: 16 }}>🔒</Text>
+        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: colors.foreground, textAlign: "center", marginBottom: 8 }}>
+          Super Admin Only
+        </Text>
+        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: colors.mutedForeground, textAlign: "center", marginBottom: 24 }}>
+          Only the super admin can manage businesses, packages, payments and modules.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: "#7C3AED", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}>
+          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#FFF" }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

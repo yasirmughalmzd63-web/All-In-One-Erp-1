@@ -124,6 +124,23 @@ export default function RegistrationsScreen() {
   const freeCount = registrations.filter(r => !PKG_IS_PAID[r.package]).length;
   const paidCount = registrations.filter(r => PKG_IS_PAID[r.package]).length;
 
+  if (!isAdmin) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background, alignItems: "center", justifyContent: "center", padding: 32 }]}>
+        <Text style={{ fontSize: 56, marginBottom: 16 }}>🔒</Text>
+        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: colors.foreground, textAlign: "center", marginBottom: 8 }}>
+          Super Admin Only
+        </Text>
+        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 14, color: colors.mutedForeground, textAlign: "center", marginBottom: 24 }}>
+          Only the super admin can approve, reject, or change business registrations.
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ backgroundColor: colors.primary, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}>
+          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: "#FFF" }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8 }]}>

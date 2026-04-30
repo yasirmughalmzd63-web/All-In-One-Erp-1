@@ -43,7 +43,7 @@ const REPORTS_ITEMS: MenuItem[] = [
   { label: "Reconciliation",  icon: "check-circle",  route: "/reconciliation",   color: "#059669", bg: "#ECFDF5", desc: "Daily reconcile · Dollar · Exchange",   module: "reconciliation" },
   { label: "Privileges",   icon: "shield",      route: "/privileges",   color: "#059669", bg: "#ECFDF5", desc: "User access control",           module: "users", adminOnly: true },
   { label: "Super Admin",   icon: "shield",     route: "/super-admin",   color: "#1E1B4B", bg: "#EDE9FE", desc: "Dashboard, stats & controls",   module: "users", superAdminOnly: true },
-  { label: "Registrations", icon: "user-plus",  route: "/registrations", color: "#D97706", bg: "#FFF7ED", desc: "Approve business accounts",     module: "users", adminOnly: true },
+  { label: "Registrations", icon: "user-plus",  route: "/registrations", color: "#D97706", bg: "#FFF7ED", desc: "Approve business accounts",     module: "users", superAdminOnly: true },
   { label: "Businesses",    icon: "briefcase",  route: "/businesses",    color: "#7C3AED", bg: "#F3E8FF", desc: "Manage all businesses & modules", module: "users", superAdminOnly: true },
   { label: "Reset Center",  icon: "alert-octagon", route: "/reset-center", color: "#DC2626", bg: "#FEF2F2", desc: "Clear application data safely",   module: "users", adminOnly: true },
 ];

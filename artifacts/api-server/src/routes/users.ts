@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { hashPassword } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { requireAdmin } from "../lib/permissions.js";
 import { logAudit } from "../lib/audit.js";
 
 const router = Router();
@@ -22,11 +23,17 @@ router.get("/users", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/users", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
   const { username, name, password, role, locationId } = req.body as {
     username?: string; name?: string; password?: string; role?: string; locationId?: number | null;
   };
   if (!username || !name || !password || !role) {
     res.status(400).json({ error: "username, name, password, role required" });
+    return;
+  }
+  // Only super_admin can create another super_admin
+  if (role === "super_admin" && req.userRole !== "super_admin") {
+    res.status(403).json({ error: "Only super admins can create super admin users" });
     return;
   }
   const passwordHash = hashPassword(password);
@@ -36,12 +43,33 @@ router.post("/users", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw!, 10);
   const { name, role, locationId, isActive, password, privileges } = req.body as {
     name?: string; role?: string; locationId?: number | null; isActive?: boolean; password?: string;
     privileges?: string[] | null;
   };
+
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Block non-super-admins from modifying any super_admin account
+  if (target.role === "super_admin" && req.userRole !== "super_admin") {
+    res.status(403).json({ error: "Only super admins can modify super admin accounts" });
+    return;
+  }
+  // Only super_admin can change role or privileges (prevents privilege escalation)
+  if ((role != null || privileges !== undefined) && req.userRole !== "super_admin") {
+    res.status(403).json({ error: "Only super admins can change role or privileges" });
+    return;
+  }
+  // Block elevating any user to super_admin unless caller is super_admin (already covered above, but explicit)
+  if (role === "super_admin" && req.userRole !== "super_admin") {
+    res.status(403).json({ error: "Only super admins can promote users to super admin" });
+    return;
+  }
+
   const updateData: Record<string, unknown> = {};
   if (name != null) updateData.name = name;
   if (role != null) updateData.role = role;
@@ -65,8 +93,15 @@ router.get("/users/:id/privileges", requireAuth, async (req, res): Promise<void>
 });
 
 router.delete("/users/:id", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw!, 10);
+  const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+  if (target.role === "super_admin" && req.userRole !== "super_admin") {
+    res.status(403).json({ error: "Only super admins can delete super admin accounts" });
+    return;
+  }
   const [user] = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   await logAudit(req.userId, "delete", "user", id);

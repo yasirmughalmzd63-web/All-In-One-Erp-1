@@ -78,6 +78,10 @@ router.post("/registrations", async (req, res): Promise<void> => {
 
 // GET /api/registrations — admin only
 router.get("/registrations", requireAuth, async (req, res): Promise<void> => {
+  if (req.userRole !== "super_admin") {
+    res.status(403).json({ error: "Only super admins can view registrations" });
+    return;
+  }
   const regs = await db.select().from(businessRegistrationsTable).orderBy(businessRegistrationsTable.createdAt);
   res.json(regs.map(r => ({
     ...r,
