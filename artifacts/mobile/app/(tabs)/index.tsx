@@ -1317,7 +1317,7 @@ function BalanceTile({
         numberOfLines={1}
         adjustsFontSizeToFit
       >
-        {value !== null ? formatK(value) : "—"}
+        {value !== null ? value.toLocaleString(undefined, { maximumFractionDigits: 0 }) : "—"}
       </Text>
       {isTotal && (
         <View style={{ height: 3, borderRadius: 2, backgroundColor: color, marginTop: 5, opacity: 0.5 }} />
