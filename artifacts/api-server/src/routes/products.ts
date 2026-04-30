@@ -26,6 +26,8 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
     unit: productsTable.unit,
     isActive: productsTable.isActive,
     imageUrl: productsTable.imageUrl,
+    topupCoinsPerUsd: productsTable.topupCoinsPerUsd,
+    topupExchangeRatePkr: productsTable.topupExchangeRatePkr,
     createdAt: productsTable.createdAt,
   }).from(productsTable)
     .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
@@ -53,9 +55,10 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (!requireAdmin(req, res)) return;
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive, locationId, imageUrl } = req.body as {
+  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive, locationId, imageUrl, topupCoinsPerUsd, topupExchangeRatePkr } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
     unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean; locationId?: number | null; imageUrl?: string | null;
+    topupCoinsPerUsd?: string | null; topupExchangeRatePkr?: string | null;
   };
   const updates: Record<string, unknown> = {};
   if (name != null) updates.name = name;
@@ -69,6 +72,8 @@ router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (isActive != null) updates.isActive = isActive;
   if (locationId !== undefined) updates.locationId = locationId;
   if (imageUrl !== undefined) updates.imageUrl = imageUrl;
+  if (topupCoinsPerUsd !== undefined) updates.topupCoinsPerUsd = topupCoinsPerUsd;
+  if (topupExchangeRatePkr !== undefined) updates.topupExchangeRatePkr = topupExchangeRatePkr;
   const [row] = await db.update(productsTable).set(updates).where(eq(productsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Product not found" }); return; }
   await logAudit(req.userId, "update", "product", id);

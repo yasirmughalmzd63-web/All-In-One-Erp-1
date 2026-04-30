@@ -15,6 +15,8 @@ export const productsTable = pgTable("products", {
   unit: text("unit").notNull().default("pcs"),
   isActive: boolean("is_active").notNull().default(true),
   imageUrl: text("image_url"),
+  topupCoinsPerUsd: text("topup_coins_per_usd"),
+  topupExchangeRatePkr: text("topup_exchange_rate_pkr"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

@@ -25,16 +25,14 @@ type DollarEntry = {
 };
 
 const ENTRY_TYPES: { key: string; label: string; desc: string; sign: 1 | -1; color: string; bg: string; icon: string }[] = [
-  { key: "received",  label: "Received USD",      desc: "Customer paid in dollars",    sign:  1, color: "#16A34A", bg: "#DCFCE7", icon: "arrow-down-circle" },
-  { key: "product",   label: "Sent Product",       desc: "Goods given — deduct USD",    sign: -1, color: "#DC2626", bg: "#FEE2E2", icon: "package" },
-  { key: "partial",   label: "Partial Payment",    desc: "Part cash, part credit",      sign:  1, color: "#0891B2", bg: "#ECFEFF", icon: "divide-circle" },
-  { key: "recovery",  label: "Credit Recovery",    desc: "Old credit recovered as USD", sign:  1, color: "#7C3AED", bg: "#F3E8FF", icon: "refresh-cw" },
-  { key: "purchase",  label: "Bought USD",         desc: "Bought from market account",   sign:  1, color: "#0EA5E9", bg: "#E0F2FE", icon: "shopping-bag" },
-  { key: "topup",     label: "Coin Top-up",        desc: "USD spent on coin stock",      sign: -1, color: "#9333EA", bg: "#F3E8FF", icon: "zap" },
+  { key: "received",  label: "Received USD",   desc: "Customer paid in dollars",  sign:  1, color: "#16A34A", bg: "#DCFCE7", icon: "arrow-down-circle" },
+  { key: "product",   label: "Sent Product",   desc: "Goods given — deduct USD",  sign: -1, color: "#DC2626", bg: "#FEE2E2", icon: "package" },
+  { key: "purchase",  label: "Bought USD",     desc: "Bought from market account", sign:  1, color: "#0EA5E9", bg: "#E0F2FE", icon: "shopping-bag" },
+  { key: "topup",     label: "Coin Top-up",    desc: "USD spent on coin stock",   sign: -1, color: "#9333EA", bg: "#F3E8FF", icon: "zap" },
 ];
 
 type Account = { id: number; name: string; type: string; currency: string; balance: string };
-type Product = { id: number; name: string; unit: string; stock: number; costPrice: string; unitPrice: string; wholesalePrice: string };
+type Product = { id: number; name: string; unit: string; stock: number; costPrice: string; unitPrice: string; wholesalePrice: string; topupCoinsPerUsd?: string | null; topupExchangeRatePkr?: string | null };
 type Wallet = { id: number; name: string; type: string; currency: string; balance: string };
 type Party = { id: number; name: string };
 
@@ -245,6 +243,25 @@ export default function WalletsScreen() {
       Alert.alert("Error", e instanceof Error ? e.message : "Failed to top-up coins");
     }
     setSaving(false);
+  };
+
+  const saveProductRate = async () => {
+    if (!topupForm.productId || !topupForm.coinsPerUsd || !topupForm.exchangeRatePkr) {
+      Alert.alert("Error", "Pick a product and enter coins-per-USD and exchange rate to save");
+      return;
+    }
+    try {
+      await customFetch(`/api/products/${topupForm.productId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          topupCoinsPerUsd: topupForm.coinsPerUsd,
+          topupExchangeRatePkr: topupForm.exchangeRatePkr,
+        }),
+      });
+      Alert.alert("Rate saved", `Rates for this app saved: ${topupForm.coinsPerUsd} coins/USD @ ₨${topupForm.exchangeRatePkr}`);
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save rate");
+    }
   };
 
   const topupQty = topupForm.amountUsd && topupForm.coinsPerUsd
@@ -636,10 +653,13 @@ export default function WalletsScreen() {
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   {products.map(p => {
                     const sel = topupForm.productId === String(p.id);
+                    const hasSavedRate = !!(p.topupCoinsPerUsd && p.topupExchangeRatePkr);
                     return (
                       <TouchableOpacity key={p.id} onPress={() => setTopupForm(f => ({
                         ...f,
                         productId: String(p.id),
+                        coinsPerUsd: p.topupCoinsPerUsd && parseFloat(p.topupCoinsPerUsd) > 0 ? p.topupCoinsPerUsd : f.coinsPerUsd,
+                        exchangeRatePkr: p.topupExchangeRatePkr && parseFloat(p.topupExchangeRatePkr) > 0 ? p.topupExchangeRatePkr : f.exchangeRatePkr,
                         costPricePkr: parseFloat(p.costPrice || "0") > 0 ? parseFloat(p.costPrice).toFixed(4) : f.costPricePkr,
                         salePricePkr: parseFloat(p.unitPrice || "0") > 0 ? parseFloat(p.unitPrice).toFixed(4) : f.salePricePkr,
                         wholesalePricePkr: parseFloat(p.wholesalePrice || "0") > 0 ? parseFloat(p.wholesalePrice).toFixed(4) : f.wholesalePricePkr,
@@ -649,6 +669,15 @@ export default function WalletsScreen() {
                         <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : colors.mutedForeground }}>
                           stock {p.stock}
                         </Text>
+                        {hasSavedRate ? (
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: sel ? "#D8B4FE" : "#7C3AED" }}>
+                            {parseFloat(p.topupCoinsPerUsd!).toLocaleString()}/USD
+                          </Text>
+                        ) : (
+                          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: sel ? "rgba(255,255,255,0.55)" : colors.mutedForeground }}>
+                            no rate saved
+                          </Text>
+                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -663,7 +692,15 @@ export default function WalletsScreen() {
                     keyboardType="decimal-pad" placeholder="100" placeholderTextColor={colors.mutedForeground} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>COINS PER 1 USD</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                    <Text style={[styles.formLabel, { color: colors.mutedForeground, marginBottom: 0 }]}>COINS / USD</Text>
+                    {topupForm.productId ? (
+                      <TouchableOpacity onPress={saveProductRate}
+                        style={{ backgroundColor: "#EDE9FE", borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: "#8B5CF6" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#5B21B6" }}>SAVE RATE</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                   <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text }]}
                     value={topupForm.coinsPerUsd}
                     onChangeText={v => setTopupForm(f => {
