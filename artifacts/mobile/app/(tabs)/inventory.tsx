@@ -1,8 +1,9 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
 import React, { useState } from "react";
 import {
-  ActivityIndicator, Alert, FlatList, Modal, Platform,
+  ActivityIndicator, Alert, FlatList, Image, Modal, Platform,
   RefreshControl, ScrollView, StyleSheet, Text,
   TextInput, TouchableOpacity, View,
 } from "react-native";
@@ -11,7 +12,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import {
   useListProducts, useCreateProduct, useUpdateProduct, useDeleteProduct,
-  useListCategories, useListLocations,
+  useListCategories, useListLocations, customFetch,
 } from "@workspace/api-client-react";
 import { useColors } from "@/hooks/useColors";
 import { useAuth } from "@/context/AuthContext";
@@ -20,6 +21,7 @@ type Product = {
   id: number; name: string; sku?: string | null; categoryName?: string | null;
   unitPrice: string; wholesalePrice: string; costPrice: string;
   stock: number; unit: string; isActive: boolean; locationId?: number | null;
+  imageUrl?: string | null;
 };
 type Category = { id: number; name: string };
 type Location = { id: number; name: string };
@@ -27,6 +29,7 @@ type Location = { id: number; name: string };
 const emptyForm = {
   name: "", sku: "", categoryId: "", locationId: "",
   unitPrice: "", wholesalePrice: "", costPrice: "", stock: "0", unit: "pcs",
+  imageUrl: "",
 };
 
 function fmtPKR(n: number): string {
@@ -63,6 +66,7 @@ export default function InventoryScreen() {
   const [showModal, setShowModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [form, setForm] = useState(emptyForm);
+  const [imageUploading, setImageUploading] = useState(false);
 
   const { data: productsRaw, isLoading, refetch } = useListProducts();
   const { data: categoriesRaw } = useListCategories();
@@ -95,8 +99,38 @@ export default function InventoryScreen() {
       costPrice: parseFloat(p.costPrice).toString(),
       categoryId: p.categoryName ? String((categories.find(c => c.name === p.categoryName) ?? { id: "" }).id) : "",
       locationId: p.locationId ? String(p.locationId) : "",
+      imageUrl: p.imageUrl ?? "",
     });
     setShowModal(true);
+  };
+
+  const pickAndUploadImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Please allow access to your photo library.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true, aspect: [1, 1], quality: 0.6, base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0]!;
+    if (!asset.base64) { Alert.alert("Error", "Could not read image data"); return; }
+    setImageUploading(true);
+    try {
+      const mime = asset.mimeType ?? "image/jpeg";
+      const { url } = await customFetch<{ url: string }>("/api/upload/product-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64: asset.base64, mimeType: mime }),
+      });
+      setForm(prev => ({ ...prev, imageUrl: url }));
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -114,6 +148,7 @@ export default function InventoryScreen() {
       costPrice: parseFloat(form.costPrice).toFixed(8),
       stock: parseInt(form.stock) || 0,
       unit: form.unit,
+      imageUrl: form.imageUrl || null,
     };
     try {
       if (editProduct) {
@@ -212,6 +247,13 @@ export default function InventoryScreen() {
           renderItem={({ item: p }) => (
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={[styles.cardAccent, { backgroundColor: stockColor(p.stock) }]} />
+              {p.imageUrl ? (
+                <Image source={{ uri: p.imageUrl }} style={{ width: 48, height: 48, borderRadius: 12, marginLeft: 10, marginVertical: 10 }} />
+              ) : (
+                <View style={{ width: 48, height: 48, borderRadius: 12, marginLeft: 10, marginVertical: 10, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: 22 }}>📦</Text>
+                </View>
+              )}
               <View style={{ flex: 1, paddingLeft: 12 }}>
                 <View style={{ flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                   <View style={{ flex: 1, marginRight: 8 }}>
@@ -290,6 +332,39 @@ export default function InventoryScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              {/* Product Image */}
+              <View style={{ alignItems: "center", marginBottom: 18 }}>
+                <TouchableOpacity onPress={pickAndUploadImage} disabled={imageUploading} activeOpacity={0.8}>
+                  {form.imageUrl ? (
+                    <View>
+                      <Image
+                        source={{ uri: form.imageUrl }}
+                        style={{ width: 90, height: 90, borderRadius: 18, borderWidth: 2, borderColor: colors.primary }}
+                      />
+                      <View style={{ position: "absolute", bottom: -6, right: -6, backgroundColor: colors.primary, borderRadius: 12, width: 24, height: 24, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ color: "#FFF", fontSize: 13 }}>✎</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={{ width: 90, height: 90, borderRadius: 18, borderWidth: 2, borderStyle: "dashed", borderColor: colors.border, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center", gap: 4 }}>
+                      {imageUploading ? (
+                        <ActivityIndicator size="small" color={colors.primary} />
+                      ) : (
+                        <>
+                          <Text style={{ fontSize: 28 }}>📷</Text>
+                          <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.mutedForeground }}>Add Logo</Text>
+                        </>
+                      )}
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {form.imageUrl ? (
+                  <TouchableOpacity onPress={() => setForm(prev => ({ ...prev, imageUrl: "" }))} style={{ marginTop: 8 }}>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.danger }}>Remove image</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+
               <InputField label="Product Name *" fkey="name" />
               <InputField label="SKU (optional)" fkey="sku" />
 

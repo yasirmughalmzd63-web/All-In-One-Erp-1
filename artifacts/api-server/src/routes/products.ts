@@ -25,6 +25,7 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
     locationId: productsTable.locationId,
     unit: productsTable.unit,
     isActive: productsTable.isActive,
+    imageUrl: productsTable.imageUrl,
     createdAt: productsTable.createdAt,
   }).from(productsTable)
     .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
@@ -35,15 +36,15 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
 
 router.post("/products", requireAuth, async (req, res): Promise<void> => {
   if (!requireAdmin(req, res)) return;
-  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, locationId, unit } = req.body as {
+  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, locationId, unit, imageUrl } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
-    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; locationId?: number | null; unit?: string;
+    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; locationId?: number | null; unit?: string; imageUrl?: string | null;
   };
   if (!name || !unitPrice || !costPrice || !unit) { res.status(400).json({ error: "name, unitPrice, costPrice, unit required" }); return; }
   const [row] = await db.insert(productsTable).values({
     name, sku: sku ?? null, categoryId: categoryId ?? null,
     unitPrice, wholesalePrice: wholesalePrice ?? unitPrice, costPrice,
-    stock: stock ?? 0, locationId: locationId ?? null, unit,
+    stock: stock ?? 0, locationId: locationId ?? null, unit, imageUrl: imageUrl ?? null,
   }).returning();
   await logAudit(req.userId, "create", "product", row!.id, `Created product ${name}`);
   res.status(201).json({ ...row!, categoryName: null, createdAt: row!.createdAt.toISOString() });
@@ -52,9 +53,9 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (!requireAdmin(req, res)) return;
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive, locationId } = req.body as {
+  const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive, locationId, imageUrl } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
-    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean; locationId?: number | null;
+    unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean; locationId?: number | null; imageUrl?: string | null;
   };
   const updates: Record<string, unknown> = {};
   if (name != null) updates.name = name;
@@ -67,6 +68,7 @@ router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (unit != null) updates.unit = unit;
   if (isActive != null) updates.isActive = isActive;
   if (locationId !== undefined) updates.locationId = locationId;
+  if (imageUrl !== undefined) updates.imageUrl = imageUrl;
   const [row] = await db.update(productsTable).set(updates).where(eq(productsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Product not found" }); return; }
   await logAudit(req.userId, "update", "product", id);

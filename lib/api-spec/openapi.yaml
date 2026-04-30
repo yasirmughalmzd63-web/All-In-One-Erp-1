@@ -1164,6 +1164,8 @@ components:
           type: string
         isActive:
           type: boolean
+        imageUrl:
+          type: ["string", "null"]
         createdAt:
           type: string
       required: [id, name, unitPrice, costPrice, stock, unit, isActive, createdAt]
@@ -1187,6 +1189,8 @@ components:
           type: ["integer", "null"]
         unit:
           type: string
+        imageUrl:
+          type: ["string", "null"]
       required: [name, unitPrice, costPrice, stock, unit]
 
     UpdateProductRequest:
@@ -1208,6 +1212,8 @@ components:
           type: string
         isActive:
           type: boolean
+        imageUrl:
+          type: ["string", "null"]
 
     # Customer
     Customer:

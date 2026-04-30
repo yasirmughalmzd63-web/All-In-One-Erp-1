@@ -2,7 +2,7 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState, useMemo } from "react";
 import {
-  Alert, FlatList, Modal, Platform, ScrollView,
+  Alert, FlatList, Image, Modal, Platform, ScrollView,
   StyleSheet, Text, TouchableOpacity, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,7 +23,7 @@ function formatK(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean };
+type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null };
 type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string };
 type Location = { id: number; name: string; address?: string | null };
@@ -606,7 +606,11 @@ export default function POSScreen() {
                     }}
                     activeOpacity={0.75}
                   >
-                    <Text style={{ fontSize: 20, lineHeight: 24 }}>{inStock ? "📦" : "🚫"}</Text>
+                    {p.imageUrl ? (
+                      <Image source={{ uri: p.imageUrl }} style={{ width: 36, height: 36, borderRadius: 10 }} />
+                    ) : (
+                      <Text style={{ fontSize: 20, lineHeight: 24 }}>{inStock ? "📦" : "🚫"}</Text>
+                    )}
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: isSelected ? "#FFF" : colors.text, textAlign: "center" }} numberOfLines={2}>
                       {p.name}
                     </Text>

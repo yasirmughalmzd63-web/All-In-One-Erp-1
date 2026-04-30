@@ -18,4 +18,6 @@ export interface CreateProductRequest {
   /** @nullable */
   locationId?: number | null;
   unit: string;
+  /** @nullable */
+  imageUrl?: string | null;
 }

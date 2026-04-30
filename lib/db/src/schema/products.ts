@@ -14,6 +14,7 @@ export const productsTable = pgTable("products", {
   locationId: integer("location_id"),
   unit: text("unit").notNull().default("pcs"),
   isActive: boolean("is_active").notNull().default(true),
+  imageUrl: text("image_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

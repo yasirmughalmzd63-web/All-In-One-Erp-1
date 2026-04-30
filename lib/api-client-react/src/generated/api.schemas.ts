@@ -141,6 +141,8 @@ export interface Product {
   locationId?: number | null;
   unit: string;
   isActive: boolean;
+  /** @nullable */
+  imageUrl?: string | null;
   createdAt: string;
 }
 
@@ -156,6 +158,8 @@ export interface CreateProductRequest {
   /** @nullable */
   locationId?: number | null;
   unit: string;
+  /** @nullable */
+  imageUrl?: string | null;
 }
 
 export interface UpdateProductRequest {
@@ -169,6 +173,8 @@ export interface UpdateProductRequest {
   stock?: number;
   unit?: string;
   isActive?: boolean;
+  /** @nullable */
+  imageUrl?: string | null;
 }
 
 export interface Customer {

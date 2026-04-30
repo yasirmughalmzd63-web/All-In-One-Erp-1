@@ -279,6 +279,7 @@ export const ListProductsResponseItem = zod.object({
   locationId: zod.number().nullish(),
   unit: zod.string(),
   isActive: zod.boolean(),
+  imageUrl: zod.string().nullish(),
   createdAt: zod.string(),
 });
 export const ListProductsResponse = zod.array(ListProductsResponseItem);
@@ -295,6 +296,7 @@ export const CreateProductBody = zod.object({
   stock: zod.number(),
   locationId: zod.number().nullish(),
   unit: zod.string(),
+  imageUrl: zod.string().nullish(),
 });
 
 /**
@@ -313,6 +315,7 @@ export const UpdateProductBody = zod.object({
   stock: zod.number().optional(),
   unit: zod.string().optional(),
   isActive: zod.boolean().optional(),
+  imageUrl: zod.string().nullish(),
 });
 
 export const UpdateProductResponse = zod.object({
@@ -327,6 +330,7 @@ export const UpdateProductResponse = zod.object({
   locationId: zod.number().nullish(),
   unit: zod.string(),
   isActive: zod.boolean(),
+  imageUrl: zod.string().nullish(),
   createdAt: zod.string(),
 });
 

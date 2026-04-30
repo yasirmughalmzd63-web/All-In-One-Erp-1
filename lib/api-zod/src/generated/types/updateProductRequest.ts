@@ -17,4 +17,6 @@ export interface UpdateProductRequest {
   stock?: number;
   unit?: string;
   isActive?: boolean;
+  /** @nullable */
+  imageUrl?: string | null;
 }

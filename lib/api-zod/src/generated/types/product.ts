@@ -22,5 +22,7 @@ export interface Product {
   locationId?: number | null;
   unit: string;
   isActive: boolean;
+  /** @nullable */
+  imageUrl?: string | null;
   createdAt: string;
 }
