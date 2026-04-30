@@ -1,18 +1,27 @@
 import { Router } from "express";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
-import { db, targetsTable, employeeBonusesTable, salesTable, usersTable } from "@workspace/db";
+import { eq, and, sql } from "drizzle-orm";
+import { db, targetsTable, employeeBonusesTable, salesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 
 const router = Router();
 
-/* ─── helpers ─── */
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/* ═══════════════════════════ LIST ═══════════════════════════ */
-router.get("/api/targets", requireAuth, async (req, res): Promise<void> => {
+/* ═══ PENDING ACHIEVEMENTS — must be before /:id ══════════════════════════ */
+router.get("/targets/pending-achievements", requireAuth, async (req, res): Promise<void> => {
+  const rows = await db.select().from(targetsTable).where(eq(targetsTable.status, "achieved"));
+  const byEmp: Record<number, number> = {};
+  for (const r of rows) {
+    if (r.employeeId) byEmp[r.employeeId] = (byEmp[r.employeeId] ?? 0) + 1;
+  }
+  res.json(byEmp);
+});
+
+/* ═══ LIST ════════════════════════════════════════════════════════════════ */
+router.get("/targets", requireAuth, async (req, res): Promise<void> => {
   const { type, scope, status, employeeId } = req.query as Record<string, string>;
   let rows = await db.select().from(targetsTable).orderBy(targetsTable.createdAt);
   if (type)       rows = rows.filter(r => r.type === type);
@@ -22,8 +31,8 @@ router.get("/api/targets", requireAuth, async (req, res): Promise<void> => {
   res.json(rows);
 });
 
-/* ═══════════════════════════ CREATE ═══════════════════════════ */
-router.post("/api/targets", requireAuth, async (req, res): Promise<void> => {
+/* ═══ CREATE ══════════════════════════════════════════════════════════════ */
+router.post("/targets", requireAuth, async (req, res): Promise<void> => {
   const {
     title, type, scope, employeeId, userId,
     targetAmount, commissionType, commissionValue,
@@ -35,9 +44,9 @@ router.post("/api/targets", requireAuth, async (req, res): Promise<void> => {
     startDate?: string; endDate?: string;
     locationId?: number; notes?: string;
   };
-  if (!title?.trim())   { res.status(400).json({ error: "title required" }); return; }
-  if (!targetAmount)    { res.status(400).json({ error: "targetAmount required" }); return; }
-  if (!startDate || !endDate) { res.status(400).json({ error: "startDate and endDate required" }); return; }
+  if (!title?.trim())             { res.status(400).json({ error: "title required" }); return; }
+  if (!targetAmount)              { res.status(400).json({ error: "targetAmount required" }); return; }
+  if (!startDate || !endDate)     { res.status(400).json({ error: "startDate and endDate required" }); return; }
 
   const [row] = await db.insert(targetsTable).values({
     title: title.trim(),
@@ -59,8 +68,8 @@ router.post("/api/targets", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json(row!);
 });
 
-/* ═══════════════════════════ UPDATE ═══════════════════════════ */
-router.patch("/api/targets/:id", requireAuth, async (req, res): Promise<void> => {
+/* ═══ UPDATE ══════════════════════════════════════════════════════════════ */
+router.patch("/targets/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
   const allowed = ["title","type","scope","employeeId","userId","targetAmount","commissionType","commissionValue","startDate","endDate","status","locationId","notes"];
   const updates: Record<string, unknown> = {};
@@ -70,8 +79,8 @@ router.patch("/api/targets/:id", requireAuth, async (req, res): Promise<void> =>
   res.json(row);
 });
 
-/* ═══════════════════════════ DELETE ═══════════════════════════ */
-router.delete("/api/targets/:id", requireAuth, async (req, res): Promise<void> => {
+/* ═══ DELETE ══════════════════════════════════════════════════════════════ */
+router.delete("/targets/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
   const [row] = await db.delete(targetsTable).where(eq(targetsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
@@ -79,24 +88,19 @@ router.delete("/api/targets/:id", requireAuth, async (req, res): Promise<void> =
   res.sendStatus(204);
 });
 
-/* ═══════════════════════════ CHECK PROGRESS ═══════════════════════════ */
-router.post("/api/targets/:id/check", requireAuth, async (req, res): Promise<void> => {
+/* ═══ CHECK PROGRESS ══════════════════════════════════════════════════════ */
+router.post("/targets/:id/check", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
   const target = await db.select().from(targetsTable).where(eq(targetsTable.id, id)).then(r => r[0]);
   if (!target) { res.status(404).json({ error: "Not found" }); return; }
 
-  // Sum sales total in the target date range (by userId for user-wise, or all for app-wise)
   const conditions = [
     sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') >= ${target.startDate}::date`,
     sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') <= ${target.endDate}::date`,
     eq(salesTable.status, "completed"),
   ];
-  if (target.scope === "user" && target.userId) {
-    conditions.push(eq(salesTable.userId, target.userId));
-  }
-  if (target.locationId) {
-    conditions.push(eq(salesTable.locationId, target.locationId));
-  }
+  if (target.scope === "user" && target.userId) conditions.push(eq(salesTable.userId, target.userId));
+  if (target.locationId) conditions.push(eq(salesTable.locationId, target.locationId));
 
   const [agg] = await db
     .select({ total: sql<string>`COALESCE(SUM(CAST(${salesTable.total} AS NUMERIC)), 0)` })
@@ -104,16 +108,12 @@ router.post("/api/targets/:id/check", requireAuth, async (req, res): Promise<voi
     .where(and(...conditions));
 
   const achievedAmount = parseFloat(agg?.total ?? "0");
-  const targetAmount   = parseFloat(target.targetAmount);
-  const achieved       = achievedAmount >= targetAmount;
+  const achieved       = achievedAmount >= parseFloat(target.targetAmount);
 
-  // Auto-update status: only if still active or already achieved (not if done)
   let newStatus = target.status;
   if (target.status === "active" || target.status === "achieved") {
     const isPast = target.endDate < today();
-    if (achieved) newStatus = "achieved";
-    else if (isPast) newStatus = "missed";
-    else newStatus = "active";
+    newStatus = achieved ? "achieved" : isPast ? "missed" : "active";
   }
 
   const [updated] = await db
@@ -125,29 +125,25 @@ router.post("/api/targets/:id/check", requireAuth, async (req, res): Promise<voi
   res.json({ ...updated, achievedAmount: achievedAmount.toFixed(2), achieved });
 });
 
-/* ═══════════════════════════ APPLY COMMISSION ═══════════════════════════ */
-router.post("/api/targets/:id/apply-commission", requireAuth, async (req, res): Promise<void> => {
+/* ═══ APPLY COMMISSION ════════════════════════════════════════════════════ */
+router.post("/targets/:id/apply-commission", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
   const target = await db.select().from(targetsTable).where(eq(targetsTable.id, id)).then(r => r[0]);
-  if (!target) { res.status(404).json({ error: "Not found" }); return; }
+  if (!target)            { res.status(404).json({ error: "Not found" }); return; }
   if (!target.employeeId) { res.status(400).json({ error: "No employee linked to this target" }); return; }
-  if (target.status === "done") { res.status(400).json({ error: "Commission already applied" }); return; }
+  if (target.status === "done")     { res.status(400).json({ error: "Commission already applied" }); return; }
   if (target.status !== "achieved") { res.status(400).json({ error: "Target not yet achieved" }); return; }
 
   const achievedAmt = parseFloat(target.achievedAmount);
-  let commissionAmount = 0;
-  if (target.commissionType === "percentage") {
-    commissionAmount = (achievedAmt * parseFloat(target.commissionValue)) / 100;
-  } else {
-    commissionAmount = parseFloat(target.commissionValue);
-  }
+  const commissionAmount = target.commissionType === "percentage"
+    ? (achievedAmt * parseFloat(target.commissionValue)) / 100
+    : parseFloat(target.commissionValue);
 
-  const bonusDate = today();
   const [bonus] = await db.insert(employeeBonusesTable).values({
     employeeId: target.employeeId,
     amount: commissionAmount.toFixed(2),
     reason: `Target: ${target.title} (${target.startDate} – ${target.endDate})`,
-    date: bonusDate,
+    date: today(),
     locationId: target.locationId ?? null,
   }).returning();
 
@@ -159,18 +155,6 @@ router.post("/api/targets/:id/apply-commission", requireAuth, async (req, res): 
 
   await logAudit(req.userId, "update", "target", id, `Commission applied: ${target.title}`);
   res.json({ target: updated, bonus });
-});
-
-/* ═══════════════════════════ PENDING ACHIEVEMENTS (for HRM badge) ═══════ */
-router.get("/api/targets/pending-achievements", requireAuth, async (req, res): Promise<void> => {
-  const rows = await db.select().from(targetsTable)
-    .where(eq(targetsTable.status, "achieved"));
-  // Group by employeeId
-  const byEmp: Record<number, number> = {};
-  for (const r of rows) {
-    if (r.employeeId) byEmp[r.employeeId] = (byEmp[r.employeeId] ?? 0) + 1;
-  }
-  res.json(byEmp);
 });
 
 export default router;

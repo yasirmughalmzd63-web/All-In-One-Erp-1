@@ -124,7 +124,7 @@ export default function HrmScreen() {
   const [reportLoading, setReportLoading] = useState(false);
   const [reportMonth, setReportMonth] = useState(NOW.getMonth() + 1);
   const [reportYear, setReportYear] = useState(NOW.getFullYear());
-  const [reportView, setReportView] = useState<"app" | "employee">("app");
+  const [reportView, setReportView] = useState<"app" | "employee" | "performance">("app");
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
@@ -342,6 +342,41 @@ export default function HrmScreen() {
     report?.employees.filter(e => e.status === "active") ?? [],
     [report]);
 
+  // ── Behavior Score (1–100) per employee ──
+  const empScores = useMemo(() => {
+    const scores: Record<number, {
+      score: number;
+      attendancePts: number;
+      finePts: number;
+      bonusPts: number;
+      label: string;
+      color: string;
+    }> = {};
+    for (const emp of reportActiveEmployees) {
+      const pay = empPayrollMap[emp.id];
+      const fineAmt  = empFinesMap[emp.id]  ?? 0;
+      const bonusAmt = empBonusMap[emp.id]  ?? 0;
+      const baseSal  = parseFloat(emp.baseSalary) || 1;
+
+      // Attendance: 0–60 pts
+      const attPts = pay
+        ? Math.round(((pay.presentDays + pay.halfDays * 0.5) / Math.max(pay.workingDays, 1)) * 60)
+        : 0;
+      // Fine deduction: 0–30 pts (deducted)
+      const finePts  = Math.min(30, Math.round((fineAmt / baseSal) * 100));
+      // Bonus reward: 0–10 pts
+      const bonusPts = Math.min(10, Math.round((bonusAmt / baseSal) * 50));
+
+      const raw   = attPts - finePts + bonusPts;
+      const score = Math.max(1, Math.min(100, raw));
+
+      const label = score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Average" : "Needs Work";
+      const color = score >= 85 ? "#059669"   : score >= 70 ? "#2563EB" : score >= 50 ? "#D97706" : "#DC2626";
+      scores[emp.id] = { score, attendancePts: attPts, finePts, bonusPts, label, color };
+    }
+    return scores;
+  }, [reportActiveEmployees, empPayrollMap, empFinesMap, empBonusMap]);
+
   /* ─── Export Report CSV ─── */
   const exportReportCsv = async () => {
     if (!report) return;
@@ -420,6 +455,14 @@ export default function HrmScreen() {
               </View>
             </View>
             <View style={s.cardActions}>
+              {/* Behavior score badge */}
+              {empScores[e.id] && (
+                <View style={{ width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: empScores[e.id]!.color, alignItems: "center", justifyContent: "center", marginBottom: 4, backgroundColor: empScores[e.id]!.color + "12" }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: empScores[e.id]!.color, lineHeight: 14 }}>{empScores[e.id]!.score}</Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 7, color: empScores[e.id]!.color, lineHeight: 9 }}>/100</Text>
+                </View>
+              )}
+              {/* Target achievement badge */}
               {pendingAchievements[e.id] > 0 && (
                 <View style={{ backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, alignItems: "center", marginBottom: 4 }}>
                   <Feather name="award" size={16} color="#D97706" />
@@ -639,25 +682,25 @@ export default function HrmScreen() {
     return (
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }} refreshControl={<RefreshControl refreshing={reportLoading} onRefresh={fetchReport} />}>
 
-        {/* ── Top Filter Toggle ── */}
-        <View style={{ flexDirection: "row", gap: 0, marginTop: 12, marginBottom: 12, borderRadius: 14, overflow: "hidden", borderWidth: 1.5, borderColor: colors.border }}>
-          <TouchableOpacity
-            onPress={() => setReportView("app")}
-            style={{ flex: 1, paddingVertical: 12, alignItems: "center", justifyContent: "center", gap: 4, flexDirection: "row",
-              backgroundColor: reportView === "app" ? colors.primary : colors.card }}
-          >
-            <Feather name="bar-chart-2" size={15} color={reportView === "app" ? "#FFF" : colors.textSecondary} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: reportView === "app" ? "#FFF" : colors.textSecondary }}>App Wise</Text>
-          </TouchableOpacity>
-          <View style={{ width: 1.5, backgroundColor: colors.border }} />
-          <TouchableOpacity
-            onPress={() => setReportView("employee")}
-            style={{ flex: 1, paddingVertical: 12, alignItems: "center", justifyContent: "center", gap: 4, flexDirection: "row",
-              backgroundColor: reportView === "employee" ? colors.primary : colors.card }}
-          >
-            <Feather name="users" size={15} color={reportView === "employee" ? "#FFF" : colors.textSecondary} />
-            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: reportView === "employee" ? "#FFF" : colors.textSecondary }}>Employee Wise</Text>
-          </TouchableOpacity>
+        {/* ── Top Filter Toggle (3-way) ── */}
+        <View style={{ flexDirection: "row", marginTop: 12, marginBottom: 12, borderRadius: 14, overflow: "hidden", borderWidth: 1.5, borderColor: colors.border }}>
+          {([
+            { key: "app",         icon: "bar-chart-2", label: "App Wise" },
+            { key: "employee",    icon: "users",       label: "Employee" },
+            { key: "performance", icon: "award",       label: "Scores" },
+          ] as const).map((item, idx) => (
+            <React.Fragment key={item.key}>
+              {idx > 0 && <View style={{ width: 1.5, backgroundColor: colors.border }} />}
+              <TouchableOpacity
+                onPress={() => setReportView(item.key)}
+                style={{ flex: 1, paddingVertical: 11, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 4,
+                  backgroundColor: reportView === item.key ? colors.primary : colors.card }}
+              >
+                <Feather name={item.icon} size={13} color={reportView === item.key ? "#FFF" : colors.textSecondary} />
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: reportView === item.key ? "#FFF" : colors.textSecondary }}>{item.label}</Text>
+              </TouchableOpacity>
+            </React.Fragment>
+          ))}
         </View>
 
         {/* Month/Year picker */}
@@ -872,6 +915,272 @@ export default function HrmScreen() {
             </TouchableOpacity>
           </>
         )}
+
+        {/* ══════════════ PERFORMANCE SCORECARD ══════════════ */}
+        {reportView === "performance" && report && (() => {
+          const ranked = [...reportActiveEmployees]
+            .map(emp => ({ emp, ...( empScores[emp.id] ?? { score: 0, attendancePts: 0, finePts: 0, bonusPts: 0, label: "N/A", color: "#6B7280" }) }))
+            .sort((a, b) => b.score - a.score);
+
+          return (
+            <>
+              {/* Section header */}
+              <View style={{ marginBottom: 16 }}>
+                <Text style={[s.sectionTitle, { fontSize: 17 }]}>
+                  🏆 Performance Scorecard
+                </Text>
+                <Text style={s.cardSub}>
+                  {MONTHS[reportMonth - 1]} {reportYear} · Behavior Score 1–100
+                </Text>
+              </View>
+
+              {/* Score legend */}
+              <View style={{ flexDirection: "row", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+                {[
+                  { label: "Excellent", color: "#059669", range: "85–100" },
+                  { label: "Good",      color: "#2563EB", range: "70–84" },
+                  { label: "Average",   color: "#D97706", range: "50–69" },
+                  { label: "Needs Work",color: "#DC2626", range: "1–49"  },
+                ].map(l => (
+                  <View key={l.label} style={{ flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: l.color + "15", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: l.color }} />
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: l.color }}>{l.label}</Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: l.color, opacity: 0.8 }}>{l.range}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {/* Scoring formula card */}
+              <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: colors.border }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text, marginBottom: 10 }}>Score Formula</Text>
+                <View style={{ gap: 6 }}>
+                  {[
+                    { icon: "calendar", label: "Attendance",     pts: "0–60 pts", color: "#2563EB",  desc: "Present + half days / working days × 60" },
+                    { icon: "alert-circle", label: "Fine Deduction", pts: "–0 to –30", color: "#DC2626", desc: "Fines vs base salary (max –30 pts)" },
+                    { icon: "award",    label: "Bonus Reward",   pts: "+0 to +10", color: "#059669", desc: "Bonuses vs base salary (max +10 pts)" },
+                  ].map(row => (
+                    <View key={row.label} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: row.color + "20", alignItems: "center", justifyContent: "center" }}>
+                        <Feather name={row.icon as any} size={13} color={row.color} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text }}>{row.label}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textSecondary }}>{row.desc}</Text>
+                      </View>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: row.color }}>{row.pts}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {/* Podium — top 3 */}
+              {ranked.length >= 1 && (
+                <>
+                  <Text style={s.sectionTitle}>🥇 Leaderboard</Text>
+                  <View style={{ flexDirection: "row", alignItems: "flex-end", justifyContent: "center", gap: 8, marginBottom: 20 }}>
+                    {/* 2nd place */}
+                    {ranked[1] && (
+                      <View style={{ flex: 1, alignItems: "center" }}>
+                        <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: "#9CA3AF", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: "#fff" }}>{ranked[1].emp.name.charAt(0)}</Text>
+                        </View>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.text, textAlign: "center" }} numberOfLines={1}>{ranked[1].emp.name}</Text>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: "#9CA3AF" }}>{ranked[1].score}</Text>
+                        <View style={{ width: "100%", height: 60, backgroundColor: "#9CA3AF" + "30", borderTopLeftRadius: 8, borderTopRightRadius: 8, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#9CA3AF" }}>2nd</Text>
+                        </View>
+                      </View>
+                    )}
+                    {/* 1st place */}
+                    <View style={{ flex: 1, alignItems: "center" }}>
+                      <Text style={{ fontSize: 24, marginBottom: 2 }}>👑</Text>
+                      <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: "#F59E0B", alignItems: "center", justifyContent: "center", marginBottom: 4, borderWidth: 3, borderColor: "#FEF3C7" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: "#fff" }}>{ranked[0].emp.name.charAt(0)}</Text>
+                      </View>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: colors.text, textAlign: "center" }} numberOfLines={1}>{ranked[0].emp.name}</Text>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 28, color: "#F59E0B" }}>{ranked[0].score}</Text>
+                      <View style={{ width: "100%", height: 80, backgroundColor: "#F59E0B" + "30", borderTopLeftRadius: 8, borderTopRightRadius: 8, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: "#F59E0B" }}>1st 🏆</Text>
+                      </View>
+                    </View>
+                    {/* 3rd place */}
+                    {ranked[2] && (
+                      <View style={{ flex: 1, alignItems: "center" }}>
+                        <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#B45309", alignItems: "center", justifyContent: "center", marginBottom: 4 }}>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#fff" }}>{ranked[2].emp.name.charAt(0)}</Text>
+                        </View>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.text, textAlign: "center" }} numberOfLines={1}>{ranked[2].emp.name}</Text>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#B45309" }}>{ranked[2].score}</Text>
+                        <View style={{ width: "100%", height: 44, backgroundColor: "#B45309" + "30", borderTopLeftRadius: 8, borderTopRightRadius: 8, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: "#B45309" }}>3rd</Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </>
+              )}
+
+              {/* Full ranking cards */}
+              <Text style={s.sectionTitle}>All Employees</Text>
+              {ranked.map((item, rank) => {
+                const { emp, score, attendancePts, finePts, bonusPts, label, color } = item;
+                const pay      = empPayrollMap[emp.id];
+                const fineAmt  = empFinesMap[emp.id]  ?? 0;
+                const bonusAmt = empBonusMap[emp.id]  ?? 0;
+                const empFineList  = report.fines.filter(f => f.employeeId === emp.id);
+                const empBonusList = report.bonuses.filter(b => b.employeeId === emp.id);
+                const attPct   = pay ? Math.round(((pay.presentDays + pay.halfDays * 0.5) / Math.max(pay.workingDays, 1)) * 100) : 0;
+
+                return (
+                  <View key={emp.id} style={{ backgroundColor: colors.card, borderRadius: 16, marginBottom: 14, overflow: "hidden", borderWidth: 1.5, borderColor: color + "40" }}>
+                    {/* Card header */}
+                    <View style={{ backgroundColor: color + "12", padding: 14, flexDirection: "row", alignItems: "center", gap: 12 }}>
+                      {/* Rank badge */}
+                      <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: color, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#fff" }}>#{rank + 1}</Text>
+                      </View>
+                      {/* Avatar */}
+                      <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: color, alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: color + "50" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#fff" }}>{emp.name.charAt(0).toUpperCase()}</Text>
+                      </View>
+                      {/* Name + label */}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: colors.text }}>{emp.name}</Text>
+                        {emp.position && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary }}>{emp.position}</Text>}
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 2 }}>
+                          <View style={{ backgroundColor: color + "25", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color }}>{label}</Text>
+                          </View>
+                          {(pendingAchievements[emp.id] ?? 0) > 0 && (
+                            <View style={{ backgroundColor: "#FEF3C7", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 3 }}>
+                              <Feather name="award" size={10} color="#D97706" />
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#D97706" }}>{pendingAchievements[emp.id]} target{pendingAchievements[emp.id] > 1 ? "s" : ""}</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                      {/* Big Score circle */}
+                      <View style={{ width: 62, height: 62, borderRadius: 31, borderWidth: 4, borderColor: color, alignItems: "center", justifyContent: "center", backgroundColor: color + "10" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color }}>{score}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 8, color, marginTop: -2 }}>/100</Text>
+                      </View>
+                    </View>
+
+                    {/* Score breakdown bars */}
+                    <View style={{ padding: 14, gap: 10 }}>
+                      {/* Attendance bar */}
+                      <View>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                            <Feather name="calendar" size={12} color="#2563EB" />
+                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text }}>Attendance</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary }}>
+                              {pay ? `${pay.presentDays}/${pay.workingDays} days` : "no payroll"}
+                            </Text>
+                          </View>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#2563EB" }}>+{attendancePts} pts</Text>
+                        </View>
+                        <View style={{ height: 7, backgroundColor: colors.border, borderRadius: 4, overflow: "hidden" }}>
+                          <View style={{ height: "100%", width: `${Math.round(attendancePts / 60 * 100)}%` as any, backgroundColor: "#2563EB", borderRadius: 4 }} />
+                        </View>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                          Attendance: {attPct}%
+                        </Text>
+                      </View>
+
+                      {/* Fine deduction bar */}
+                      <View>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                            <Feather name="alert-circle" size={12} color="#DC2626" />
+                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text }}>Fine Deduction</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary }}>
+                              {fineAmt > 0 ? PKR(fineAmt) : "none"}
+                            </Text>
+                          </View>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: finePts > 0 ? "#DC2626" : colors.textSecondary }}>
+                            {finePts > 0 ? `–${finePts} pts` : "0 pts"}
+                          </Text>
+                        </View>
+                        <View style={{ height: 7, backgroundColor: colors.border, borderRadius: 4, overflow: "hidden" }}>
+                          <View style={{ height: "100%", width: `${Math.round(finePts / 30 * 100)}%` as any, backgroundColor: "#DC2626", borderRadius: 4 }} />
+                        </View>
+                        {/* Fine list */}
+                        {empFineList.length > 0 && (
+                          <View style={{ marginTop: 6, gap: 3 }}>
+                            {empFineList.map(f => (
+                              <View key={f.id} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 8 }}>
+                                <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "#DC2626" }} />
+                                <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary }}>{f.reason}</Text>
+                                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: "#DC2626" }}>–{PKR(parseFloat(f.amount))}</Text>
+                                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textSecondary }}>{f.date}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Bonus reward bar */}
+                      <View>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                            <Feather name="gift" size={12} color="#059669" />
+                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.text }}>Bonus Reward</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary }}>
+                              {bonusAmt > 0 ? PKR(bonusAmt) : "none"}
+                            </Text>
+                          </View>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: bonusPts > 0 ? "#059669" : colors.textSecondary }}>
+                            {bonusPts > 0 ? `+${bonusPts} pts` : "0 pts"}
+                          </Text>
+                        </View>
+                        <View style={{ height: 7, backgroundColor: colors.border, borderRadius: 4, overflow: "hidden" }}>
+                          <View style={{ height: "100%", width: `${Math.round(bonusPts / 10 * 100)}%` as any, backgroundColor: "#059669", borderRadius: 4 }} />
+                        </View>
+                        {/* Bonus list */}
+                        {empBonusList.length > 0 && (
+                          <View style={{ marginTop: 6, gap: 3 }}>
+                            {empBonusList.map(b => (
+                              <View key={b.id} style={{ flexDirection: "row", alignItems: "center", gap: 6, paddingLeft: 8 }}>
+                                <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: "#059669" }} />
+                                <Text style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary }}>{b.reason}</Text>
+                                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: "#059669" }}>+{PKR(parseFloat(b.amount))}</Text>
+                                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textSecondary }}>{b.date}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Footer: net salary */}
+                    {pay && (
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+                        borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: 14, paddingVertical: 10,
+                        backgroundColor: color + "06" }}>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.textSecondary }}>
+                          Net Salary · {pay.status}
+                        </Text>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: pay.status === "paid" ? "#059669" : colors.primary }}>
+                          {PKR(parseFloat(pay.netSalary))}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+
+              {ranked.length === 0 && (
+                <Text style={s.empty}>No payroll data for {MONTHS[reportMonth - 1]} {reportYear}. Generate payroll first.</Text>
+              )}
+
+              <TouchableOpacity style={s.exportBtn} onPress={exportReportCsv}>
+                <Feather name="share-2" size={16} color="#fff" />
+                <Text style={s.exportBtnTxt}>Export CSV</Text>
+              </TouchableOpacity>
+            </>
+          );
+        })()}
       </ScrollView>
     );
   };
