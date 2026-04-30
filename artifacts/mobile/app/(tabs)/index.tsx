@@ -1021,16 +1021,17 @@ export default function POSScreen() {
                 </View>
                 <TouchableOpacity
                   style={{
-                    paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
-                    backgroundColor: copyError ? "#FEF2F2" : copiedQty ? "#F0FDF4" : "transparent",
-                    borderColor: copyError ? "#FECACA" : copiedQty ? "#BBF7D0" : colors.border,
-                    opacity: qty <= 0 ? 0.35 : 1,
+                    flexDirection: "row", alignItems: "center", gap: 5,
+                    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
+                    backgroundColor: copyError ? "#FEE2E2" : copiedQty ? "#D1FAE5" : "#E0E7FF",
+                    opacity: qty <= 0 ? 0.4 : 1,
                   }}
                   onPress={handleCopyQty} disabled={qty <= 0}
-                  activeOpacity={0.5}
+                  activeOpacity={0.7}
                 >
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: copyError ? "#EF4444" : copiedQty ? "#16A34A" : colors.mutedForeground }}>
-                    {copyError ? "Error" : copiedQty ? "✓ Copied" : "Copy QTY"}
+                  <Text style={{ fontSize: 14 }}>{copyError ? "⚠️" : copiedQty ? "✅" : "📋"}</Text>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: copyError ? "#B91C1C" : copiedQty ? "#065F46" : "#3730A3" }}>
+                    {copyError ? "Error" : copiedQty ? "Copied!" : "Copy"}
                   </Text>
                 </TouchableOpacity>
               </View>
