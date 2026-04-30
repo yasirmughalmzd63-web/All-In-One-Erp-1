@@ -973,66 +973,59 @@ export default function POSScreen() {
         {/* ── Amount + QTY + Presets (unified card) ───────────────────── */}
         <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border, overflow: "hidden" }]}>
 
-          {/* Single row: AMOUNT | divider | QTY + copy */}
-          <View style={{ flexDirection: "row", alignItems: "stretch" }}>
-            {/* Amount side — blue tinted, red if exceeds balance */}
-            <View style={{ flex: 1.1, padding: 12, paddingRight: 10, backgroundColor: balanceShortfall > 0 ? "#FEF2F2" : "#EFF6FF" }}>
-              <Text style={[styles.amountLabel, { color: balanceShortfall > 0 ? "#EF4444" : "#3B82F6", marginBottom: 2 }]}>
-                {balanceShortfall > 0 ? "⚠️ AMOUNT" : "💵 AMOUNT"}
-              </Text>
-              <Text style={[styles.amountValue, { color: balanceShortfall > 0 ? "#DC2626" : "#1E40AF", fontSize: 24 }]} numberOfLines={1} adjustsFontSizeToFit>
-                {typedPart}
-                <Text style={{ color: "#93C5FD", opacity: 0.5 }}>{ghostPart}</Text>
-              </Text>
-              {balanceShortfall > 0 && (
-                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#EF4444", marginTop: 3 }}>
-                  Short ₨{balanceShortfall.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          {/* Single compact line: AMOUNT | divider | QTY + copy */}
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            {/* Amount side */}
+            <View style={{ flex: 1.1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: balanceShortfall > 0 ? "#FEF2F2" : "#EFF6FF" }}>
+              <Text style={{ fontSize: 14 }}>{balanceShortfall > 0 ? "⚠️" : "💵"}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: balanceShortfall > 0 ? "#EF4444" : "#3B82F6", letterSpacing: 0.8 }}>AMOUNT</Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: balanceShortfall > 0 ? "#DC2626" : "#1E40AF", lineHeight: 26 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                  {typedPart}<Text style={{ color: "#93C5FD", opacity: 0.5 }}>{ghostPart}</Text>
                 </Text>
-              )}
+                {balanceShortfall > 0 && (
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444" }}>
+                    Short ₨{balanceShortfall.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </Text>
+                )}
+              </View>
             </View>
 
             {/* Vertical separator */}
-            <View style={{ width: 1, backgroundColor: colors.border }} />
+            <View style={{ width: 1, alignSelf: "stretch", backgroundColor: colors.border }} />
 
-            {/* QTY side — emerald or red if exceeds stock */}
-            <View style={{ flex: 1, padding: 12, paddingLeft: 10, backgroundColor: stockWarning ? "#FEF2F2" : "#ECFDF5" }}>
-              <Text style={[styles.qtyLabel, { color: stockWarning ? "#EF4444" : "#059669", marginBottom: 2 }]}>
-                {stockWarning ? "⚠️ QTY" : "📦 QTY"}{selectedProduct ? ` @ ${activePrice.toFixed(0)}` : ""}
-              </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-                <View>
-                  <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 30, lineHeight: 36 }, {
-                    color: stockWarning ? "#DC2626" : qty > 0 ? "#065F46" : "#6EE7B7",
-                  }]}>
-                    {qty > 0 ? qty.toLocaleString() : "—"}
-                  </Text>
-                  {stockWarning === "exceeds-stock" && selectedProduct && (
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#EF4444" }}>
-                      Max {selectedProduct.stock} {selectedProduct.unit}
-                    </Text>
-                  )}
-                  {stockWarning === "out-of-stock" && (
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#EF4444" }}>
-                      Out of stock
-                    </Text>
-                  )}
-                </View>
-                <TouchableOpacity
-                  style={{
-                    flexDirection: "row", alignItems: "center", gap: 5,
-                    paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12,
-                    backgroundColor: copyError ? "#FEE2E2" : copiedQty ? "#D1FAE5" : "#E0E7FF",
-                    opacity: qty <= 0 ? 0.4 : 1,
-                  }}
-                  onPress={handleCopyQty} disabled={qty <= 0}
-                  activeOpacity={0.7}
-                >
-                  <Text style={{ fontSize: 14 }}>{copyError ? "⚠️" : copiedQty ? "✅" : "📋"}</Text>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: copyError ? "#B91C1C" : copiedQty ? "#065F46" : "#3730A3" }}>
-                    {copyError ? "Error" : copiedQty ? "Copied!" : "Copy"}
-                  </Text>
-                </TouchableOpacity>
+            {/* QTY side */}
+            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: stockWarning ? "#FEF2F2" : "#ECFDF5" }}>
+              <Text style={{ fontSize: 14 }}>{stockWarning ? "⚠️" : "📦"}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: stockWarning ? "#EF4444" : "#059669", letterSpacing: 0.8 }}>
+                  QTY{selectedProduct ? ` @ ${activePrice.toFixed(0)}` : ""}
+                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: stockWarning ? "#DC2626" : qty > 0 ? "#065F46" : "#6EE7B7", lineHeight: 26 }}>
+                  {qty > 0 ? qty.toLocaleString() : "—"}
+                </Text>
+                {stockWarning === "exceeds-stock" && selectedProduct && (
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444" }}>Max {selectedProduct.stock} {selectedProduct.unit}</Text>
+                )}
+                {stockWarning === "out-of-stock" && (
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444" }}>Out of stock</Text>
+                )}
               </View>
+              <TouchableOpacity
+                style={{
+                  flexDirection: "row", alignItems: "center", gap: 4,
+                  paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10,
+                  backgroundColor: copyError ? "#FEE2E2" : copiedQty ? "#D1FAE5" : "#E0E7FF",
+                  opacity: qty <= 0 ? 0.4 : 1,
+                }}
+                onPress={handleCopyQty} disabled={qty <= 0}
+                activeOpacity={0.7}
+              >
+                <Text style={{ fontSize: 13 }}>{copyError ? "⚠️" : copiedQty ? "✅" : "📋"}</Text>
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: copyError ? "#B91C1C" : copiedQty ? "#065F46" : "#3730A3" }}>
+                  {copyError ? "Err" : copiedQty ? "✓" : "Copy"}
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -1110,9 +1103,9 @@ export default function POSScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Account */}
+          {/* Account — single line */}
           <TouchableOpacity
-            style={[styles.optionRow, { borderBottomColor: colors.border, borderBottomWidth: 0, alignItems: "flex-start" }]}
+            style={[styles.optionRow, { borderBottomColor: colors.border, borderBottomWidth: 0, alignItems: "center" }]}
             onPress={() => {
               if (!canSelectAccount) {
                 Alert.alert("Access Denied", "You don't have permission to change the payment account.");
@@ -1126,60 +1119,53 @@ export default function POSScreen() {
               return (
                 <View style={[styles.optionIcon, {
                   backgroundColor: ac ? ac.bg : (canSelectAccount ? colors.dangerBg : colors.input),
-                  borderWidth: ac ? 1 : 0,
-                  borderColor: ac?.border,
+                  borderWidth: ac ? 1 : 0, borderColor: ac?.border,
                 }]}>
-                  <Text style={{ fontSize: 15 }}>
-                    {selectedAccount ? acctEmoji(selectedAccount.type) : "🏧"}
-                  </Text>
+                  <Text style={{ fontSize: 13 }}>{selectedAccount ? acctEmoji(selectedAccount.type) : "🏧"}</Text>
                 </View>
               );
             })()}
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.mutedForeground, letterSpacing: 0.4 }}>ACCOUNT</Text>
-              {selectedAccount ? (
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 }}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>{selectedAccount.name}</Text>
-                  {(() => {
-                    const ac = acctColor(selectedAccount.type);
-                    return (
-                      <View style={{ backgroundColor: ac.bg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: ac.border }}>
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: ac.text }}>
-                          {selectedAccount.type.charAt(0).toUpperCase() + selectedAccount.type.slice(1)}
-                        </Text>
-                      </View>
-                    );
-                  })()}
-                </View>
-              ) : (
-                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: canSelectAccount ? colors.danger : colors.mutedForeground, marginTop: 1 }}>
-                  {canSelectAccount ? "Required for cash sale" : "Locked by admin"}
+            {/* label */}
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.mutedForeground, letterSpacing: 0.4, width: 54 }}>ACCOUNT</Text>
+            {/* name + type badge */}
+            {selectedAccount ? (
+              <>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text, flex: 1 }} numberOfLines={1}>{selectedAccount.name}</Text>
+                {(() => {
+                  const ac = acctColor(selectedAccount.type);
+                  return (
+                    <View style={{ backgroundColor: ac.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: ac.border }}>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: ac.text }}>
+                        {selectedAccount.type.charAt(0).toUpperCase() + selectedAccount.type.slice(1)}
+                      </Text>
+                    </View>
+                  );
+                })()}
+                {/* balance */}
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.mutedForeground }}>
+                  ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </Text>
-              )}
-              {selectedAccount && (
-                <>
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
-                    Balance: ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </Text>
-                  <View style={{ marginTop: 6 }}>
-                    {selectedAccount.id !== defaults.accountId ? (
-                      <TouchableOpacity
-                        onPress={e => { e.stopPropagation?.(); saveDefault("accountId", selectedAccount.id); }}
-                        style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#FDE68A", alignSelf: "flex-start" }}
-                      >
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#92400E" }}>★ Set Default</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#BBF7D0", alignSelf: "flex-start" }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#166534" }}>★ Default</Text>
-                      </View>
-                    )}
+                {/* default badge */}
+                {selectedAccount.id !== defaults.accountId ? (
+                  <TouchableOpacity
+                    onPress={e => { e.stopPropagation?.(); saveDefault("accountId", selectedAccount.id); }}
+                    style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#FDE68A" }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  >
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#92400E" }}>★</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#166534" }}>★</Text>
                   </View>
-                </>
-              )}
-            </View>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 18, color: colors.mutedForeground }}>›</Text>
-            
+                )}
+              </>
+            ) : (
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: canSelectAccount ? colors.danger : colors.mutedForeground, flex: 1 }}>
+                {canSelectAccount ? "Tap to select" : "Locked by admin"}
+              </Text>
+            )}
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 16, color: colors.mutedForeground, marginLeft: 2 }}>›</Text>
           </TouchableOpacity>
         </View>
 
