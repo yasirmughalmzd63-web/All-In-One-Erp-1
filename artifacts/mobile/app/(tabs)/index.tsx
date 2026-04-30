@@ -29,6 +29,98 @@ type Account = { id: number; name: string; type: string; balance: string; curren
 type Location = { id: number; name: string; address?: string | null };
 type RateMode = "normal" | "wholesale";
 
+// ── Account type helpers ────────────────────────────────────────────────
+function acctEmoji(type: string): string {
+  const t = type.toLowerCase();
+  if (t === "cash")   return "💵";
+  if (t === "bank")   return "🏦";
+  if (t === "mobile") return "📱";
+  return "💳";
+}
+function acctColor(type: string): { bg: string; border: string; text: string } {
+  const t = type.toLowerCase();
+  if (t === "cash")   return { bg: "#ECFDF5", border: "#059669", text: "#065F46" };
+  if (t === "bank")   return { bg: "#EFF6FF", border: "#2563EB", text: "#1E3A8A" };
+  if (t === "mobile") return { bg: "#F3E8FF", border: "#7C3AED", text: "#4C1D95" };
+  return { bg: "#F1F5F9", border: "#94A3B8", text: "#334155" };
+}
+
+function AccountPickerModal({ visible, accounts, onSelect, onClose }: {
+  visible: boolean;
+  accounts: Account[];
+  onSelect: (a: Account | null) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const ORDER = ["cash", "bank", "mobile", "other"];
+  const grouped: Record<string, Account[]> = {};
+  for (const a of accounts) {
+    const key = a.type.toLowerCase();
+    const group = ORDER.includes(key) ? key : "other";
+    if (!grouped[group]) grouped[group] = [];
+    grouped[group].push(a);
+  }
+  const sections = ORDER.filter(k => grouped[k]?.length);
+  const TYPE_LABEL: Record<string, string> = { cash: "Cash", bank: "Bank", mobile: "Mobile Wallet", other: "Other" };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "85%" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Select Account</Text>
+            <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 22, lineHeight: 24 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+            {sections.map(typeKey => {
+              const { bg, border, text } = acctColor(typeKey);
+              return (
+                <View key={typeKey}>
+                  {/* Section header */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
+                    <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: bg, borderWidth: 1, borderColor: border, alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 14 }}>{acctEmoji(typeKey)}</Text>
+                    </View>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: text, letterSpacing: 0.8 }}>
+                      {TYPE_LABEL[typeKey] ?? typeKey.toUpperCase()}
+                    </Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: border, opacity: 0.3 }} />
+                  </View>
+                  {/* Accounts in this group */}
+                  {grouped[typeKey].map(a => (
+                    <TouchableOpacity
+                      key={a.id}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                      onPress={() => { onSelect(a); onClose(); }}
+                    >
+                      <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 18 }}>{acctEmoji(typeKey)}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>{a.name}</Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 1 }}>
+                          Balance: ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </Text>
+                      </View>
+                      <View style={{ backgroundColor: bg, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: border }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: text }}>
+                          ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function PickerModal<T extends { id: number; name: string }>({
   visible, title, items, onSelect, onClose, renderSub,
 }: { visible: boolean; title: string; items: T[]; onSelect: (item: T | null) => void; onClose: () => void; renderSub?: (item: T) => string }) {
@@ -672,7 +764,7 @@ export default function POSScreen() {
 
           {/* Account */}
           <TouchableOpacity
-            style={[styles.optionRow, { borderBottomColor: colors.border, borderBottomWidth: 0 }]}
+            style={[styles.optionRow, { borderBottomColor: colors.border, borderBottomWidth: 0, alignItems: "flex-start" }]}
             onPress={() => {
               if (!canSelectAccount) {
                 Alert.alert("Access Denied", "You don't have permission to change the payment account.");
@@ -681,24 +773,48 @@ export default function POSScreen() {
               setShowAccountModal(true);
             }}
           >
-            <View style={[styles.optionIcon, { backgroundColor: selectedAccount ? colors.secondary : (canSelectAccount ? colors.dangerBg : colors.input) }]}>
-              
-            </View>
-            <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Account</Text>
-            {selectedAccount ? (
-              <View style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 6, marginRight: 4 }}>
-                <Text style={[styles.optionValue, { color: colors.text, flex: 0 }]}>{selectedAccount.name}</Text>
-                <View style={[styles.balBadge, { backgroundColor: colors.saleBg }]}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: colors.success }}>
-                    ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            {(() => {
+              const ac = selectedAccount ? acctColor(selectedAccount.type) : null;
+              return (
+                <View style={[styles.optionIcon, {
+                  backgroundColor: ac ? ac.bg : (canSelectAccount ? colors.dangerBg : colors.input),
+                  borderWidth: ac ? 1 : 0,
+                  borderColor: ac?.border,
+                }]}>
+                  <Text style={{ fontSize: 15 }}>
+                    {selectedAccount ? acctEmoji(selectedAccount.type) : "🏧"}
                   </Text>
                 </View>
-              </View>
-            ) : (
-              <Text style={[styles.optionValue, { color: canSelectAccount ? colors.danger : colors.mutedForeground }]}>
-                {canSelectAccount ? "Required for cash sale" : "Locked by admin"}
-              </Text>
-            )}
+              );
+            })()}
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.mutedForeground, letterSpacing: 0.4 }}>ACCOUNT</Text>
+              {selectedAccount ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 1 }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>{selectedAccount.name}</Text>
+                  {(() => {
+                    const ac = acctColor(selectedAccount.type);
+                    return (
+                      <View style={{ backgroundColor: ac.bg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: ac.border }}>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: ac.text }}>
+                          {selectedAccount.type.charAt(0).toUpperCase() + selectedAccount.type.slice(1)}
+                        </Text>
+                      </View>
+                    );
+                  })()}
+                </View>
+              ) : (
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: canSelectAccount ? colors.danger : colors.mutedForeground, marginTop: 1 }}>
+                  {canSelectAccount ? "Required for cash sale" : "Locked by admin"}
+                </Text>
+              )}
+              {selectedAccount && (
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
+                  Balance: ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </Text>
+              )}
+            </View>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 18, color: colors.mutedForeground }}>›</Text>
             
           </TouchableOpacity>
         </View>
@@ -814,10 +930,9 @@ export default function POSScreen() {
         onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)}
         renderSub={c => c.phone ?? ""}
       />
-      <PickerModal<Account>
-        visible={showAccountModal} title="Select Payment Account" items={allowedAccounts}
+      <AccountPickerModal
+        visible={showAccountModal} accounts={allowedAccounts}
         onSelect={setSelectedAccount} onClose={() => setShowAccountModal(false)}
-        renderSub={a => `${a.type}  ·  Balance: ₨${parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
       />
       <PickerModal<Location>
         visible={showLocationModal} title="Select App" items={allowedLocations}
