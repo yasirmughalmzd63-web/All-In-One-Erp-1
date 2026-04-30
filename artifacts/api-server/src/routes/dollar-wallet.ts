@@ -268,6 +268,151 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
   });
 });
 
+// POST /api/dollar-wallet/wallets/transfer — move USD between wallets
+router.post("/dollar-wallet/wallets/transfer", requireAuth, async (req, res): Promise<void> => {
+  const { fromWalletId, toWalletId, amountUsd, notes, date } = req.body as {
+    fromWalletId?: number; toWalletId?: number; amountUsd?: string; notes?: string | null; date?: string;
+  };
+
+  if (!fromWalletId || !toWalletId || !amountUsd || !date) {
+    res.status(400).json({ error: "fromWalletId, toWalletId, amountUsd, date are required." });
+    return;
+  }
+  if (fromWalletId === toWalletId) {
+    res.status(422).json({ error: "Source and destination wallets must be different." });
+    return;
+  }
+  const usd = parseFloat(amountUsd);
+  if (isNaN(usd) || usd <= 0) {
+    res.status(422).json({ error: "Transfer amount must be greater than zero." });
+    return;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || isNaN(Date.parse(date))) {
+    res.status(422).json({ error: `Invalid date "${date}". Use YYYY-MM-DD format.` });
+    return;
+  }
+
+  const [fromWallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, fromWalletId), eq(walletsTable.currency, "USD")));
+  if (!fromWallet) { res.status(404).json({ error: "Source wallet not found." }); return; }
+  if (!fromWallet.isActive) { res.status(422).json({ error: `Source wallet "${fromWallet.name}" is inactive.` }); return; }
+
+  const [toWallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, toWalletId), eq(walletsTable.currency, "USD")));
+  if (!toWallet) { res.status(404).json({ error: "Destination wallet not found." }); return; }
+  if (!toWallet.isActive) { res.status(422).json({ error: `Destination wallet "${toWallet.name}" is inactive.` }); return; }
+
+  const fromBal = parseFloat(fromWallet.balance);
+  if (fromBal < usd) {
+    res.status(422).json({
+      error: `Insufficient balance in "${fromWallet.name}". Available: $${fromBal.toFixed(2)}, Required: $${usd.toFixed(2)}.`,
+    });
+    return;
+  }
+
+  const result = await db.transaction(async tx => {
+    const [freshFrom] = await tx.select().from(walletsTable).where(eq(walletsTable.id, fromWalletId));
+    if (!freshFrom || parseFloat(freshFrom.balance) < usd) {
+      throw new Error(`Insufficient balance in "${fromWallet.name}" (race condition).`);
+    }
+
+    // Deduct from source
+    await tx.update(walletsTable)
+      .set({ balance: fmt(parseFloat(freshFrom.balance) - usd) })
+      .where(eq(walletsTable.id, fromWalletId));
+
+    // Add to destination
+    const [freshTo] = await tx.select().from(walletsTable).where(eq(walletsTable.id, toWalletId));
+    await tx.update(walletsTable)
+      .set({ balance: fmt(parseFloat(freshTo!.balance) + usd) })
+      .where(eq(walletsTable.id, toWalletId));
+
+    // Log transfer_out
+    const [outRow] = await tx.insert(dollarWalletTable).values({
+      entryType: "transfer_out",
+      amountUsd: fmt(usd),
+      rate: "0.00000000",
+      totalPkr: "0.00000000",
+      partyName: `→ ${toWallet.name}`,
+      partyType: "wallet",
+      walletId: fromWalletId,
+      notes: notes ?? null,
+      date,
+      userId: String(req.userId),
+    }).returning();
+
+    // Log transfer_in
+    const [inRow] = await tx.insert(dollarWalletTable).values({
+      entryType: "transfer_in",
+      amountUsd: fmt(usd),
+      rate: "0.00000000",
+      totalPkr: "0.00000000",
+      partyName: `← ${fromWallet.name}`,
+      partyType: "wallet",
+      walletId: toWalletId,
+      notes: notes ?? null,
+      date,
+      userId: String(req.userId),
+    }).returning();
+
+    return { outRow: outRow!, inRow: inRow! };
+  });
+
+  await logAudit(req.userId, "transfer", "dollar_wallet", result.outRow.id,
+    `Transferred $${usd.toFixed(2)} from "${fromWallet.name}" to "${toWallet.name}"`);
+
+  res.status(201).json({
+    message: `Successfully transferred $${usd.toFixed(2)} from "${fromWallet.name}" to "${toWallet.name}".`,
+    fromBalance: fmt(parseFloat(fromWallet.balance) - usd),
+    toBalance:   fmt(parseFloat(toWallet.balance)   + usd),
+    outEntry: { ...result.outRow, createdAt: result.outRow.createdAt.toISOString() },
+    inEntry:  { ...result.inRow,  createdAt: result.inRow.createdAt.toISOString()  },
+  });
+});
+
+// GET /api/dollar-wallet/wallets/:id/verify — reconcile stored vs computed balance
+router.get("/dollar-wallet/wallets/:id/verify", requireAuth, async (req, res): Promise<void> => {
+  const walletId = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  if (isNaN(walletId)) { res.status(400).json({ error: "Invalid wallet id." }); return; }
+
+  const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
+  if (!wallet) { res.status(404).json({ error: "Wallet not found." }); return; }
+
+  const txs = await db.select().from(dollarWalletTable).where(eq(dollarWalletTable.walletId, walletId));
+
+  const IN_TYPES  = new Set(["purchase", "transfer_in"]);
+  const OUT_TYPES = new Set(["topup", "transfer_out"]);
+
+  let calculatedBalance = 0;
+  let totalIn  = 0;
+  let totalOut = 0;
+
+  for (const t of txs) {
+    const amt = parseFloat(t.amountUsd);
+    if (IN_TYPES.has(t.entryType)) {
+      calculatedBalance += amt;
+      totalIn += amt;
+    } else if (OUT_TYPES.has(t.entryType)) {
+      calculatedBalance -= amt;
+      totalOut += amt;
+    }
+  }
+
+  const storedBalance = parseFloat(wallet.balance);
+  const discrepancy   = storedBalance - calculatedBalance;
+  const isReconciled  = Math.abs(discrepancy) < 0.000001;
+
+  res.json({
+    walletId,
+    walletName:         wallet.name,
+    storedBalance:      fmt(storedBalance),
+    calculatedBalance:  fmt(calculatedBalance),
+    discrepancy:        fmt(discrepancy),
+    isReconciled,
+    totalIn:            fmt(totalIn),
+    totalOut:           fmt(totalOut),
+    txCount:            txs.length,
+  });
+});
+
 // GET /api/dollar-wallet/wallets/:id/transactions — per-wallet history + summary
 router.get("/dollar-wallet/wallets/:id/transactions", requireAuth, async (req, res): Promise<void> => {
   const walletId = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
@@ -280,8 +425,8 @@ router.get("/dollar-wallet/wallets/:id/transactions", requireAuth, async (req, r
     .where(eq(dollarWalletTable.walletId, walletId))
     .orderBy(desc(dollarWalletTable.createdAt));
 
-  const IN_TYPES = new Set(["purchase"]);
-  const OUT_TYPES = new Set(["topup"]);
+  const IN_TYPES  = new Set(["purchase", "transfer_in"]);
+  const OUT_TYPES = new Set(["topup", "transfer_out"]);
 
   let totalIn = 0;
   let totalOut = 0;

@@ -94,10 +94,22 @@ export default function UsdBridgeScreen() {
   const [creditPkr, setCreditPkr] = useState("");
 
   /* ─── Wallets ─── */
-  const [wallets,            setWallets]            = useState<WalletData[]>([]);
-  const [walletDetail,       setWalletDetail]       = useState<WalletDetail | null>(null);
+  const [wallets,             setWallets]             = useState<WalletData[]>([]);
+  const [walletDetail,        setWalletDetail]        = useState<WalletDetail | null>(null);
   const [walletDetailLoading, setWalletDetailLoading] = useState(false);
-  const [showWalletDetail,   setShowWalletDetail]   = useState(false);
+  const [showWalletDetail,    setShowWalletDetail]    = useState(false);
+
+  /* ─── Transfer modal ─── */
+  const [showTransfer,     setShowTransfer]     = useState(false);
+  const [transferFrom,     setTransferFrom]     = useState<WalletData | null>(null);
+  const [transferToId,     setTransferToId]     = useState<number | null>(null);
+  const [transferAmount,   setTransferAmount]   = useState("");
+  const [transferNotes,    setTransferNotes]    = useState("");
+  const [transferDate,     setTransferDate]     = useState(TODAY);
+  const [transferLoading,  setTransferLoading]  = useState(false);
+
+  /* ─── Verify ─── */
+  const [verifying, setVerifying] = useState<number | null>(null);
 
   /* ─── Modals ─── */
   const [showCustPicker, setShowCustPicker] = useState(false);
@@ -138,6 +150,80 @@ export default function UsdBridgeScreen() {
       if (r.ok) setWalletDetail(await r.json());
     } catch (_) {}
     setWalletDetailLoading(false);
+  };
+
+  const openTransfer = (wallet: WalletData) => {
+    setTransferFrom(wallet);
+    setTransferToId(null);
+    setTransferAmount("");
+    setTransferNotes("");
+    setTransferDate(TODAY);
+    setShowTransfer(true);
+  };
+
+  const submitTransfer = async () => {
+    if (!transferFrom || !transferToId || !transferAmount) {
+      Alert.alert("Missing Fields", "Please fill in all required fields.");
+      return;
+    }
+    const usd = parseFloat(transferAmount);
+    if (isNaN(usd) || usd <= 0) { Alert.alert("Invalid Amount", "Amount must be greater than zero."); return; }
+    setTransferLoading(true);
+    try {
+      const r = await fetch(getApiUrl("/api/dollar-wallet/wallets/transfer"), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          fromWalletId: transferFrom.id,
+          toWalletId:   transferToId,
+          amountUsd:    transferAmount,
+          notes:        transferNotes || null,
+          date:         transferDate,
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) { Alert.alert("Transfer Failed", data.error ?? "Unknown error"); return; }
+      setShowTransfer(false);
+      await fetchAll();
+      Alert.alert("Transfer Successful", data.message);
+    } catch (e) {
+      Alert.alert("Error", "Network error. Please try again.");
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  const verifyWallet = async (wallet: WalletData) => {
+    setVerifying(wallet.id);
+    try {
+      const r = await fetch(getApiUrl(`/api/dollar-wallet/wallets/${wallet.id}/verify`), { headers });
+      const data = await r.json();
+      if (!r.ok) { Alert.alert("Error", data.error ?? "Verification failed"); return; }
+      const stored     = parseFloat(data.storedBalance);
+      const calculated = parseFloat(data.calculatedBalance);
+      const diff       = parseFloat(data.discrepancy);
+      const icon       = data.isReconciled ? "✅" : "⚠️";
+      const status     = data.isReconciled ? "Balance Verified" : "Discrepancy Found";
+      Alert.alert(
+        `${icon} ${status}`,
+        [
+          `Wallet: ${data.walletName}`,
+          "",
+          `Stored Balance:      $${stored.toFixed(2)}`,
+          `Calculated Balance:  $${calculated.toFixed(2)}`,
+          `Discrepancy:         $${Math.abs(diff).toFixed(2)} ${diff < 0 ? "(under)" : diff > 0 ? "(over)" : ""}`,
+          "",
+          `Total In:   $${parseFloat(data.totalIn).toFixed(2)}`,
+          `Total Out:  $${parseFloat(data.totalOut).toFixed(2)}`,
+          `Transactions: ${data.txCount}`,
+        ].join("\n"),
+        [{ text: "OK" }]
+      );
+    } catch (_) {
+      Alert.alert("Error", "Network error during verification.");
+    } finally {
+      setVerifying(null);
+    }
   };
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -614,15 +700,44 @@ export default function UsdBridgeScreen() {
                 </Text>
               </View>
 
-              {/* View Transactions button */}
+              {/* Action buttons */}
               <TouchableOpacity
                 style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-                  backgroundColor: "#0891B2", borderRadius: 12, paddingVertical: 12 }}
+                  backgroundColor: "#0891B2", borderRadius: 12, paddingVertical: 12, marginBottom: 8 }}
                 onPress={() => fetchWalletDetail(w.id)}
               >
                 <Feather name="list" size={16} color="#fff" />
                 <Text style={{ color: "#fff", fontWeight: "700", fontSize: 14 }}>View Transactions</Text>
               </TouchableOpacity>
+
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {/* Transfer button */}
+                <TouchableOpacity
+                  style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+                    backgroundColor: "#7C3AED", borderRadius: 12, paddingVertical: 11 }}
+                  onPress={() => openTransfer(w)}
+                  disabled={!w.isActive}
+                >
+                  <Feather name="send" size={15} color="#fff" />
+                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>Transfer</Text>
+                </TouchableOpacity>
+
+                {/* Verify button */}
+                <TouchableOpacity
+                  style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+                    backgroundColor: verifying === w.id ? "#6B7280" : "#059669", borderRadius: 12, paddingVertical: 11 }}
+                  onPress={() => verifyWallet(w)}
+                  disabled={verifying === w.id}
+                >
+                  {verifying === w.id
+                    ? <ActivityIndicator size="small" color="#fff" />
+                    : <Feather name="shield" size={15} color="#fff" />
+                  }
+                  <Text style={{ color: "#fff", fontWeight: "700", fontSize: 13 }}>
+                    {verifying === w.id ? "Checking…" : "Verify"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         ))
@@ -922,6 +1037,137 @@ export default function UsdBridgeScreen() {
             <TouchableOpacity style={s.cancelBtn} onPress={() => setShowAcctPicker(false)}>
               <Text style={s.cancelTxt}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ─── Transfer Modal ─── */}
+      <Modal visible={showTransfer} animationType="slide" transparent onRequestClose={() => setShowTransfer(false)}>
+        <View style={s.overlay}>
+          <View style={[s.sheet, { maxHeight: "85%" }]}>
+            {/* Header */}
+            <View style={{ flexDirection: "row", alignItems: "center", marginBottom: 16 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: "#EDE9FE", alignItems: "center", justifyContent: "center", marginRight: 10 }}>
+                <Feather name="send" size={18} color="#7C3AED" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: "800", color: "#1F2937" }}>Transfer USD</Text>
+                <Text style={{ fontSize: 12, color: "#6B7280" }}>Move funds between wallets</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowTransfer(false)}>
+                <Feather name="x" size={20} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* From wallet (read-only) */}
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#374151", marginBottom: 4 }}>FROM WALLET</Text>
+              <View style={{ backgroundColor: "#EDE9FE", borderRadius: 10, padding: 14, marginBottom: 14, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Feather name="briefcase" size={18} color="#7C3AED" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#1F2937" }}>{transferFrom?.name}</Text>
+                  <Text style={{ fontSize: 12, color: "#7C3AED" }}>
+                    Available: {USD(parseFloat(transferFrom?.balance ?? "0"))}
+                  </Text>
+                </View>
+              </View>
+
+              {/* To wallet picker */}
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#374151", marginBottom: 4 }}>TO WALLET</Text>
+              <View style={{ borderRadius: 10, borderWidth: 1, borderColor: "#E5E7EB", marginBottom: 14, overflow: "hidden" }}>
+                {wallets
+                  .filter(w => w.id !== transferFrom?.id && w.isActive)
+                  .map(w => (
+                    <TouchableOpacity
+                      key={w.id}
+                      style={{ flexDirection: "row", alignItems: "center", padding: 12, gap: 10,
+                        backgroundColor: transferToId === w.id ? "#EDE9FE" : "#fff",
+                        borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}
+                      onPress={() => setTransferToId(w.id)}
+                    >
+                      <View style={{ width: 28, height: 28, borderRadius: 14,
+                        backgroundColor: transferToId === w.id ? "#7C3AED" : "#F3F4F6",
+                        alignItems: "center", justifyContent: "center" }}>
+                        {transferToId === w.id
+                          ? <Feather name="check" size={14} color="#fff" />
+                          : <Feather name="briefcase" size={12} color="#6B7280" />
+                        }
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: "600",
+                          color: transferToId === w.id ? "#7C3AED" : "#1F2937" }}>{w.name}</Text>
+                        <Text style={{ fontSize: 11, color: "#6B7280" }}>{USD(parseFloat(w.balance || "0"))}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                }
+              </View>
+
+              {/* Amount */}
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#374151", marginBottom: 4 }}>AMOUNT (USD)</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12,
+                  fontSize: 22, fontWeight: "800", color: "#1F2937", marginBottom: 14, textAlign: "center" }}
+                placeholder="0.00"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="decimal-pad"
+                value={transferAmount}
+                onChangeText={setTransferAmount}
+              />
+
+              {/* Date */}
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#374151", marginBottom: 4 }}>DATE</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12,
+                  fontSize: 14, color: "#1F2937", marginBottom: 14 }}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#9CA3AF"
+                value={transferDate}
+                onChangeText={setTransferDate}
+              />
+
+              {/* Notes */}
+              <Text style={{ fontSize: 12, fontWeight: "600", color: "#374151", marginBottom: 4 }}>NOTES (optional)</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 12,
+                  fontSize: 14, color: "#1F2937", marginBottom: 20, minHeight: 60, textAlignVertical: "top" }}
+                placeholder="Add a note…"
+                placeholderTextColor="#9CA3AF"
+                multiline
+                value={transferNotes}
+                onChangeText={setTransferNotes}
+              />
+
+              {/* Summary strip */}
+              {transferAmount && !isNaN(parseFloat(transferAmount)) && parseFloat(transferAmount) > 0 && transferFrom && transferToId && (
+                <View style={{ backgroundColor: "#F5F3FF", borderRadius: 10, padding: 12, marginBottom: 16, gap: 4 }}>
+                  <Text style={{ fontSize: 12, color: "#7C3AED", fontWeight: "700" }}>Transfer Preview</Text>
+                  <Text style={{ fontSize: 12, color: "#374151" }}>
+                    {transferFrom.name}: {USD(parseFloat(transferFrom.balance))} → {USD(parseFloat(transferFrom.balance) - parseFloat(transferAmount || "0"))}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: "#374151" }}>
+                    {wallets.find(w => w.id === transferToId)?.name ?? "—"}:{" "}
+                    {USD(parseFloat(wallets.find(w => w.id === transferToId)?.balance ?? "0"))} → {USD(parseFloat(wallets.find(w => w.id === transferToId)?.balance ?? "0") + parseFloat(transferAmount || "0"))}
+                  </Text>
+                </View>
+              )}
+
+              {/* Submit */}
+              <TouchableOpacity
+                style={{ backgroundColor: transferLoading ? "#9CA3AF" : "#7C3AED", borderRadius: 12,
+                  paddingVertical: 14, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 }}
+                onPress={submitTransfer}
+                disabled={transferLoading}
+              >
+                {transferLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Feather name="send" size={16} color="#fff" />
+                }
+                <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>
+                  {transferLoading ? "Transferring…" : "Confirm Transfer"}
+                </Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
