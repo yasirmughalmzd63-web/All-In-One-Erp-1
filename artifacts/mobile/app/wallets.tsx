@@ -22,6 +22,10 @@ type DollarEntry = {
   notes: string | null;
   date: string;
   createdAt: string;
+  productId?: number | null;
+  qty?: number | null;
+  paymentMode?: string | null;
+  walletId?: number | null;
 };
 
 const ENTRY_TYPES: { key: string; label: string; desc: string; sign: 1 | -1; color: string; bg: string; icon: string }[] = [
@@ -49,6 +53,7 @@ const emptyBuyForm = {
 const emptyTopupForm = {
   productId: "",
   walletId: "",
+  paymentMode: "wallet" as "wallet" | "direct",
   partyType: "supplier" as "supplier" | "customer",
   partyId: "",
   amountUsd: "",
@@ -95,6 +100,8 @@ export default function WalletsScreen() {
   const [entries, setEntries] = useState<DollarEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterProductId, setFilterProductId] = useState<string>("all");
   const [showModal, setShowModal] = useState(false);
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showTopupModal, setShowTopupModal] = useState(false);
@@ -196,24 +203,29 @@ export default function WalletsScreen() {
   };
 
   const handleTopup = async () => {
-    if (!topupForm.productId || !topupForm.walletId || !topupForm.amountUsd || !topupForm.coinsPerUsd || !topupForm.exchangeRatePkr || !topupForm.date) {
-      Alert.alert("Error", "Coin, dollar wallet, USD amount, coins per USD, PKR rate and date are required");
+    if (!topupForm.productId || !topupForm.amountUsd || !topupForm.coinsPerUsd || !topupForm.exchangeRatePkr || !topupForm.date) {
+      Alert.alert("Error", "Coin, USD amount, coins per USD, PKR rate and date are required");
       return;
     }
     if (!topupForm.partyId) {
       Alert.alert("Pick party", "Choose which supplier or customer is selling you the coins.");
       return;
     }
-    const selWallet = dollarWallets.find(x => String(x.id) === topupForm.walletId);
-    const needUsd = parseFloat(topupForm.amountUsd);
-    if (!selWallet || parseFloat(selWallet.balance) < needUsd) {
-      Alert.alert(
-        "Insufficient dollars",
-        selWallet
-          ? `${selWallet.name} only has $${parseFloat(selWallet.balance).toFixed(2)} but you need $${needUsd.toFixed(2)}.\n\nBuy more USD into this wallet first.`
-          : "Pick a dollar wallet first."
-      );
-      return;
+    // Wallet is required only when payment mode is "wallet"
+    if (topupForm.paymentMode === "wallet") {
+      const selWallet = dollarWallets.find(x => String(x.id) === topupForm.walletId);
+      const needUsd = parseFloat(topupForm.amountUsd);
+      if (!selWallet) {
+        Alert.alert("Pick wallet", "Select a dollar wallet to deduct from, or switch to Direct Purchase.");
+        return;
+      }
+      if (parseFloat(selWallet.balance) < needUsd) {
+        Alert.alert(
+          "Insufficient dollars",
+          `${selWallet.name} only has $${parseFloat(selWallet.balance).toFixed(2)} but you need $${needUsd.toFixed(2)}.\n\nBuy more USD into this wallet first, or switch to Direct Purchase.`
+        );
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -221,7 +233,7 @@ export default function WalletsScreen() {
         method: "POST",
         body: JSON.stringify({
           productId: parseInt(topupForm.productId, 10),
-          walletId: parseInt(topupForm.walletId, 10),
+          walletId: topupForm.paymentMode === "wallet" && topupForm.walletId ? parseInt(topupForm.walletId, 10) : null,
           partyType: topupForm.partyType,
           partyId: parseInt(topupForm.partyId, 10),
           amountUsd: topupForm.amountUsd,
@@ -326,6 +338,8 @@ export default function WalletsScreen() {
   const renderItem = ({ item }: { item: DollarEntry }) => {
     const et = ENTRY_TYPES.find(t => t.key === item.entryType);
     const sign = et?.sign ?? 1;
+    const isTopup = item.entryType === "topup";
+    const isDirect = item.paymentMode === "direct";
     return (
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <View style={styles.cardRow}>
@@ -333,12 +347,25 @@ export default function WalletsScreen() {
             
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>
-              {et?.label ?? item.entryType}
-              {item.partyName ? <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground }}> — {item.partyName}</Text> : null}
-            </Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>
+                {et?.label ?? item.entryType}
+                {item.partyName ? <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground }}> — {item.partyName}</Text> : null}
+              </Text>
+              {isTopup && isDirect && (
+                <View style={{ backgroundColor: "#FEF3C7", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#92400E" }}>DIRECT</Text>
+                </View>
+              )}
+              {isTopup && !isDirect && (
+                <View style={{ backgroundColor: "#EDE9FE", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#5B21B6" }}>WALLET</Text>
+                </View>
+              )}
+            </View>
             <Text style={[styles.cardSub, { color: colors.mutedForeground }]}>
               Rate: {parseFloat(item.rate).toFixed(2)} • {item.date}
+              {isTopup && item.qty ? ` • ${item.qty.toLocaleString()} coins` : ""}
             </Text>
             {item.notes ? <Text style={[styles.noteText, { color: colors.mutedForeground }]}>{item.notes}</Text> : null}
           </View>
@@ -429,11 +456,61 @@ export default function WalletsScreen() {
         ) : null}
       </LinearGradient>
 
+      {/* Ledger Filters */}
+      {!loading && (
+        <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
+          {/* Entry type filter */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              {[{ k: "all", label: "All" }, ...ENTRY_TYPES.map(e => ({ k: e.key, label: e.label }))].map(f => {
+                const sel = filterType === f.k;
+                return (
+                  <TouchableOpacity key={f.k} onPress={() => { setFilterType(f.k); setFilterProductId("all"); }}
+                    style={{ backgroundColor: sel ? "#0891B2" : colors.card, borderColor: sel ? "#0891B2" : colors.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 12, paddingVertical: 5 }}>
+                    <Text style={{ fontFamily: sel ? "Inter_700Bold" : "Inter_400Regular", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{f.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </ScrollView>
+          {/* Per-app filter (only visible when topup filter is active or there are topup entries) */}
+          {(filterType === "topup" || filterType === "all") && (() => {
+            const topupProductIds = [...new Set(entries.filter(e => e.entryType === "topup" && e.productId).map(e => String(e.productId)))];
+            if (topupProductIds.length === 0) return null;
+            return (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <TouchableOpacity onPress={() => setFilterProductId("all")}
+                    style={{ backgroundColor: filterProductId === "all" ? "#9333EA" : colors.card, borderColor: filterProductId === "all" ? "#9333EA" : colors.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 4 }}>
+                    <Text style={{ fontFamily: filterProductId === "all" ? "Inter_700Bold" : "Inter_400Regular", fontSize: 11, color: filterProductId === "all" ? "#FFF" : colors.mutedForeground }}>All Apps</Text>
+                  </TouchableOpacity>
+                  {topupProductIds.map(pid => {
+                    const p = products.find(x => String(x.id) === pid);
+                    if (!p) return null;
+                    const sel = filterProductId === pid;
+                    return (
+                      <TouchableOpacity key={pid} onPress={() => setFilterProductId(sel ? "all" : pid)}
+                        style={{ backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : colors.border, borderWidth: 1, borderRadius: 16, paddingHorizontal: 10, paddingVertical: 4 }}>
+                        <Text style={{ fontFamily: sel ? "Inter_700Bold" : "Inter_400Regular", fontSize: 11, color: sel ? "#FFF" : colors.mutedForeground }}>{p.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+            );
+          })()}
+        </View>
+      )}
+
       {loading ? (
         <ActivityIndicator style={{ marginTop: 40 }} color={colors.primary} />
       ) : (
         <FlatList
-          data={entries}
+          data={entries.filter(e => {
+            if (filterType !== "all" && e.entryType !== filterType) return false;
+            if (filterProductId !== "all" && String(e.productId) !== filterProductId) return false;
+            return true;
+          })}
           keyExtractor={i => String(i.id)}
           renderItem={renderItem}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
@@ -629,24 +706,57 @@ export default function WalletsScreen() {
                 </View>
               </ScrollView>
 
-              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DOLLAR WALLET (USD COMES OUT OF)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-                <View style={{ flexDirection: "row", gap: 8 }}>
-                  {dollarWallets.map(w => {
-                    const sel = topupForm.walletId === String(w.id);
-                    const insufficient = topupForm.amountUsd ? parseFloat(w.balance) < parseFloat(topupForm.amountUsd) : false;
-                    return (
-                      <TouchableOpacity key={w.id} onPress={() => setTopupForm(f => ({ ...f, walletId: String(w.id) }))}
-                        style={[styles.acctChip, { backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : insufficient ? "#DC2626" : colors.border }]}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{w.name}</Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : insufficient ? "#DC2626" : colors.mutedForeground }}>
-                          ${parseFloat(w.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+              {/* Payment Mode Toggle */}
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PAYMENT METHOD</Text>
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+                {([{ k: "wallet", label: "Dollar Wallet", icon: "💳" }, { k: "direct", label: "Direct/Cash", icon: "💵" }] as const).map(opt => {
+                  const sel = topupForm.paymentMode === opt.k;
+                  return (
+                    <TouchableOpacity key={opt.k}
+                      onPress={() => setTopupForm(f => ({ ...f, paymentMode: opt.k, walletId: opt.k === "direct" ? "" : f.walletId }))}
+                      style={[styles.acctChip, { flex: 1, backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : colors.border, paddingVertical: 10 }]}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: sel ? "#FFF" : colors.text, textAlign: "center" }}>{opt.icon} {opt.label}</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.8)" : colors.mutedForeground, textAlign: "center" }}>
+                        {opt.k === "wallet" ? "Deducts from USD wallet" : "No wallet deduction"}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Dollar Wallet selector — only shown when payment mode is "wallet" */}
+              {topupForm.paymentMode === "wallet" && (
+                <>
+                  <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>DOLLAR WALLET (USD COMES OUT OF)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {dollarWallets.map(w => {
+                        const sel = topupForm.walletId === String(w.id);
+                        const insufficient = topupForm.amountUsd ? parseFloat(w.balance) < parseFloat(topupForm.amountUsd) : false;
+                        return (
+                          <TouchableOpacity key={w.id} onPress={() => setTopupForm(f => ({ ...f, walletId: String(w.id) }))}
+                            style={[styles.acctChip, { backgroundColor: sel ? "#9333EA" : colors.card, borderColor: sel ? "#9333EA" : insufficient ? "#DC2626" : colors.border }]}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: sel ? "#FFF" : colors.text }}>{w.name}</Text>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: sel ? "rgba(255,255,255,0.85)" : insufficient ? "#DC2626" : colors.mutedForeground }}>
+                              ${parseFloat(w.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </>
+              )}
+
+              {/* Direct purchase info banner */}
+              {topupForm.paymentMode === "direct" && (
+                <View style={{ backgroundColor: "#FEF3C7", borderColor: "#F59E0B", borderWidth: 1, borderRadius: 8, padding: 10, marginBottom: 14 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#92400E" }}>💵 Direct/Cash Purchase</Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#78350F", marginTop: 2 }}>
+                    Inventory will be updated but no USD wallet balance will be deducted. Use this for cash purchases or external top-ups.
+                  </Text>
                 </View>
-              </ScrollView>
+              )}
 
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>COIN PRODUCT</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
@@ -839,34 +949,33 @@ export default function WalletsScreen() {
                 value={topupForm.notes} onChangeText={v => setTopupForm(f => ({ ...f, notes: v }))} placeholder="e.g. Hayuki batch from Binance" placeholderTextColor={colors.mutedForeground} multiline />
 
               {(() => {
+                const isDirect = topupForm.paymentMode === "direct";
                 const selW = dollarWallets.find(x => String(x.id) === topupForm.walletId);
                 const need = parseFloat(topupForm.amountUsd || "0");
                 const have = selW ? parseFloat(selW.balance) : 0;
-                const blocked = !selW || (need > 0 && have < need);
-                const showWarn = topupForm.walletId && need > 0 && have < need;
+                const walletBlocked = !isDirect && (!selW || (need > 0 && have < need));
+                const showWarn = !isDirect && topupForm.walletId && need > 0 && have < need;
+                const btnLabel = saving ? "Saving..." : isDirect ? "Top-up (Direct)" : walletBlocked ? (selW ? `Insufficient $${have.toFixed(2)}` : "Pick a wallet") : "Top-up Coins";
                 return (
                   <>
                     {showWarn ? (
                       <View style={{ backgroundColor: "#FEE2E2", borderRadius: 10, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: "#DC2626", flexDirection: "row", alignItems: "center", gap: 10 }}>
-                        
                         <View style={{ flex: 1 }}>
                           <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#991B1B" }}>
                             Not enough dollars in {selW!.name}
                           </Text>
                           <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#7F1D1D", marginTop: 2 }}>
                             Have ${have.toFixed(2)} · Need ${need.toFixed(2)} · Short ${(need - have).toFixed(2)}.
-                            Buy USD into this wallet first.
+                            Switch to Direct Purchase or buy more USD first.
                           </Text>
                         </View>
                       </View>
                     ) : null}
                     <TouchableOpacity
-                      style={[styles.saveBtn, { backgroundColor: blocked ? "#9CA3AF" : "#9333EA", opacity: saving ? 0.6 : 1 }]}
-                      disabled={saving || blocked}
+                      style={[styles.saveBtn, { backgroundColor: walletBlocked ? "#9CA3AF" : isDirect ? "#D97706" : "#9333EA", opacity: saving ? 0.6 : 1 }]}
+                      disabled={saving || walletBlocked}
                       onPress={handleTopup}>
-                      <Text style={styles.saveBtnText}>
-                        {saving ? "Saving..." : blocked ? (selW ? `Insufficient $${have.toFixed(2)}` : "Pick a wallet") : "Top-up Coins"}
-                      </Text>
+                      <Text style={styles.saveBtnText}>{btnLabel}</Text>
                     </TouchableOpacity>
                   </>
                 );

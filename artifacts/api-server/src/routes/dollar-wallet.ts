@@ -153,22 +153,36 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 });
 
 router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void> => {
-  const { productId, walletId, partyType, partyId, amountUsd, perCoinUsdRate, coinsPerUsd, exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes } = req.body as {
-    productId?: number; walletId?: number; partyType?: "supplier" | "customer"; partyId?: number;
+  const {
+    productId, walletId, partyType, partyId, amountUsd, perCoinUsdRate, coinsPerUsd,
+    exchangeRatePkr, costPricePkr, salePricePkr, wholesalePricePkr, date, notes,
+  } = req.body as {
+    productId?: number; walletId?: number | null; partyType?: "supplier" | "customer"; partyId?: number;
     amountUsd?: string; perCoinUsdRate?: string; coinsPerUsd?: string;
     exchangeRatePkr?: string; costPricePkr?: string | null; salePricePkr?: string | null; wholesalePricePkr?: string | null;
     date?: string; notes?: string | null;
   };
-  if (!productId || !walletId || !amountUsd || (!perCoinUsdRate && !coinsPerUsd) || !exchangeRatePkr || !date) {
-    res.status(400).json({ error: "productId, walletId, amountUsd, perCoinUsdRate or coinsPerUsd, exchangeRatePkr, date required" });
+
+  // walletId is now OPTIONAL — omit it for a direct/cash purchase (inventory updated, no wallet deducted)
+  const useWallet = !!walletId;
+
+  if (!productId || !amountUsd || (!perCoinUsdRate && !coinsPerUsd) || !exchangeRatePkr || !date) {
+    res.status(400).json({ error: "productId, amountUsd, perCoinUsdRate or coinsPerUsd, exchangeRatePkr, date required" });
     return;
   }
   if (!partyType || !partyId || (partyType !== "supplier" && partyType !== "customer")) {
     res.status(400).json({ error: "partyType (supplier|customer) and partyId are required" });
     return;
   }
-  const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId), eq(walletsTable.currency, "USD")));
-  if (!wallet) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
+
+  // Only look up wallet when one was given
+  let wallet: typeof walletsTable.$inferSelect | null = null;
+  if (useWallet) {
+    const [w] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId!), eq(walletsTable.currency, "USD")));
+    if (!w) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
+    wallet = w;
+  }
+
   const usd = parseFloat(amountUsd);
   const fx = parseFloat(exchangeRatePkr);
   let qty = 0;
@@ -186,6 +200,12 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
     return;
   }
   if (qty <= 0) { res.status(400).json({ error: "Computed coin quantity is zero — increase USD or lower per-coin rate" }); return; }
+
+  if (useWallet && wallet && parseFloat(wallet.balance) < usd) {
+    res.status(400).json({ error: `Insufficient balance in ${wallet.name} (have $${wallet.balance}, need $${usd})` });
+    return;
+  }
+
   const totalPkr = usd * fx;
   const newCostPerCoin = totalPkr / qty;
 
@@ -210,42 +230,45 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
 
   const overrideCost = costPricePkr && parseFloat(costPricePkr) > 0 ? parseFloat(costPricePkr) : null;
   const finalCostPerCoin = overrideCost ?? weightedCost;
-  const updates: Record<string, string | number> = {
+  const productUpdates: Record<string, string | number> = {
     stock: newStock,
     costPrice: fmt(finalCostPerCoin),
   };
-  if (salePricePkr && parseFloat(salePricePkr) > 0) {
-    updates.unitPrice = fmt(parseFloat(salePricePkr));
-  }
-  if (wholesalePricePkr && parseFloat(wholesalePricePkr) > 0) {
-    updates.wholesalePrice = fmt(parseFloat(wholesalePricePkr));
-  }
+  if (salePricePkr && parseFloat(salePricePkr) > 0) productUpdates.unitPrice = fmt(parseFloat(salePricePkr));
+  if (wholesalePricePkr && parseFloat(wholesalePricePkr) > 0) productUpdates.wholesalePrice = fmt(parseFloat(wholesalePricePkr));
 
-  if (parseFloat(wallet.balance) < usd) {
-    res.status(400).json({ error: `Insufficient balance in ${wallet.name} (have $${wallet.balance}, need $${usd})` });
-    return;
-  }
+  const paymentMode = useWallet ? "wallet" : "direct";
+  const walletLabel = wallet ? wallet.name : "Direct/Cash";
+  const noteText = notes
+    ? `${notes} · ${qty} ${product.unit} @ ${perCoin.toFixed(8)} USD/coin via ${walletLabel}`
+    : `${qty} ${product.unit} from ${partyType} ${partyName} @ ${perCoin.toFixed(8)} USD/coin via ${walletLabel}`;
 
   let row: typeof dollarWalletTable.$inferSelect;
   try {
     row = await db.transaction(async tx => {
-      const [freshWallet] = await tx.select().from(walletsTable).where(eq(walletsTable.id, walletId));
-      if (!freshWallet || parseFloat(freshWallet.balance) < usd) {
-        throw new Error(`Insufficient balance in ${wallet.name} (have $${freshWallet?.balance ?? 0}, need $${usd})`);
+      await tx.update(productsTable).set(productUpdates).where(eq(productsTable.id, productId));
+
+      if (useWallet && wallet) {
+        const [freshWallet] = await tx.select().from(walletsTable).where(eq(walletsTable.id, wallet.id));
+        if (!freshWallet || parseFloat(freshWallet.balance) < usd) {
+          throw new Error(`Insufficient balance in ${wallet.name} (have $${freshWallet?.balance ?? 0}, need $${usd})`);
+        }
+        await tx.update(walletsTable).set({ balance: fmt(parseFloat(freshWallet.balance) - usd) }).where(eq(walletsTable.id, wallet.id));
       }
-      await tx.update(productsTable).set(updates).where(eq(productsTable.id, productId));
-      const newWalletBal = parseFloat(freshWallet.balance) - usd;
-      await tx.update(walletsTable).set({ balance: fmt(newWalletBal) }).where(eq(walletsTable.id, walletId));
+
       const [r] = await tx.insert(dollarWalletTable).values({
         entryType: "topup",
         amountUsd: fmt(usd),
         rate: fmt(fx),
         totalPkr: fmt(totalPkr),
         partyName: `${partyName} → ${product.name}`,
-        walletId,
+        walletId: walletId ?? null,
         partyType,
         partyId,
-        notes: notes ? `${notes} · ${qty} ${product.unit} from ${partyType} ${partyName} @ ${perCoin.toFixed(8)} USD/coin · paid from ${wallet.name}` : `${qty} ${product.unit} from ${partyType} ${partyName} @ ${perCoin.toFixed(8)} USD/coin · paid from ${wallet.name}`,
+        productId,
+        qty,
+        paymentMode,
+        notes: noteText,
         date,
         userId: String(req.userId),
       }).returning();
@@ -257,7 +280,7 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
   }
 
   await logAudit(req.userId, "create", "dollar_wallet", row.id,
-    `Topup ${qty} ${product.name} for ${amountUsd} USD @ $${perCoinUsdRate}/coin (fx ${exchangeRatePkr})`);
+    `Topup ${qty} ${product.name} for ${amountUsd} USD @ $${perCoinUsdRate}/coin (fx ${exchangeRatePkr}) via ${paymentMode}`);
 
   res.status(201).json({
     ...row,
