@@ -276,35 +276,142 @@ export default function AppWalletsScreen() {
   };
 
   const renderDollarsTab = () => {
-    if (!detail || detail.topups.length === 0) {
-      return <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No dollar topups yet</Text>;
-    }
+    if (!detail) return null;
+
+    const topups = detail.topups;
+
+    // Aggregate dollar flow stats
+    const totalUsd = topups.reduce((s, t) => s + parseFloat(t.amountUsd), 0);
+    const totalPkr = topups.reduce((s, t) => s + parseFloat(t.totalPkr), 0);
+    const totalCoins = topups.reduce((s, t) => s + (t.qty ?? 0), 0);
+
+    const walletTopups = topups.filter(t => t.paymentMode !== "direct");
+    const directTopups = topups.filter(t => t.paymentMode === "direct");
+    const walletUsd = walletTopups.reduce((s, t) => s + parseFloat(t.amountUsd), 0);
+    const directUsd = directTopups.reduce((s, t) => s + parseFloat(t.amountUsd), 0);
+    const walletPkr = walletTopups.reduce((s, t) => s + parseFloat(t.totalPkr), 0);
+    const directPkr = directTopups.reduce((s, t) => s + parseFloat(t.totalPkr), 0);
+
+    const avgRate = totalUsd > 0 ? totalPkr / totalUsd : 0;
+    const costPerCoin = totalCoins > 0 ? totalPkr / totalCoins : 0;
+    const walletPct = totalUsd > 0 ? (walletUsd / totalUsd) * 100 : 0;
+    const directPct = 100 - walletPct;
+
     return (
       <>
-        {detail.topups.map(t => (
-          <View key={t.id} style={[styles.txRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <View style={[styles.txBadge, { backgroundColor: "#F3E8FF" }]}>
-              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#7C3AED" }}>${parseFloat(t.amountUsd).toFixed(2)}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }}>
-                {t.partyName ?? "Topup"}{t.qty ? ` · ${t.qty.toLocaleString()} coins` : ""}
-              </Text>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>
-                Rate ₨{parseFloat(t.rate).toFixed(2)} · ₨{parseFloat(t.totalPkr).toLocaleString(undefined, { maximumFractionDigits: 0 })} · {t.date}
+        {/* ── Dollar Flow Summary Card ── */}
+        <View style={{ backgroundColor: "#1E1B4B", borderRadius: 16, padding: 16, marginBottom: 16 }}>
+          {/* Total row */}
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <View>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: 0.5 }}>Total USD Invested</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: "#FFF" }}>${totalUsd.toFixed(2)}</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
+                ₨{totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {topups.length} topup{topups.length !== 1 ? "s" : ""}
               </Text>
             </View>
-            {t.paymentMode === "direct" ? (
-              <View style={{ backgroundColor: "#FEF3C7", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#92400E" }}>DIRECT</Text>
-              </View>
-            ) : (
-              <View style={{ backgroundColor: "#EDE9FE", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#5B21B6" }}>WALLET</Text>
-              </View>
-            )}
+            <View style={{ alignItems: "flex-end" }}>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>Avg Rate</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: "#A78BFA" }}>₨{avgRate.toFixed(2)}</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>per USD</Text>
+            </View>
           </View>
-        ))}
+
+          {/* Wallet vs Direct split bar */}
+          {topups.length > 0 && (
+            <>
+              <View style={{ flexDirection: "row", height: 8, borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
+                {walletPct > 0 && <View style={{ flex: walletPct, backgroundColor: "#7C3AED" }} />}
+                {directPct > 0 && <View style={{ flex: directPct, backgroundColor: "#D97706" }} />}
+              </View>
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#7C3AED" }} />
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "rgba(255,255,255,0.7)" }}>
+                    Wallet ${walletUsd.toFixed(2)} ({walletPct.toFixed(0)}%)
+                  </Text>
+                </View>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#D97706" }} />
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "rgba(255,255,255,0.7)" }}>
+                    Direct ${directUsd.toFixed(2)} ({directPct.toFixed(0)}%)
+                  </Text>
+                </View>
+              </View>
+            </>
+          )}
+
+          {/* Stats row */}
+          <View style={{ flexDirection: "row", marginTop: 14, gap: 8 }}>
+            {[
+              { label: "Cost/Coin", value: `₨${costPerCoin.toFixed(4)}` },
+              { label: "Coins In", value: totalCoins.toLocaleString() },
+              { label: "Topups", value: String(topups.length) },
+            ].map(stat => (
+              <View key={stat.label} style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.08)", borderRadius: 8, padding: 8, alignItems: "center" }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#FFF" }}>{stat.value}</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", marginTop: 2 }}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Wallet vs Direct section breakdown */}
+        {walletTopups.length > 0 && directTopups.length > 0 && (
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+            <View style={{ flex: 1, backgroundColor: "#EDE9FE", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#7C3AED40" }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#5B21B6" }}>💳 Via Wallet</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#5B21B6" }}>${walletUsd.toFixed(2)}</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "#7C3AED" }}>₨{walletPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {walletTopups.length} topup{walletTopups.length !== 1 ? "s" : ""}</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: "#FEF3C7", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#D9780640" }}>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#92400E" }}>💵 Direct/Cash</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#92400E" }}>${directUsd.toFixed(2)}</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "#D97706" }}>₨{directPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {directTopups.length} topup{directTopups.length !== 1 ? "s" : ""}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Empty state */}
+        {topups.length === 0 && (
+          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>No dollar topups yet</Text>
+        )}
+
+        {/* Transaction list */}
+        {topups.length > 0 && (
+          <>
+            <Text style={[styles.label, { color: colors.mutedForeground, marginBottom: 8 }]}>TRANSACTION HISTORY</Text>
+            {topups.map(t => (
+              <View key={t.id} style={[styles.txRow, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.txBadge, { backgroundColor: t.paymentMode === "direct" ? "#FEF3C7" : "#F3E8FF" }]}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: t.paymentMode === "direct" ? "#92400E" : "#7C3AED" }}>${parseFloat(t.amountUsd).toFixed(2)}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }}>
+                    {t.partyName ?? "Topup"}{t.qty ? ` · ${t.qty.toLocaleString()} coins` : ""}
+                  </Text>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>
+                    ₨{parseFloat(t.rate).toFixed(2)}/USD · ₨{parseFloat(t.totalPkr).toLocaleString(undefined, { maximumFractionDigits: 0 })} · {t.date}
+                  </Text>
+                  {t.qty && t.qty > 0 ? (
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground }}>
+                      Cost/coin: ₨{(parseFloat(t.totalPkr) / t.qty).toFixed(4)}
+                    </Text>
+                  ) : null}
+                </View>
+                {t.paymentMode === "direct" ? (
+                  <View style={{ backgroundColor: "#FEF3C7", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#92400E" }}>DIRECT</Text>
+                  </View>
+                ) : (
+                  <View style={{ backgroundColor: "#EDE9FE", borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#5B21B6" }}>WALLET</Text>
+                  </View>
+                )}
+              </View>
+            ))}
+          </>
+        )}
       </>
     );
   };
