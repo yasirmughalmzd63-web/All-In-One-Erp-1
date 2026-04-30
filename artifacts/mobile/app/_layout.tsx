@@ -33,7 +33,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (isLoading) return;
-    const inAuthGroup = segments[0] === "login";
+    const inAuthGroup = segments[0] === "login" || segments[0] === "register";
     if (!user && !inAuthGroup) {
       router.replace("/login");
     } else if (user && inAuthGroup) {
@@ -52,6 +52,7 @@ function RootLayoutNav() {
   return (
     <Stack>
       <Stack.Screen name="login" options={{ headerShown: false }} />
+      <Stack.Screen name="register" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="customers" options={{ title: "Customers", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
       <Stack.Screen name="suppliers" options={{ title: "Suppliers", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
