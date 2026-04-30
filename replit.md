@@ -127,3 +127,12 @@ lib/db/src/schema/   — 14 table definitions
 ### Apr 30, 2026 — Payment screenshot compression + wallet rename
 - **Compression**: Added `expo-image-manipulator` to the mobile app. `pickAndUploadProof` now resizes payment screenshots down to max 1280px wide and re-encodes them as JPEG at ~60% quality before uploading. This typically takes a 2-8 MB phone-gallery shot down to ~80-200 KB — much faster on slow connections and far less storage usage.
 - **Rename wallets**: Long-pressing a wallet card on the Dollar Wallet screen opens a Rename modal. New backend route `PATCH /api/wallets/:id` (auth-required) updates the wallet name, validates non-empty, and writes an audit log entry like `Renamed "X" → "Y"`. The local wallet list updates in place — no full reload needed.
+
+### Apr 30, 2026 — Admin Reset Center
+- New screen `artifacts/mobile/app/reset-center.tsx` accessible from More → Reports → "Reset Center" (admin only).
+- Backend: `artifacts/api-server/src/routes/admin-reset.ts` adds two endpoints, both admin-only:
+  - `GET /api/admin/reset/counts` returns current row counts for every category.
+  - `POST /api/admin/reset/:category` requires body `{ confirm: "RESET" }` and wipes that category, writing an audit-log entry like `Cleared <Label> (N rows)`.
+- Categories: sales, purchases, expenses, credits (PKR), dollar-wallet (also resets wallet balances), app-wallets (USDT topups + coin credits), stock-transfers, cash-counts, currencies, hrm (attendance/payroll/bonuses/fines/leaves), audit-logs, account-balances → 0, product-stock → 0.
+- Special category `all-transactions` runs every category except audit-logs in sequence.
+- UI safety: each clear opens a confirm modal that requires typing **RESET** to enable the Clear Now button. Master data (users, customers, suppliers, products, accounts, wallets, employees) is never deleted by these actions.

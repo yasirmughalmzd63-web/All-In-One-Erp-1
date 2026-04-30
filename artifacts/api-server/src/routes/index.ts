@@ -29,6 +29,7 @@ import targetsRouter from "./targets.js";
 import cashManagementRouter from "./cash-management.js";
 import dollarStatementRouter from "./dollar-statement.js";
 import appWalletsRouter from "./app-wallets.js";
+import adminResetRouter from "./admin-reset.js";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(targetsRouter);
 router.use(cashManagementRouter);
 router.use(dollarStatementRouter);
 router.use(appWalletsRouter);
+router.use(adminResetRouter);
 
 export default router;

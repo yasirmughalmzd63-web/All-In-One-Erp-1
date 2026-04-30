@@ -44,6 +44,7 @@ const REPORTS_ITEMS: MenuItem[] = [
   { label: "Privileges",   icon: "shield",      route: "/privileges",   color: "#059669", bg: "#ECFDF5", desc: "User access control",           module: "users", adminOnly: true },
   { label: "Registrations", icon: "user-plus",  route: "/registrations", color: "#D97706", bg: "#FFF7ED", desc: "Approve business accounts",     module: "users", adminOnly: true },
   { label: "Businesses",    icon: "briefcase",  route: "/businesses",    color: "#7C3AED", bg: "#F3E8FF", desc: "Manage all businesses & modules", module: "users", superAdminOnly: true },
+  { label: "Reset Center",  icon: "alert-octagon", route: "/reset-center", color: "#DC2626", bg: "#FEF2F2", desc: "Clear application data safely",   module: "users", adminOnly: true },
 ];
 
 const OTHER_ITEMS: MenuItem[] = [
