@@ -1,8 +1,9 @@
 import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator, Alert, FlatList, Modal, Platform,
+  ActivityIndicator, Alert, FlatList, Image, Modal, Platform,
   RefreshControl, ScrollView, StyleSheet, Text, TextInput,
   TouchableOpacity, View,
 } from "react-native";
@@ -26,6 +27,10 @@ type DollarEntry = {
   qty?: number | null;
   paymentMode?: string | null;
   walletId?: number | null;
+  paymentProofUrl?: string | null;
+  paymentProofKey?: string | null;
+  proofVerifiedAt?: string | null;
+  proofVerifiedBy?: number | null;
 };
 
 const ENTRY_TYPES: { key: string; label: string; desc: string; sign: 1 | -1; color: string; bg: string; icon: string }[] = [
@@ -49,6 +54,8 @@ const emptyBuyForm = {
   partyId: "",
   notes: "",
   date: new Date().toISOString().split("T")[0]!,
+  paymentProofUrl: "",
+  paymentProofKey: "",
 };
 const emptyTopupForm = {
   productId: "",
@@ -76,9 +83,12 @@ const emptyForm = {
 };
 
 const WALLET_KEY = "/api/dollar-wallet";
+const WALLET_PAGE_SIZE = 200;
 
-async function loadEntries(): Promise<DollarEntry[]> {
-  try { return await customFetch<DollarEntry[]>(WALLET_KEY); } catch { return []; }
+async function loadEntries(limit = WALLET_PAGE_SIZE, offset = 0): Promise<DollarEntry[]> {
+  try {
+    return await customFetch<DollarEntry[]>(`${WALLET_KEY}?limit=${limit}&offset=${offset}`);
+  } catch { return []; }
 }
 
 async function saveEntry(body: object): Promise<void> {
@@ -115,6 +125,55 @@ export default function WalletsScreen() {
   const newSplitRow = (): SplitRow => ({ id: Math.random().toString(36).slice(2), productId: "", amountUsd: "", coinsPerUsd: "6000", exchangeRatePkr: "333.33" });
   const [splitHeader, setSplitHeader] = useState({ partyType: "supplier" as "supplier" | "customer", partyId: "", walletId: "", paymentMode: "wallet" as "wallet" | "direct", date: new Date().toISOString().split("T")[0]!, notes: "" });
   const [splitRows, setSplitRows] = useState<SplitRow[]>([newSplitRow()]);
+
+  // Payment screenshot state for Buy USD modal
+  const [proofUploading, setProofUploading] = useState(false);
+  // Full-screen proof viewer (also used for verifying)
+  const [viewProofEntry, setViewProofEntry] = useState<DollarEntry | null>(null);
+  const [verifying, setVerifying] = useState(false);
+
+  const pickAndUploadProof = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Please allow access to your photo library to attach a payment screenshot.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false, quality: 0.7, base64: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    const asset = result.assets[0]!;
+    if (!asset.base64) { Alert.alert("Error", "Could not read image data"); return; }
+    setProofUploading(true);
+    try {
+      const mime = asset.mimeType ?? "image/jpeg";
+      const { url, key } = await customFetch<{ url: string; key: string }>("/api/upload/product-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64: asset.base64, mimeType: mime }),
+      });
+      setBuyForm(f => ({ ...f, paymentProofUrl: url, paymentProofKey: key }));
+    } catch (e) {
+      Alert.alert("Upload failed", e instanceof Error ? e.message : "Try again");
+    } finally {
+      setProofUploading(false);
+    }
+  };
+
+  const handleVerifyProof = async (entry: DollarEntry, verify: boolean) => {
+    setVerifying(true);
+    try {
+      const path = verify ? `/api/dollar-wallet/${entry.id}/verify-proof` : `/api/dollar-wallet/${entry.id}/unverify-proof`;
+      const updated = await customFetch<DollarEntry>(path, { method: "POST" });
+      setEntries(prev => prev.map(e => (e.id === entry.id ? { ...e, ...updated } : e)));
+      setViewProofEntry(updated);
+    } catch (e) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to update verification");
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const { data: accountsRaw } = useListAccounts();
   const { data: productsRaw } = useListProducts();
@@ -196,6 +255,8 @@ export default function WalletsScreen() {
           partyId: parseInt(buyForm.partyId, 10),
           date: buyForm.date,
           notes: buyForm.notes || null,
+          paymentProofUrl: buyForm.paymentProofUrl || null,
+          paymentProofKey: buyForm.paymentProofKey || null,
         }),
       });
       setShowBuyModal(false);
@@ -426,6 +487,19 @@ export default function WalletsScreen() {
             <Text style={[styles.pkrAmt, { color: colors.mutedForeground }]}>
               ₨{parseFloat(item.totalPkr).toLocaleString(undefined, { maximumFractionDigits: 0 })}
             </Text>
+            {item.paymentProofUrl ? (
+              <TouchableOpacity onPress={() => setViewProofEntry(item)}
+                style={{ flexDirection: "row", alignItems: "center", gap: 4,
+                  backgroundColor: item.proofVerifiedAt ? "#DCFCE7" : "#FEF3C7",
+                  borderColor: item.proofVerifiedAt ? "#16A34A" : "#F59E0B",
+                  borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
+                <Image source={{ uri: item.paymentProofUrl }} style={{ width: 22, height: 22, borderRadius: 3 }} />
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9,
+                  color: item.proofVerifiedAt ? "#15803D" : "#92400E" }}>
+                  {item.proofVerifiedAt ? "✓ VERIFIED" : "PENDING"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
             {isAdmin && (
               <TouchableOpacity style={[styles.delBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(item)}>
                 
@@ -704,8 +778,46 @@ export default function WalletsScreen() {
                 value={buyForm.date} onChangeText={v => setBuyForm(f => ({ ...f, date: v }))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.mutedForeground} />
 
               <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>NOTES (OPTIONAL)</Text>
-              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 20 }]}
+              <TextInput style={[styles.input, { backgroundColor: colors.input, borderColor: colors.border, color: colors.text, marginBottom: 16 }]}
                 value={buyForm.notes} onChangeText={v => setBuyForm(f => ({ ...f, notes: v }))} placeholder="Any notes..." placeholderTextColor={colors.mutedForeground} multiline />
+
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PAYMENT SCREENSHOT (OPTIONAL)</Text>
+              <View style={{ marginBottom: 20 }}>
+                {buyForm.paymentProofUrl ? (
+                  <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                    <TouchableOpacity onPress={() => setViewProofEntry({
+                      id: -1, entryType: "purchase", amountUsd: buyForm.amountUsd || "0",
+                      rate: buyForm.rate || "0", totalPkr: "0", partyName: null, notes: null,
+                      date: buyForm.date, createdAt: new Date().toISOString(),
+                      paymentProofUrl: buyForm.paymentProofUrl, paymentProofKey: buyForm.paymentProofKey,
+                      proofVerifiedAt: null, proofVerifiedBy: null,
+                    })}>
+                      <Image source={{ uri: buyForm.paymentProofUrl }} style={{ width: 88, height: 88, borderRadius: 8, borderWidth: 1, borderColor: colors.border }} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#16A34A" }}>✓ Screenshot attached</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>Tap thumbnail to preview</Text>
+                      <TouchableOpacity onPress={() => setBuyForm(f => ({ ...f, paymentProofUrl: "", paymentProofKey: "" }))}
+                        style={{ marginTop: 8, alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: colors.dangerBg }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.danger }}>Remove</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity onPress={pickAndUploadProof} disabled={proofUploading}
+                    style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+                      borderWidth: 2, borderStyle: "dashed", borderColor: colors.border,
+                      backgroundColor: colors.input, borderRadius: 10, paddingVertical: 16, opacity: proofUploading ? 0.6 : 1 }}>
+                    {proofUploading ? <ActivityIndicator size="small" /> : null}
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text }}>
+                      {proofUploading ? "Uploading..." : "📷  Attach Payment Screenshot"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 6 }}>
+                  Attach a screenshot of your bank/Jazz Cash/EasyPaisa transfer for verification.
+                </Text>
+              </View>
 
               <TouchableOpacity style={[styles.saveBtn, { backgroundColor: "#0EA5E9", opacity: saving ? 0.6 : 1 }]} disabled={saving} onPress={handleBuyUsd}>
                 <Text style={styles.saveBtnText}>{saving ? "Saving..." : "Buy USD"}</Text>
@@ -1588,6 +1700,60 @@ export default function WalletsScreen() {
               </View>
             )}
           </View>
+        </View>
+      </Modal>
+
+      {/* PAYMENT PROOF VIEWER MODAL */}
+      <Modal visible={!!viewProofEntry} animationType="fade" transparent onRequestClose={() => setViewProofEntry(null)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center" }}>
+          <View style={{ position: "absolute", top: insets.top + 8, right: 16, zIndex: 10 }}>
+            <TouchableOpacity onPress={() => setViewProofEntry(null)}
+              style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: "#FFF", fontSize: 24, fontFamily: "Inter_500Medium", lineHeight: 26 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+          {viewProofEntry?.paymentProofUrl ? (
+            <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center", paddingVertical: 60 }}
+              maximumZoomScale={4} minimumZoomScale={1}>
+              <Image source={{ uri: viewProofEntry.paymentProofUrl }}
+                style={{ width: "100%", height: 480, resizeMode: "contain" }} />
+            </ScrollView>
+          ) : null}
+          {viewProofEntry && viewProofEntry.id > 0 ? (
+            <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 16, paddingBottom: insets.bottom + 16, backgroundColor: "rgba(0,0,0,0.85)" }}>
+              <Text style={{ color: "#FFF", fontFamily: "Inter_700Bold", fontSize: 14, marginBottom: 4 }}>
+                ${parseFloat(viewProofEntry.amountUsd).toFixed(2)} @ ₨{parseFloat(viewProofEntry.rate).toFixed(2)}
+                {viewProofEntry.partyName ? ` · ${viewProofEntry.partyName}` : ""}
+              </Text>
+              <Text style={{ color: "rgba(255,255,255,0.7)", fontFamily: "Inter_400Regular", fontSize: 12, marginBottom: 12 }}>
+                {viewProofEntry.date}
+                {viewProofEntry.proofVerifiedAt
+                  ? ` · Verified ${new Date(viewProofEntry.proofVerifiedAt).toLocaleString()}`
+                  : " · Awaiting verification"}
+              </Text>
+              {isAdmin ? (
+                viewProofEntry.proofVerifiedAt ? (
+                  <TouchableOpacity disabled={verifying} onPress={() => handleVerifyProof(viewProofEntry, false)}
+                    style={{ backgroundColor: "#F59E0B", borderRadius: 10, paddingVertical: 14, alignItems: "center", opacity: verifying ? 0.6 : 1 }}>
+                    <Text style={{ color: "#FFF", fontFamily: "Inter_700Bold", fontSize: 14 }}>
+                      {verifying ? "Updating..." : "Mark as Unverified"}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity disabled={verifying} onPress={() => handleVerifyProof(viewProofEntry, true)}
+                    style={{ backgroundColor: "#16A34A", borderRadius: 10, paddingVertical: 14, alignItems: "center", opacity: verifying ? 0.6 : 1 }}>
+                    <Text style={{ color: "#FFF", fontFamily: "Inter_700Bold", fontSize: 14 }}>
+                      {verifying ? "Verifying..." : "✓  Verify Payment"}
+                    </Text>
+                  </TouchableOpacity>
+                )
+              ) : (
+                <Text style={{ color: "rgba(255,255,255,0.6)", fontFamily: "Inter_400Regular", fontSize: 11, textAlign: "center" }}>
+                  Only admins can verify payments.
+                </Text>
+              )}
+            </View>
+          ) : null}
         </View>
       </Modal>
     </View>

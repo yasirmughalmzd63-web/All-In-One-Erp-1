@@ -112,3 +112,14 @@ artifacts/
       colors.ts      — ERP color palette
 lib/db/src/schema/   — 14 table definitions
 ```
+
+## Recent Changes
+
+### Apr 30, 2026 — Payment screenshot verification + dollar-wallet query optimization
+- Added `payment_proof_url`, `payment_proof_key`, `proof_verified_at`, `proof_verified_by` columns to `dollar_wallet` for attaching bank/Jazz Cash/EasyPaisa transfer screenshots to USD purchases.
+- Added DB indexes `(entry_type, created_at)` and `(wallet_id, created_at)` on `dollar_wallet` for fast list/filter queries.
+- `GET /api/dollar-wallet` now supports `?entryType=&limit=&offset=` (default limit 500, max 1000) and the mobile app fetches just the latest 200 by default.
+- `POST /api/dollar-wallet/purchase` now accepts and stores `paymentProofUrl` and `paymentProofKey`.
+- New admin-only routes `POST /api/dollar-wallet/:id/verify-proof` and `POST /api/dollar-wallet/:id/unverify-proof`.
+- Mobile Buy USD modal: dashed "Attach Payment Screenshot" picker + thumbnail preview/remove. Uploads via existing `/api/upload/product-image`.
+- Mobile transactions list: shows pending/verified badge with thumb on entries that have a proof. Tapping opens a full-screen image viewer with zoom (admins see Verify / Unverify button).

@@ -2,15 +2,34 @@ import { Router } from "express";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, dollarWalletTable, accountsTable, productsTable, walletsTable, suppliersTable, customersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { requireAdmin } from "../lib/permissions.js";
 import { logAudit } from "../lib/audit.js";
 
 const router = Router();
 
 const fmt = (n: number) => n.toFixed(8);
 
-router.get("/dollar-wallet", requireAuth, async (_req, res): Promise<void> => {
-  const rows = await db.select().from(dollarWalletTable).orderBy(desc(dollarWalletTable.createdAt));
-  res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
+router.get("/dollar-wallet", requireAuth, async (req, res): Promise<void> => {
+  const entryType = typeof req.query.entryType === "string" ? req.query.entryType : undefined;
+  const limitRaw = typeof req.query.limit === "string" ? parseInt(req.query.limit, 10) : NaN;
+  const offsetRaw = typeof req.query.offset === "string" ? parseInt(req.query.offset, 10) : NaN;
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 500;
+  const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
+
+  const baseQuery = db.select().from(dollarWalletTable);
+  const filtered = entryType
+    ? baseQuery.where(eq(dollarWalletTable.entryType, entryType))
+    : baseQuery;
+  const rows = await filtered
+    .orderBy(desc(dollarWalletTable.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  res.json(rows.map(r => ({
+    ...r,
+    createdAt: r.createdAt.toISOString(),
+    proofVerifiedAt: r.proofVerifiedAt ? r.proofVerifiedAt.toISOString() : null,
+  })));
 });
 
 router.get("/dollar-wallet/balance", requireAuth, async (_req, res): Promise<void> => {
@@ -76,9 +95,10 @@ router.get("/dollar-wallet/wallets", requireAuth, async (_req, res): Promise<voi
 });
 
 router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<void> => {
-  const { amountUsd, rate, accountId, walletId, partyType, partyId, date, notes } = req.body as {
+  const { amountUsd, rate, accountId, walletId, partyType, partyId, date, notes, paymentProofUrl, paymentProofKey } = req.body as {
     amountUsd?: string; rate?: string; accountId?: number; walletId?: number;
     partyType?: string; partyId?: number; date?: string; notes?: string | null;
+    paymentProofUrl?: string | null; paymentProofKey?: string | null;
   };
   if (!amountUsd || !rate || !accountId || !walletId || !partyType || !partyId || !date) {
     res.status(400).json({ error: "amountUsd, rate, accountId, walletId, partyType, partyId, date required" });
@@ -144,12 +164,61 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
       notes: notes ?? null,
       date,
       userId: String(req.userId),
+      paymentProofUrl: paymentProofUrl ?? null,
+      paymentProofKey: paymentProofKey ?? null,
     }).returning();
     return r!;
   });
   await logAudit(req.userId, "create", "dollar_wallet", row.id,
-    `Purchase ${amountUsd} USD @ ${rate} from ${partyType} ${partyName} → ${wallet.name}, paid via ${account.name}`);
-  res.status(201).json({ ...row, createdAt: row.createdAt.toISOString(), walletName: wallet.name, accountName: account.name });
+    `Purchase ${amountUsd} USD @ ${rate} from ${partyType} ${partyName} → ${wallet.name}, paid via ${account.name}${paymentProofUrl ? " [proof attached]" : ""}`);
+  res.status(201).json({
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    proofVerifiedAt: row.proofVerifiedAt ? row.proofVerifiedAt.toISOString() : null,
+    walletName: wallet.name,
+    accountName: account.name,
+  });
+});
+
+// POST /dollar-wallet/:id/verify-proof — mark a purchase's payment screenshot as verified (admin only)
+router.post("/dollar-wallet/:id/verify-proof", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
+  const idParam = req.params.id;
+  const id = parseInt(typeof idParam === "string" ? idParam : "", 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existing] = await db.select().from(dollarWalletTable).where(eq(dollarWalletTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Entry not found" }); return; }
+  if (!existing.paymentProofUrl) { res.status(422).json({ error: "No payment proof attached to this entry" }); return; }
+
+  const [updated] = await db.update(dollarWalletTable)
+    .set({ proofVerifiedAt: new Date(), proofVerifiedBy: parseInt(String(req.userId), 10) || 0 })
+    .where(eq(dollarWalletTable.id, id))
+    .returning();
+  await logAudit(req.userId, "update", "dollar_wallet", id, `Verified payment proof for entry #${id}`);
+  res.json({
+    ...updated!,
+    createdAt: updated!.createdAt.toISOString(),
+    proofVerifiedAt: updated!.proofVerifiedAt ? updated!.proofVerifiedAt.toISOString() : null,
+  });
+});
+
+// POST /dollar-wallet/:id/unverify-proof — undo a verification (admin only)
+router.post("/dollar-wallet/:id/unverify-proof", requireAuth, async (req, res): Promise<void> => {
+  if (!requireAdmin(req, res)) return;
+  const idParam = req.params.id;
+  const id = parseInt(typeof idParam === "string" ? idParam : "", 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [updated] = await db.update(dollarWalletTable)
+    .set({ proofVerifiedAt: null, proofVerifiedBy: null })
+    .where(eq(dollarWalletTable.id, id))
+    .returning();
+  if (!updated) { res.status(404).json({ error: "Entry not found" }); return; }
+  await logAudit(req.userId, "update", "dollar_wallet", id, `Cleared payment proof verification for entry #${id}`);
+  res.json({
+    ...updated,
+    createdAt: updated.createdAt.toISOString(),
+    proofVerifiedAt: null,
+  });
 });
 
 router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void> => {
@@ -643,7 +712,11 @@ router.get("/dollar-wallet/wallets/:id/transactions", requireAuth, async (req, r
 
   res.json({
     wallet: { ...wallet, createdAt: wallet.createdAt.toISOString() },
-    transactions: txs.map(t => ({ ...t, createdAt: t.createdAt.toISOString() })),
+    transactions: txs.map(t => ({
+      ...t,
+      createdAt: t.createdAt.toISOString(),
+      proofVerifiedAt: t.proofVerifiedAt ? t.proofVerifiedAt.toISOString() : null,
+    })),
     summary: {
       totalIn: fmt(totalIn),
       totalOut: fmt(totalOut),
