@@ -5,6 +5,7 @@ import {
 } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useListCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer, useListLocations } from "@workspace/api-client-react";
@@ -18,6 +19,7 @@ const emptyForm = { name: "", phone: "", email: "", address: "", locationId: "",
 export default function CustomersScreen() {
   const colors = useColors();
   const { user } = useAuth();
+  const router  = useRouter();
   const insets = useSafeAreaInsets();
   const topPad = Platform.OS === "web" ? 20 : insets.top;
 
@@ -216,16 +218,24 @@ export default function CustomersScreen() {
                   </View>
 
                   {/* Actions */}
-                  {canAdmin && (
-                    <View style={{ gap: 8 }}>
-                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(c)}>
-                        <Text style={{ fontSize: 14 }}>✏️</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(c)}>
-                        <Text style={{ fontSize: 14 }}>🗑</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
+                  <View style={{ gap: 8 }}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: "#EFF6FF" }]}
+                      onPress={() => router.push({ pathname: "/customer-profile", params: { id: String(c.id) } })}
+                    >
+                      <Text style={{ fontSize: 14 }}>📋</Text>
+                    </TouchableOpacity>
+                    {canAdmin && (
+                      <>
+                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.secondary }]} onPress={() => openEdit(c)}>
+                          <Text style={{ fontSize: 14 }}>✏️</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: colors.dangerBg }]} onPress={() => handleDelete(c)}>
+                          <Text style={{ fontSize: 14 }}>🗑</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
                 </View>
               </View>
             );
