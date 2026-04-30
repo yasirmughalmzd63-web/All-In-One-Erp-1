@@ -9,158 +9,141 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { customFetch } from "@workspace/api-client-react";
 
-// ── Package definitions ──────────────────────────────────────────────────────
+/* ─── Package definitions ─────────────────────────────────────────────────── */
 type PackageKey = "free" | "basic" | "professional" | "enterprise";
 
 const PACKAGES: {
   key: PackageKey; name: string; price: string; tag: string;
   tagColor: string; tagBg: string; emoji: string;
-  color: string; border: string; bg: string; isPaid: boolean;
-  features: string[]; limits?: string;
+  border: string; isPaid: boolean; features: string[]; limits?: string;
 }[] = [
   {
-    key: "free",
-    name: "Free Starter",
-    price: "Free",
-    tag: "FREE",
-    tagColor: "#065F46",
-    tagBg: "#D1FAE5",
-    emoji: "🆓",
-    color: "#1F2937",
-    border: "#9CA3AF",
-    bg: "rgba(255,255,255,0.06)",
-    isPaid: false,
-    features: ["POS & Basic Sales", "1 App / Location", "Up to 3 Products"],
-    limits: "Limited — Upgrade anytime",
+    key: "free", name: "Free Starter", price: "Free", tag: "FREE",
+    tagColor: "#065F46", tagBg: "#D1FAE5", emoji: "🆓",
+    border: "#9CA3AF", isPaid: false,
+    features: ["POS & Basic Sales", "1 Location", "Up to 3 Products"],
+    limits: "Limited — upgrade anytime",
   },
   {
-    key: "basic",
-    name: "Basic",
-    price: "₨999/mo",
-    tag: "PAID",
-    tagColor: "#92400E",
-    tagBg: "#FEF3C7",
-    emoji: "🟢",
-    color: "#065F46",
-    border: "#059669",
-    bg: "rgba(5,150,105,0.08)",
-    isPaid: true,
-    features: ["POS & Sales", "Inventory Management", "Accounts & Apps", "Product Categories", "Credits (Customer)"],
+    key: "basic", name: "Basic", price: "₨999/mo", tag: "PAID",
+    tagColor: "#92400E", tagBg: "#FEF3C7", emoji: "🟢",
+    border: "#059669", isPaid: true,
+    features: ["POS & Sales", "Inventory", "Accounts & Apps", "Credits"],
   },
   {
-    key: "professional",
-    name: "Professional",
-    price: "₨2,499/mo",
-    tag: "POPULAR",
-    tagColor: "#1E3A8A",
-    tagBg: "#DBEAFE",
-    emoji: "🔵",
-    color: "#1E3A8A",
-    border: "#2563EB",
-    bg: "rgba(37,99,235,0.08)",
-    isPaid: true,
-    features: ["Everything in Basic", "Purchases & Expenses", "Credits & Customers", "Suppliers & Reports", "Cash Count & Currency"],
+    key: "professional", name: "Professional", price: "₨2,499/mo", tag: "POPULAR",
+    tagColor: "#1E3A8A", tagBg: "#DBEAFE", emoji: "🔵",
+    border: "#2563EB", isPaid: true,
+    features: ["Everything in Basic", "Purchases & Expenses", "Suppliers & Reports", "Cash Count"],
   },
   {
-    key: "enterprise",
-    name: "Enterprise",
-    price: "₨4,999/mo",
-    tag: "BEST VALUE",
-    tagColor: "#4C1D95",
-    tagBg: "#EDE9FE",
-    emoji: "🟣",
-    color: "#4C1D95",
-    border: "#7C3AED",
-    bg: "rgba(124,58,237,0.08)",
-    isPaid: true,
-    features: ["Everything in Professional", "User Management", "Audit Logs", "Reconciliation", "Full Admin Access"],
+    key: "enterprise", name: "Enterprise", price: "₨4,999/mo", tag: "BEST VALUE",
+    tagColor: "#4C1D95", tagBg: "#EDE9FE", emoji: "🟣",
+    border: "#7C3AED", isPaid: true,
+    features: ["Everything in Professional", "User Management", "Audit Logs", "Full Admin Access"],
   },
 ];
-
-const BUSINESS_TYPES = ["Retail", "Wholesale", "Services", "Manufacturing", "Import/Export", "Other"];
 
 const BUSINESS_NATURES = [
   { emoji: "🛒", label: "Products / POS" },
   { emoji: "👗", label: "Fashion & Clothing" },
+  { emoji: "📱", label: "Electronics" },
   { emoji: "🏥", label: "Medical" },
-  { emoji: "👟", label: "Footwear" },
   { emoji: "🔧", label: "Hardware" },
   { emoji: "💇", label: "Salon & Spa" },
-  { emoji: "📱", label: "Electronics & Mobile" },
-  { emoji: "🏪", label: "Department Store" },
   { emoji: "🍽️", label: "Restaurant" },
-  { emoji: "🏗️", label: "Sanitary" },
-  { emoji: "🌐", label: "Web & Agency" },
-  { emoji: "📚", label: "Stationary" },
-  { emoji: "🔌", label: "Repair Shop" },
-  { emoji: "🍞", label: "Daily Needs" },
-  { emoji: "🍶", label: "Liquor" },
-  { emoji: "💼", label: "Consulting" },
   { emoji: "📦", label: "Wholesale" },
-  { emoji: "🏭", label: "Manufacturing" },
-  { emoji: "✈️", label: "Import / Export" },
+  { emoji: "🌐", label: "Web & Agency" },
+  { emoji: "🔌", label: "Repair Shop" },
+  { emoji: "🏗️", label: "Sanitary" },
   { emoji: "🔑", label: "Other" },
 ];
 
-// ── Industries from image ────────────────────────────────────────────────────
-const INDUSTRIES = [
-  "Products", "All Services", "Fashion & Clothing", "Department Stores",
-  "Medical", "Footwear", "Liquor", "Sanitary", "Hardware",
-  "Salon & Spa", "Electronics & Home Appliances", "Mobile & Digital Stores",
-  "Web & Hosting Agencies", "All Daily Needs", "Stationary", "Repair Shops", "Restaurants",
-];
+const BUSINESS_TYPES = ["Retail", "Wholesale", "Services", "Manufacturing", "Import/Export", "Other"];
 
-const KEY_FEATURES = [
-  { icon: "🛒", label: "POS" },
-  { icon: "📦", label: "Stock Management" },
-  { icon: "🧾", label: "Invoicing" },
-  { icon: "🏪", label: "Retail" },
-  { icon: "🏭", label: "Whole Sale" },
-  { icon: "💼", label: "Consulting" },
-];
+/* ─── Reusable field ──────────────────────────────────────────────────────── */
+function Field({
+  label, value, onChangeText, placeholder, keyboardType, multiline, autoCapitalize, hint,
+}: {
+  label: string; value: string; onChangeText: (v: string) => void;
+  placeholder?: string; keyboardType?: "default" | "phone-pad" | "email-address" | "decimal-pad";
+  multiline?: boolean; autoCapitalize?: "none" | "sentences" | "words";
+  hint?: string;
+}) {
+  return (
+    <View style={{ marginBottom: 14 }}>
+      <Text style={s.label}>{label}</Text>
+      <TextInput
+        style={[s.input, multiline && { height: 72, textAlignVertical: "top" }]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#9CA3AF"
+        keyboardType={keyboardType ?? "default"}
+        multiline={multiline}
+        autoCapitalize={autoCapitalize ?? "sentences"}
+        autoCorrect={false}
+      />
+      {hint && <Text style={s.hint}>{hint}</Text>}
+    </View>
+  );
+}
 
+/* ─── Main component ──────────────────────────────────────────────────────── */
 export default function RegisterScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const topInset = Platform.OS === "web" ? 67 : insets.top;
 
-  const [step, setStep] = useState(1);
+  const [step, setStep]       = useState(1);
   const [loading, setLoading] = useState(false);
+  const [showOptional, setShowOptional] = useState(false);
 
-  // Step 1: Business Info
-  const [businessName, setBusinessName] = useState("");
-  const [businessType, setBusinessType] = useState("");
+  /* Step 1 fields */
+  const [businessName,   setBusinessName]   = useState("");
   const [businessNature, setBusinessNature] = useState("");
-  const [ownerName, setOwnerName] = useState("");
-  const [ownerPhone, setOwnerPhone] = useState("");
-  const [ownerCnic, setOwnerCnic] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
-  const [purpose, setPurpose] = useState("");
+  const [businessType,   setBusinessType]   = useState("");
+  const [ownerName,      setOwnerName]      = useState("");
+  const [ownerPhone,     setOwnerPhone]     = useState("");
 
-  // Step 2: Package
+  /* Optional extras */
+  const [ownerCnic, setOwnerCnic] = useState("");
+  const [email,     setEmail]     = useState("");
+  const [address,   setAddress]   = useState("");
+  const [purpose,   setPurpose]   = useState("");
+
+  /* Step 2 */
   const [selectedPackage, setSelectedPackage] = useState<PackageKey>("professional");
 
-  // Step 3: Admin Account
-  const [adminUsername, setAdminUsername] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
+  /* Step 3 */
+  const [adminUsername,   setAdminUsername]   = useState("");
+  const [adminPassword,   setAdminPassword]   = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword,    setShowPassword]    = useState(false);
+
+  const selectedPkg = PACKAGES.find(p => p.key === selectedPackage)!;
 
   const validateStep1 = () => {
-    if (!businessName.trim()) { Alert.alert("Required", "Please enter your business name."); return false; }
-    if (!businessNature) { Alert.alert("Required", "Please select the business nature."); return false; }
-    if (!businessType) { Alert.alert("Required", "Please select your business type."); return false; }
-    if (!ownerName.trim()) { Alert.alert("Required", "Please enter the owner name."); return false; }
+    if (!businessName.trim())  { Alert.alert("Required", "Enter your business name."); return false; }
+    if (!businessNature)       { Alert.alert("Required", "Select your business nature."); return false; }
+    if (!businessType)         { Alert.alert("Required", "Select your business type."); return false; }
+    if (!ownerName.trim())     { Alert.alert("Required", "Enter the owner name."); return false; }
     return true;
   };
 
   const validateStep3 = () => {
-    if (!adminUsername.trim() || adminUsername.length < 3) { Alert.alert("Required", "Username must be at least 3 characters."); return false; }
-    if (!/^[a-z0-9_]+$/.test(adminUsername)) { Alert.alert("Invalid", "Username can only contain lowercase letters, numbers, and underscores."); return false; }
-    if (!adminPassword || adminPassword.length < 6) { Alert.alert("Required", "Password must be at least 6 characters."); return false; }
-    if (adminPassword !== confirmPassword) { Alert.alert("Mismatch", "Passwords do not match."); return false; }
+    if (!adminUsername.trim() || adminUsername.length < 3) {
+      Alert.alert("Required", "Username must be at least 3 characters."); return false;
+    }
+    if (!/^[a-z0-9_]+$/.test(adminUsername)) {
+      Alert.alert("Invalid", "Username: lowercase letters, numbers and underscores only."); return false;
+    }
+    if (!adminPassword || adminPassword.length < 6) {
+      Alert.alert("Required", "Password must be at least 6 characters."); return false;
+    }
+    if (adminPassword !== confirmPassword) {
+      Alert.alert("Mismatch", "Passwords do not match."); return false;
+    }
     return true;
   };
 
@@ -172,290 +155,240 @@ export default function RegisterScreen() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          businessName: businessName.trim(),
+          businessName:    businessName.trim(),
           businessNature,
           businessType,
-          ownerName: ownerName.trim(),
-          ownerPhone: ownerPhone.trim() || undefined,
-          ownerCnic: ownerCnic.trim() || undefined,
-          email: email.trim() || undefined,
-          phone: phone.trim() || undefined,
-          address: address.trim() || undefined,
-          purpose: purpose.trim() || undefined,
-          package: selectedPackage,
-          adminUsername: adminUsername.toLowerCase().trim(),
+          ownerName:       ownerName.trim(),
+          ownerPhone:      ownerPhone.trim()  || undefined,
+          ownerCnic:       ownerCnic.trim()   || undefined,
+          email:           email.trim()       || undefined,
+          address:         address.trim()     || undefined,
+          purpose:         purpose.trim()     || undefined,
+          package:         selectedPackage,
+          adminUsername:   adminUsername.toLowerCase().trim(),
           adminPassword,
         }),
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-      const pkg = PACKAGES.find(p => p.key === selectedPackage)!;
       Alert.alert(
-        "Registration Submitted! 🎉",
-        `"${businessName}" registered with the ${pkg.name} plan${pkg.isPaid ? ` (${pkg.price})` : " (Free)"}.\n\nAn admin will approve your account shortly.`,
+        "Registration Submitted 🎉",
+        `"${businessName}" is registered on the ${selectedPkg.name} plan. An admin will approve your account shortly.`,
         [{ text: "Back to Login", onPress: () => router.back() }],
       );
     } catch (e: unknown) {
-      Alert.alert("Error", e instanceof Error ? e.message : "Registration failed");
+      Alert.alert("Error", e instanceof Error ? e.message : "Registration failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  const selectedPkg = PACKAGES.find(p => p.key === selectedPackage)!;
+  const next = (nextStep: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setStep(nextStep);
+  };
 
   return (
-    <LinearGradient colors={["#1E3A8A", "#1E40AF", "#312E81"]} style={[styles.container, { paddingTop: topInset }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : router.back()} style={styles.backBtn}>
-          <Text style={{ fontSize: 18, color: "#FFF" }}>‹</Text>
-          <Text style={styles.backText}>{step > 1 ? "Back" : "Login"}</Text>
+    <LinearGradient colors={["#1E3A8A", "#1E40AF", "#312E81"]} style={[s.root, { paddingTop: topInset }]}>
+      {/* ── Top nav ── */}
+      <View style={s.nav}>
+        <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : router.back()} style={s.back}>
+          <Text style={s.backCaret}>‹</Text>
+          <Text style={s.backText}>{step > 1 ? "Back" : "Login"}</Text>
         </TouchableOpacity>
-        <View style={styles.stepIndicator}>
-          {[1, 2, 3].map(s => (
-            <View key={s} style={[styles.stepDot, { backgroundColor: s <= step ? "#FFF" : "rgba(255,255,255,0.3)" }]} />
+
+        {/* Progress dots */}
+        <View style={s.dots}>
+          {[1, 2, 3].map(n => (
+            <View key={n} style={[s.dot, { backgroundColor: n <= step ? "#FFF" : "rgba(255,255,255,0.25)" }]} />
           ))}
+        </View>
+
+        {/* Step counter */}
+        <View style={{ width: 56, alignItems: "flex-end" }}>
+          <Text style={{ color: "rgba(255,255,255,0.6)", fontSize: 12, fontFamily: "Inter_500Medium" }}>
+            {step} / 3
+          </Text>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
-        {/* Step header */}
-        <View style={styles.stepHeader}>
-          <Text style={styles.stepLabel}>STEP {step} OF 3</Text>
-          <Text style={styles.stepTitle}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+
+        {/* Step title block */}
+        <View style={s.titleBlock}>
+          <Text style={s.stepLabel}>STEP {step} OF 3</Text>
+          <Text style={s.stepTitle}>
             {step === 1 ? "Business Details" : step === 2 ? "Choose Your Plan" : "Admin Account"}
           </Text>
-          <Text style={styles.stepSub}>
-            {step === 1 ? "Tell us about your business" : step === 2 ? "Start free or go paid for more features" : "Create your admin login credentials"}
+          <Text style={s.stepSub}>
+            {step === 1
+              ? "Tell us a bit about your business"
+              : step === 2
+              ? "Start free or unlock more features"
+              : "Set up your admin login"}
           </Text>
         </View>
 
-        {/* ── STEP 1: Business Info ─────────────────────────────────────── */}
+        {/* ══ STEP 1 ══════════════════════════════════════════════════════ */}
         {step === 1 && (
-          <>
-            {/* "One Software for Every Business" banner */}
-            <View style={styles.heroBanner}>
-              <LinearGradient colors={["#0EA5E9", "#38BDF8"]} style={styles.heroBannerInner}>
-                <Text style={styles.heroTitle}>ONE SOFTWARE</Text>
-                <Text style={styles.heroTitle}>
-                  FOR <Text style={{ color: "#EF4444", fontFamily: "Inter_700Bold" }}>EVERY</Text> BUSINESS
-                </Text>
-                {/* Key features row */}
-                <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 10, marginTop: 14 }}>
-                  {KEY_FEATURES.map(f => (
-                    <View key={f.label} style={styles.featurePill}>
-                      <Text style={{ fontSize: 13 }}>✅</Text>
-                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#1E3A8A" }}>{f.label}</Text>
-                    </View>
-                  ))}
-                </View>
-                {/* Industry grid */}
-                <View style={{ marginTop: 14, backgroundColor: "rgba(255,255,255,0.18)", borderRadius: 12, padding: 12 }}>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-                    {INDUSTRIES.map(ind => (
-                      <View key={ind} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: "#22C55E" }} />
-                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: "#FFF" }}>{ind}</Text>
-                      </View>
-                    ))}
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#FCD34D" }}>& Many More...</Text>
-                    </View>
-                  </View>
-                </View>
-                <Text style={{ fontFamily: "Inter_400Regular", fontStyle: "italic", fontSize: 11, color: "rgba(255,255,255,0.9)", textAlign: "center", marginTop: 10 }}>
-                  premium modules available for best features
-                </Text>
-              </LinearGradient>
-            </View>
+          <View style={s.card}>
+            <Field
+              label="Business Name *"
+              value={businessName}
+              onChangeText={setBusinessName}
+              placeholder="e.g. Coins Dynasty Ltd"
+              autoCapitalize="words"
+            />
 
-            <View style={styles.card}>
-              <Field label="Business Name *" value={businessName} onChangeText={setBusinessName} placeholder="e.g. Coins Dynasty Ltd" />
-
-              {/* Business Nature */}
-              <Text style={styles.fieldLabel}>Business Nature *</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                {BUSINESS_NATURES.map(n => (
+            {/* Business Nature */}
+            <Text style={s.label}>Business Nature *</Text>
+            <View style={s.grid}>
+              {BUSINESS_NATURES.map(n => {
+                const active = businessNature === n.label;
+                return (
                   <TouchableOpacity
                     key={n.label}
                     onPress={() => setBusinessNature(n.label)}
-                    style={[styles.typePill, businessNature === n.label && styles.typePillSelected]}
+                    style={[s.chip, active && s.chipActive]}
                   >
-                    <Text style={{ fontSize: 13 }}>{n.emoji}</Text>
-                    <Text style={[styles.typePillText, businessNature === n.label && { color: "#FFF" }]}>{n.label}</Text>
+                    <Text style={{ fontSize: 14 }}>{n.emoji}</Text>
+                    <Text style={[s.chipText, active && s.chipTextActive]}>{n.label}</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                );
+              })}
+            </View>
 
-              {/* Business Type */}
-              <Text style={styles.fieldLabel}>Business Type *</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                {BUSINESS_TYPES.map(t => (
+            {/* Business Type */}
+            <Text style={[s.label, { marginTop: 4 }]}>Business Type *</Text>
+            <View style={[s.grid, { gap: 6 }]}>
+              {BUSINESS_TYPES.map(t => {
+                const active = businessType === t;
+                return (
                   <TouchableOpacity
                     key={t}
                     onPress={() => setBusinessType(t)}
-                    style={[styles.typePill, businessType === t && styles.typePillSelected]}
+                    style={[s.chip, { paddingHorizontal: 12 }, active && s.chipActive]}
                   >
-                    <Text style={[styles.typePillText, businessType === t && { color: "#FFF" }]}>{t}</Text>
+                    <Text style={[s.chipText, active && s.chipTextActive]}>{t}</Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                );
+              })}
+            </View>
 
-              {/* Owner Details */}
-              <View style={{ marginBottom: 16, backgroundColor: "#F0F9FF", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#BAE6FD" }}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#0369A1", marginBottom: 12 }}>👤 Owner Details</Text>
-                <Field label="Owner Name *" value={ownerName} onChangeText={setOwnerName} placeholder="Full legal name" />
-                <Field label="Owner Phone" value={ownerPhone} onChangeText={setOwnerPhone} placeholder="+92 300 0000000" keyboardType="phone-pad" />
+            {/* Owner */}
+            <View style={s.divider} />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Field label="Owner Name *" value={ownerName} onChangeText={setOwnerName} placeholder="Full name" autoCapitalize="words" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field label="Phone (optional)" value={ownerPhone} onChangeText={setOwnerPhone} placeholder="+92 300 …" keyboardType="phone-pad" />
+              </View>
+            </View>
+
+            {/* Optional extras toggle */}
+            <TouchableOpacity
+              style={s.optionalToggle}
+              onPress={() => setShowOptional(v => !v)}
+            >
+              <Text style={s.optionalToggleText}>
+                {showOptional ? "▲ Hide optional fields" : "▼ Add more details (optional)"}
+              </Text>
+            </TouchableOpacity>
+
+            {showOptional && (
+              <View style={{ marginTop: 8 }}>
                 <Field label="Owner CNIC" value={ownerCnic} onChangeText={setOwnerCnic} placeholder="35202-1234567-1" keyboardType="phone-pad" />
+                <Field label="Business Email" value={email} onChangeText={setEmail} placeholder="business@email.com" keyboardType="email-address" autoCapitalize="none" />
+                <Field label="Address" value={address} onChangeText={setAddress} placeholder="City, Province" />
+                <Field label="Business Description" value={purpose} onChangeText={setPurpose} placeholder="What does your business do?" multiline />
               </View>
-
-              <Field label="Business Phone" value={phone} onChangeText={setPhone} placeholder="+92 300 0000000" keyboardType="phone-pad" />
-              <Field label="Business Email" value={email} onChangeText={setEmail} placeholder="business@email.com" keyboardType="email-address" />
-              <Field label="Address" value={address} onChangeText={setAddress} placeholder="City, Province" />
-              <Field label="Business Description" value={purpose} onChangeText={setPurpose} placeholder="What does your business do?" multiline />
-
-              <TouchableOpacity
-                style={styles.nextBtn}
-                onPress={() => { if (validateStep1()) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setStep(2); } }}
-              >
-                <Text style={styles.nextBtnText}>Next — Choose Your Plan</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
-
-        {/* ── STEP 2: Package Selection ─────────────────────────────────── */}
-        {step === 2 && (
-          <View>
-            {/* Free vs Paid section labels */}
-            <View style={styles.sectionLabelRow}>
-              <View style={[styles.sectionLabelBadge, { backgroundColor: "#D1FAE5", borderColor: "#6EE7B7" }]}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#065F46" }}>🆓 FREE PLAN</Text>
-              </View>
-            </View>
-
-            {/* Free package */}
-            {PACKAGES.filter(p => !p.isPaid).map(pkg => (
-              <TouchableOpacity
-                key={pkg.key}
-                onPress={() => { setSelectedPackage(pkg.key); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }}
-                activeOpacity={0.85}
-                style={[styles.packageCard, {
-                  borderColor: selectedPackage === pkg.key ? "#059669" : "rgba(255,255,255,0.2)",
-                  backgroundColor: selectedPackage === pkg.key ? "rgba(5,150,105,0.15)" : "rgba(255,255,255,0.06)",
-                }]}
-              >
-                <View style={styles.packageHeader}>
-                  <Text style={{ fontSize: 26 }}>{pkg.emoji}</Text>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={styles.packageName}>{pkg.name}</Text>
-                      <View style={{ backgroundColor: pkg.tagBg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: pkg.tagColor }}>{pkg.tag}</Text>
-                      </View>
-                    </View>
-                    <Text style={[styles.packagePrice, { color: "#6EE7B7" }]}>{pkg.price}</Text>
-                    {pkg.limits && <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 1 }}>{pkg.limits}</Text>}
-                  </View>
-                  <View style={[styles.radioCircle, selectedPackage === pkg.key && { backgroundColor: "#059669", borderColor: "#059669" }]}>
-                    {selectedPackage === pkg.key && <View style={styles.radioDot} />}
-                  </View>
-                </View>
-                <View style={{ gap: 4, marginTop: 8 }}>
-                  {pkg.features.map(f => (
-                    <View key={f} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={{ fontSize: 11, color: "#6EE7B7" }}>✓</Text>
-                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>{f}</Text>
-                    </View>
-                  ))}
-                </View>
-              </TouchableOpacity>
-            ))}
-
-            {/* Paid section label */}
-            <View style={[styles.sectionLabelRow, { marginTop: 6 }]}>
-              <View style={[styles.sectionLabelBadge, { backgroundColor: "#FEF3C7", borderColor: "#FCD34D" }]}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#92400E" }}>💳 PAID PLANS</Text>
-              </View>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.5)" }}>Unlock full features</Text>
-            </View>
-
-            {/* Paid packages */}
-            {PACKAGES.filter(p => p.isPaid).map(pkg => (
-              <TouchableOpacity
-                key={pkg.key}
-                onPress={() => { setSelectedPackage(pkg.key); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }}
-                activeOpacity={0.85}
-                style={[styles.packageCard, {
-                  borderColor: selectedPackage === pkg.key ? pkg.border : "rgba(255,255,255,0.15)",
-                  backgroundColor: selectedPackage === pkg.key ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
-                }]}
-              >
-                <View style={styles.packageHeader}>
-                  <Text style={{ fontSize: 26 }}>{pkg.emoji}</Text>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={styles.packageName}>{pkg.name}</Text>
-                      <View style={{ backgroundColor: pkg.tagBg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: pkg.tagColor }}>{pkg.tag}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.packagePrice}>{pkg.price}</Text>
-                  </View>
-                  <View style={[styles.radioCircle, selectedPackage === pkg.key && { backgroundColor: pkg.border, borderColor: pkg.border }]}>
-                    {selectedPackage === pkg.key && <View style={styles.radioDot} />}
-                  </View>
-                </View>
-                <View style={{ gap: 4, marginTop: 8 }}>
-                  {pkg.features.map(f => (
-                    <View key={f} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                      <Text style={{ fontSize: 11, color: "#A7F3D0" }}>✓</Text>
-                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.8)" }}>{f}</Text>
-                    </View>
-                  ))}
-                </View>
-              </TouchableOpacity>
-            ))}
+            )}
 
             <TouchableOpacity
-              style={styles.nextBtn}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); setStep(3); }}
+              style={s.nextBtn}
+              onPress={() => { if (validateStep1()) next(2); }}
             >
-              <Text style={styles.nextBtnText}>
-                Next — {selectedPkg.isPaid ? `Create Admin (${selectedPkg.price})` : "Create Admin (Free)"}
+              <Text style={s.nextBtnText}>Next — Choose Your Plan →</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ══ STEP 2 ══════════════════════════════════════════════════════ */}
+        {step === 2 && (
+          <View>
+            {PACKAGES.map((pkg, idx) => {
+              const active = selectedPackage === pkg.key;
+              return (
+                <React.Fragment key={pkg.key}>
+                  {idx === 1 && (
+                    <View style={s.planSectionLabel}>
+                      <Text style={s.planSectionText}>💳 PAID PLANS — Unlock full features</Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => { setSelectedPackage(pkg.key); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); }}
+                    style={[s.planCard, {
+                      borderColor: active ? pkg.border : "rgba(255,255,255,0.15)",
+                      backgroundColor: active ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.05)",
+                    }]}
+                  >
+                    <View style={s.planRow}>
+                      <Text style={{ fontSize: 24 }}>{pkg.emoji}</Text>
+                      <View style={{ flex: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                          <Text style={s.planName}>{pkg.name}</Text>
+                          <View style={{ backgroundColor: pkg.tagBg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5 }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: pkg.tagColor }}>{pkg.tag}</Text>
+                          </View>
+                        </View>
+                        <Text style={[s.planPrice, active && { color: "#A5F3FC" }]}>{pkg.price}</Text>
+                        {pkg.limits && <Text style={s.planLimits}>{pkg.limits}</Text>}
+                      </View>
+                      <View style={[s.radio, active && { backgroundColor: pkg.border, borderColor: pkg.border }]}>
+                        {active && <View style={s.radioDot} />}
+                      </View>
+                    </View>
+                    <View style={{ gap: 3, marginTop: 8 }}>
+                      {pkg.features.map(f => (
+                        <View key={f} style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                          <Text style={{ fontSize: 10, color: "#6EE7B7" }}>✓</Text>
+                          <Text style={s.planFeature}>{f}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
+
+            <TouchableOpacity style={s.nextBtn} onPress={() => next(3)}>
+              <Text style={s.nextBtnText}>
+                Next — Create Admin {selectedPkg.isPaid ? `(${selectedPkg.price})` : "(Free)"} →
               </Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* ── STEP 3: Admin Account ─────────────────────────────────────── */}
+        {/* ══ STEP 3 ══════════════════════════════════════════════════════ */}
         {step === 3 && (
-          <View style={styles.card}>
-            {/* Summary */}
-            <View style={{
-              borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1,
-              backgroundColor: selectedPkg.isPaid ? "#EFF6FF" : "#ECFDF5",
-              borderColor: selectedPkg.isPaid ? "#BFDBFE" : "#6EE7B7",
-            }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: selectedPkg.isPaid ? "#1E3A8A" : "#065F46" }}>
-                  Registration Summary
-                </Text>
-                <View style={{
-                  paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
-                  backgroundColor: selectedPkg.isPaid ? "#FEF3C7" : "#D1FAE5",
-                }}>
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: selectedPkg.isPaid ? "#92400E" : "#065F46" }}>
+          <View style={s.card}>
+            {/* Summary pill */}
+            <View style={s.summaryBox}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                <Text style={s.summaryTitle}>Registration Summary</Text>
+                <View style={{ backgroundColor: selectedPkg.isPaid ? "#FEF3C7" : "#D1FAE5", borderRadius: 5, paddingHorizontal: 7, paddingVertical: 2 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: selectedPkg.isPaid ? "#92400E" : "#065F46" }}>
                     {selectedPkg.isPaid ? "💳 PAID" : "🆓 FREE"}
                   </Text>
                 </View>
               </View>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#1E40AF" }}>🏢 {businessName}</Text>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#1E40AF" }}>🏷️ {businessNature} · {businessType}</Text>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#1E40AF" }}>
-                {selectedPkg.emoji} {selectedPkg.name} Plan — {selectedPkg.price}
-              </Text>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#1E40AF" }}>👤 Owner: {ownerName}</Text>
+              <View style={{ gap: 3 }}>
+                <Text style={s.summaryRow}>🏢 {businessName}</Text>
+                <Text style={s.summaryRow}>🏷️ {businessNature} · {businessType}</Text>
+                <Text style={s.summaryRow}>{selectedPkg.emoji} {selectedPkg.name} — {selectedPkg.price}</Text>
+                <Text style={s.summaryRow}>👤 {ownerName}</Text>
+              </View>
             </View>
 
             <Field
@@ -464,47 +397,49 @@ export default function RegisterScreen() {
               onChangeText={t => setAdminUsername(t.toLowerCase())}
               placeholder="e.g. coinsdynasty_admin"
               autoCapitalize="none"
+              hint="Lowercase letters, numbers and underscores only"
             />
-            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "#94A3B8", marginTop: -12, marginBottom: 14 }}>
-              Lowercase letters, numbers, underscores only
-            </Text>
 
-            <Field
-              label="Password *"
-              value={adminPassword}
-              onChangeText={setAdminPassword}
-              placeholder="At least 6 characters"
-              secureTextEntry={!showPassword}
-            />
+            {/* Password row */}
+            <Text style={s.label}>Password *</Text>
+            <View style={s.passwordWrap}>
+              <TextInput
+                style={[s.input, { flex: 1, marginBottom: 0, borderWidth: 0 }]}
+                value={adminPassword}
+                onChangeText={setAdminPassword}
+                placeholder="At least 6 characters"
+                placeholderTextColor="#9CA3AF"
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(v => !v)} style={{ padding: 8 }}>
+                <Text style={{ fontSize: 16 }}>{showPassword ? "🙈" : "👁️"}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ marginBottom: 14 }} />
+
             <Field
               label="Confirm Password *"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder="Repeat your password"
-              secureTextEntry={!showPassword}
+              autoCapitalize="none"
             />
-            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ marginBottom: 20 }}>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#94A3B8" }}>
-                {showPassword ? "🙈 Hide password" : "👁 Show password"}
-              </Text>
-            </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.nextBtn, { backgroundColor: loading ? "#64748B" : selectedPkg.isPaid ? "#2563EB" : "#059669" }]}
+              style={[s.nextBtn, loading && { opacity: 0.7 }]}
               onPress={handleSubmit}
               disabled={loading}
             >
               {loading
                 ? <ActivityIndicator color="#FFF" />
-                : <Text style={styles.nextBtnText}>
-                    {selectedPkg.isPaid ? `Submit (${selectedPkg.price})` : "Submit Free Registration"}
-                  </Text>}
+                : <Text style={s.nextBtnText}>Submit Registration 🎉</Text>
+              }
             </TouchableOpacity>
 
-            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: "rgba(255,255,255,0.5)", textAlign: "center", marginTop: 12 }}>
-              {selectedPkg.isPaid
-                ? "After approval, payment collection will be confirmed with you."
-                : "Free plan approved instantly after admin review."}
+            <Text style={s.disclaimer}>
+              Your registration will be reviewed and approved by an administrator before you can log in.
             </Text>
           </View>
         )}
@@ -513,59 +448,58 @@ export default function RegisterScreen() {
   );
 }
 
-function Field({ label, value, onChangeText, placeholder, keyboardType, multiline, secureTextEntry, autoCapitalize }: {
-  label: string; value: string; onChangeText: (t: string) => void;
-  placeholder?: string; keyboardType?: "default" | "phone-pad" | "email-address";
-  multiline?: boolean; secureTextEntry?: boolean; autoCapitalize?: "none" | "sentences";
-}) {
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor="#94A3B8"
-        keyboardType={keyboardType ?? "default"}
-        multiline={multiline}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize={autoCapitalize ?? (multiline ? "sentences" : "words")}
-        autoCorrect={false}
-        style={[styles.input, multiline && { height: 80, textAlignVertical: "top" }]}
-      />
-    </View>
-  );
-}
+/* ─── Styles ──────────────────────────────────────────────────────────────── */
+const s = StyleSheet.create({
+  root:         { flex: 1 },
+  nav:          { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
+  back:         { flexDirection: "row", alignItems: "center", gap: 4, width: 56 },
+  backCaret:    { fontSize: 20, color: "#FFF", lineHeight: 22 },
+  backText:     { color: "#FFF", fontSize: 14, fontFamily: "Inter_500Medium" },
+  dots:         { flexDirection: "row", gap: 6 },
+  dot:          { width: 8, height: 8, borderRadius: 4 },
+  scroll:       { paddingHorizontal: 20, paddingBottom: 48 },
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 8, paddingTop: 8 },
-  backBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
-  backText: { fontFamily: "Inter_500Medium", fontSize: 14, color: "#FFF" },
-  stepIndicator: { flexDirection: "row", gap: 6 },
-  stepDot: { width: 8, height: 8, borderRadius: 4 },
-  stepHeader: { marginVertical: 20, alignItems: "center" },
-  stepLabel: { fontFamily: "Inter_600SemiBold", fontSize: 10, color: "rgba(255,255,255,0.6)", letterSpacing: 1.5, marginBottom: 6 },
-  stepTitle: { fontFamily: "Inter_700Bold", fontSize: 24, color: "#FFF", textAlign: "center", marginBottom: 6 },
-  stepSub: { fontFamily: "Inter_400Regular", fontSize: 13, color: "rgba(255,255,255,0.65)", textAlign: "center" },
-  card: { backgroundColor: "#FFF", borderRadius: 20, padding: 24, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 20, elevation: 6 },
-  fieldLabel: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#475569", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 },
-  input: { backgroundColor: "#F8FAFC", borderRadius: 12, borderWidth: 1.5, borderColor: "#E2E8F0", paddingHorizontal: 14, paddingVertical: 12, fontFamily: "Inter_400Regular", fontSize: 14, color: "#1E293B" },
-  typePill: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 20, borderWidth: 1.5, borderColor: "#CBD5E1", backgroundColor: "#F8FAFC" },
-  typePillSelected: { backgroundColor: "#2563EB", borderColor: "#2563EB" },
-  typePillText: { fontFamily: "Inter_600SemiBold", fontSize: 12, color: "#475569" },
-  heroBanner: { marginBottom: 16, borderRadius: 18, overflow: "hidden" },
-  heroBannerInner: { padding: 18 },
-  heroTitle: { fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFF", textAlign: "center", lineHeight: 26 },
-  featurePill: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#FFF", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5 },
-  sectionLabelRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
-  sectionLabelBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
-  packageCard: { borderWidth: 2, borderRadius: 18, padding: 18, marginBottom: 12 },
-  packageHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
-  packageName: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" },
-  packagePrice: { fontFamily: "Inter_600SemiBold", fontSize: 13, color: "rgba(255,255,255,0.7)", marginTop: 2 },
-  radioCircle: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center", marginLeft: "auto" },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#FFF" },
-  nextBtn: { backgroundColor: "#2563EB", borderRadius: 14, paddingVertical: 15, alignItems: "center", marginTop: 8 },
-  nextBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" },
+  titleBlock:   { marginBottom: 20, marginTop: 4 },
+  stepLabel:    { color: "rgba(255,255,255,0.55)", fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1, marginBottom: 4 },
+  stepTitle:    { color: "#FFF", fontSize: 24, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  stepSub:      { color: "rgba(255,255,255,0.65)", fontSize: 14, fontFamily: "Inter_400Regular" },
+
+  card:         { backgroundColor: "#FFF", borderRadius: 20, padding: 20 },
+  label:        { fontSize: 12, fontFamily: "Inter_600SemiBold", color: "#374151", marginBottom: 6 },
+  input:        { borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, fontFamily: "Inter_400Regular", color: "#111827", marginBottom: 0 },
+  hint:         { fontSize: 11, color: "#9CA3AF", fontFamily: "Inter_400Regular", marginTop: 4 },
+  divider:      { height: 1, backgroundColor: "#F3F4F6", marginVertical: 14 },
+
+  grid:         { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
+  chip:         { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" },
+  chipActive:   { borderColor: "#2563EB", backgroundColor: "#EFF6FF" },
+  chipText:     { fontSize: 12, fontFamily: "Inter_500Medium", color: "#374151" },
+  chipTextActive: { color: "#1D4ED8", fontFamily: "Inter_700Bold" },
+
+  optionalToggle:     { alignItems: "center", paddingVertical: 10, marginTop: 4 },
+  optionalToggleText: { fontSize: 13, color: "#6B7280", fontFamily: "Inter_500Medium" },
+
+  nextBtn:      { backgroundColor: "#2563EB", borderRadius: 14, paddingVertical: 15, alignItems: "center", marginTop: 16 },
+  nextBtnText:  { color: "#FFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+
+  /* Plan cards */
+  planSectionLabel: { marginTop: 4, marginBottom: 10 },
+  planSectionText:  { color: "rgba(255,255,255,0.55)", fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  planCard:     { borderRadius: 16, borderWidth: 1.5, padding: 16, marginBottom: 10 },
+  planRow:      { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  planName:     { color: "#FFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  planPrice:    { color: "rgba(255,255,255,0.75)", fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 1 },
+  planLimits:   { color: "rgba(255,255,255,0.4)", fontSize: 10, fontFamily: "Inter_400Regular", marginTop: 1 },
+  planFeature:  { color: "rgba(255,255,255,0.75)", fontSize: 12, fontFamily: "Inter_400Regular" },
+  radio:        { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: "rgba(255,255,255,0.4)", alignItems: "center", justifyContent: "center" },
+  radioDot:     { width: 10, height: 10, borderRadius: 5, backgroundColor: "#FFF" },
+
+  /* Step 3 */
+  summaryBox:   { backgroundColor: "#EFF6FF", borderRadius: 14, padding: 14, marginBottom: 18, borderWidth: 1, borderColor: "#BFDBFE" },
+  summaryTitle: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#1E3A8A" },
+  summaryRow:   { fontSize: 12, fontFamily: "Inter_400Regular", color: "#1E40AF" },
+
+  passwordWrap: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 2, marginBottom: 0 },
+
+  disclaimer:   { color: "rgba(255,255,255,0.5)", fontSize: 11, fontFamily: "Inter_400Regular", textAlign: "center", marginTop: 16, lineHeight: 16 },
 });
