@@ -18,9 +18,26 @@ async function getPartyName(partyId: number, partyType: string): Promise<string>
 }
 
 router.get("/credits", requireAuth, async (req, res): Promise<void> => {
-  const rows = !isAdmin(req)
-    ? await db.select().from(creditsTable).where(eq(creditsTable.userId, req.userId!)).orderBy(desc(creditsTable.createdAt))
-    : await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
+  let rows;
+  if (!isAdmin(req) && req.userLocationId != null) {
+    // Find all customers and suppliers linked to this location
+    const locationId = req.userLocationId;
+    const [customers, suppliers] = await Promise.all([
+      db.select({ id: customersTable.id }).from(customersTable).where(eq(customersTable.locationId, locationId)),
+      db.select({ id: suppliersTable.id }).from(suppliersTable).where(eq(suppliersTable.locationId, locationId)),
+    ]);
+    const customerIds = customers.map(c => c.id);
+    const supplierIds = suppliers.map(s => s.id);
+
+    // Get credits where party is in this location
+    const allCredits = await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
+    rows = allCredits.filter(r =>
+      (r.partyType === "customer" && customerIds.includes(r.partyId)) ||
+      (r.partyType === "supplier" && supplierIds.includes(r.partyId))
+    );
+  } else {
+    rows = await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
+  }
   const result = await Promise.all(rows.map(async (row) => {
     const partyName = await getPartyName(row.partyId, row.partyType);
     return { ...row, partyName, createdAt: row.createdAt.toISOString() };
