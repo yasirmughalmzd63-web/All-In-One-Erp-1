@@ -26,6 +26,7 @@ import businessesRouter from "./businesses.js";
 import hrmRouter from "./hrm.js";
 import usdBridgeRouter from "./usd-bridge.js";
 import targetsRouter from "./targets.js";
+import cashManagementRouter from "./cash-management.js";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use(businessesRouter);
 router.use(hrmRouter);
 router.use(usdBridgeRouter);
 router.use(targetsRouter);
+router.use(cashManagementRouter);
 
 export default router;
