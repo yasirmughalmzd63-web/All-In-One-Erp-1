@@ -24,7 +24,7 @@ function formatK(n: number): string {
 }
 
 type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null; categoryName?: string | null };
-type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null };
+type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null; locationId?: number | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string };
 type Location = { id: number; name: string; address?: string | null };
 type RateMode = "normal" | "wholesale";
