@@ -164,15 +164,49 @@ export default function HrmScreen() {
   const [reviewModal, setReviewModal] = useState<LeaveRequest | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
 
-  // — Targets achievement badges
+  // — Targets achievement badges (pending = achieved-but-not-yet-verified)
   const [pendingAchievements, setPendingAchievements] = useState<Record<number, number>>({});
+
+  // — Verified-Sale tier badges per employee (lifetime)
+  type Tier = "none" | "bronze" | "silver" | "gold" | "platinum";
+  type EmployeeBadge = {
+    verifiedCount: number;
+    pendingCount: number;
+    challengeCount: number;
+    totalBonusEarned: number;
+    tier: Tier;
+  };
+  const [empBadges, setEmpBadges] = useState<Record<number, EmployeeBadge>>({});
+
+  // Visual tier metadata — matches the server thresholds (1/5/15/30 verified targets)
+  const TIER_META: Record<Tier, { label: string; color: string; bg: string; icon: "award" | "star" }> = {
+    none:     { label: "—",        color: "#6B7280", bg: "#F3F4F6", icon: "award" },
+    bronze:   { label: "Bronze",   color: "#B45309", bg: "#FEF3C7", icon: "award" },
+    silver:   { label: "Silver",   color: "#475569", bg: "#E2E8F0", icon: "award" },
+    gold:     { label: "Gold",     color: "#CA8A04", bg: "#FEF9C3", icon: "star"  },
+    platinum: { label: "Platinum", color: "#7C3AED", bg: "#EDE9FE", icon: "star"  },
+  };
+
+  // — Sales Performance report (per-period)
+  type SalesPerf = {
+    period: "daily" | "weekly" | "monthly";
+    startDate: string;
+    endDate: string;
+    totals: { salesCount: number; salesTotal: number; targetsAchieved: number; targetsMissed: number; targetsActive: number; pendingVerify: number };
+    byUser: { userId: number; name: string; username: string; salesCount: number; salesTotal: number }[];
+    byApp:  { locationId: number; name: string; salesCount: number; salesTotal: number }[];
+  };
+  const [salesPerf, setSalesPerf] = useState<SalesPerf | null>(null);
+  const [salesPerfLoading, setSalesPerfLoading] = useState(false);
+  const [salesPerfPeriod, setSalesPerfPeriod] = useState<"daily" | "weekly" | "monthly">("monthly");
+  const [salesPerfDate, setSalesPerfDate] = useState<string>(NOW.toISOString().slice(0, 10));
 
   // — Report
   const [report, setReport] = useState<HrmReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportMonth, setReportMonth] = useState(NOW.getMonth() + 1);
   const [reportYear, setReportYear] = useState(NOW.getFullYear());
-  const [reportView, setReportView] = useState<"app" | "employee" | "performance">("app");
+  const [reportView, setReportView] = useState<"app" | "employee" | "performance" | "sales">("app");
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
@@ -247,16 +281,40 @@ export default function HrmScreen() {
     } catch (_) {}
   }, [token]);
 
+  const fetchEmployeeBadges = useCallback(async () => {
+    try {
+      const r = await fetch(getApiUrl("/api/hrm/employee-badges"), { headers });
+      if (r.ok) setEmpBadges(await r.json());
+    } catch (_) {}
+  }, [token]);
+
+  const fetchSalesPerformance = useCallback(async () => {
+    setSalesPerfLoading(true);
+    try {
+      const r = await fetch(
+        getApiUrl(`/api/hrm/sales-performance?period=${salesPerfPeriod}&date=${salesPerfDate}`),
+        { headers },
+      );
+      if (r.ok) setSalesPerf(await r.json());
+    } finally { setSalesPerfLoading(false); }
+  }, [token, salesPerfPeriod, salesPerfDate]);
+
   useEffect(() => {
     fetchEmployees();
     fetchPendingAchievements();
+    fetchEmployeeBadges();
     fetch(getApiUrl("/api/locations"), { headers }).then(r => r.ok ? r.json() : []).then(setLocations).catch(() => {});
-  }, [fetchEmployees, fetchPendingAchievements]);
+  }, [fetchEmployees, fetchPendingAchievements, fetchEmployeeBadges]);
   useEffect(() => { if (activeTab === "attendance") fetchAttendance(); }, [activeTab, fetchAttendance]);
   useEffect(() => { if (activeTab === "payroll") { fetchPayroll(); fetchFinesAndBonuses(); } }, [activeTab, fetchPayroll, fetchFinesAndBonuses]);
   useEffect(() => { if (activeTab === "fines")    fetchFinesAndBonuses(); }, [activeTab, fetchFinesAndBonuses]);
   useEffect(() => { if (activeTab === "report") fetchReport(); }, [activeTab, fetchReport]);
   useEffect(() => { if (activeTab === "leaves") fetchLeaves(); }, [activeTab, fetchLeaves]);
+  // Sales Performance loads when the user opens the report tab AND switches to the sales sub-view
+  // (or when they change the period/date filters while on it).
+  useEffect(() => {
+    if (activeTab === "report" && reportView === "sales") fetchSalesPerformance();
+  }, [activeTab, reportView, fetchSalesPerformance]);
 
   /* ─── Employees CRUD ─── */
   const openEmpModal = (emp?: Employee) => {
@@ -562,15 +620,27 @@ export default function HrmScreen() {
                   <Text style={{ fontFamily: "Inter_400Regular", fontSize: 7, color: empScores[e.id]!.color, lineHeight: 9 }}>/100</Text>
                 </View>
               )}
-              {/* Target achievement badge */}
+              {/* Pending verification badge (achieved targets awaiting admin sign-off) */}
               {pendingAchievements[e.id] > 0 && (
                 <View style={{ backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, alignItems: "center", marginBottom: 4 }}>
-                  <Feather name="award" size={16} color="#D97706" />
+                  <Feather name="clock" size={14} color="#D97706" />
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#D97706" }}>
                     {pendingAchievements[e.id]}
                   </Text>
                 </View>
               )}
+              {/* Verified-Sale tier badge (lifetime) */}
+              {empBadges[e.id] && empBadges[e.id]!.tier !== "none" && (() => {
+                const b = empBadges[e.id]!;
+                const t = TIER_META[b.tier];
+                return (
+                  <View style={{ backgroundColor: t.bg, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, alignItems: "center", marginBottom: 4, borderWidth: 1, borderColor: t.color + "40" }}>
+                    <Feather name={t.icon} size={14} color={t.color} />
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 8, color: t.color, marginTop: 1 }}>{t.label}</Text>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: t.color }}>×{b.verifiedCount}</Text>
+                  </View>
+                );
+              })()}
               <TouchableOpacity onPress={() => openEmpModal(e)} style={s.iconBtn}>
                 <Feather name="edit-2" size={16} color={colors.primary} />
               </TouchableOpacity>
@@ -885,9 +955,10 @@ export default function HrmScreen() {
         {/* ── Top Filter Toggle (3-way) ── */}
         <View style={{ flexDirection: "row", marginTop: 12, marginBottom: 12, borderRadius: 14, overflow: "hidden", borderWidth: 1.5, borderColor: colors.border }}>
           {([
-            { key: "app",         icon: "bar-chart-2", label: "App Wise" },
+            { key: "app",         icon: "bar-chart-2", label: "App" },
             { key: "employee",    icon: "users",       label: "Employee" },
             { key: "performance", icon: "award",       label: "Scores" },
+            { key: "sales",       icon: "trending-up", label: "Sales" },
           ] as const).map((item, idx) => (
             <React.Fragment key={item.key}>
               {idx > 0 && <View style={{ width: 1.5, backgroundColor: colors.border }} />}
@@ -1396,6 +1467,173 @@ export default function HrmScreen() {
                 <Feather name="share-2" size={16} color="#fff" />
                 <Text style={s.exportBtnTxt}>Export CSV</Text>
               </TouchableOpacity>
+            </>
+          );
+        })()}
+
+        {/* ── Sales Performance sub-view ── */}
+        {reportView === "sales" && (() => {
+          const sp = salesPerf;
+          const periods = [
+            { key: "daily"   as const, label: "Daily"   },
+            { key: "weekly"  as const, label: "Weekly"  },
+            { key: "monthly" as const, label: "Monthly" },
+          ];
+          const maxUserSales = sp ? Math.max(1, ...sp.byUser.map(u => u.salesTotal)) : 1;
+          const maxAppSales  = sp ? Math.max(1, ...sp.byApp.map(a => a.salesTotal))  : 1;
+
+          return (
+            <>
+              {/* Header */}
+              <View style={{ marginBottom: 12 }}>
+                <Text style={[s.sectionTitle, { fontSize: 17 }]}>📈 Sales Performance</Text>
+                <Text style={s.cardSub}>
+                  Live sales totals & target progress for the selected period
+                </Text>
+              </View>
+
+              {/* Period toggle */}
+              <View style={{ flexDirection: "row", marginBottom: 10, borderRadius: 12, overflow: "hidden", borderWidth: 1.5, borderColor: colors.border }}>
+                {periods.map((p, idx) => (
+                  <React.Fragment key={p.key}>
+                    {idx > 0 && <View style={{ width: 1.5, backgroundColor: colors.border }} />}
+                    <TouchableOpacity
+                      onPress={() => setSalesPerfPeriod(p.key)}
+                      style={{ flex: 1, paddingVertical: 10, alignItems: "center", backgroundColor: salesPerfPeriod === p.key ? colors.primary : colors.card }}
+                    >
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: salesPerfPeriod === p.key ? "#fff" : colors.textSecondary }}>{p.label}</Text>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                ))}
+              </View>
+
+              {/* Date picker (text input, single anchor date) */}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14, backgroundColor: colors.card, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border }}>
+                <Feather name="calendar" size={14} color={colors.textSecondary} />
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.textSecondary }}>Anchor:</Text>
+                <TextInput
+                  value={salesPerfDate}
+                  onChangeText={setSalesPerfDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.textSecondary}
+                  style={{ flex: 1, fontFamily: "Inter_500Medium", fontSize: 13, color: colors.text }}
+                />
+                <TouchableOpacity onPress={() => setSalesPerfDate(NOW.toISOString().slice(0, 10))} style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: colors.primary + "15" }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.primary }}>Today</Text>
+                </TouchableOpacity>
+              </View>
+
+              {salesPerfLoading && !sp && (
+                <Text style={s.empty}>Loading sales performance…</Text>
+              )}
+
+              {sp && (
+                <>
+                  {/* Window summary */}
+                  <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.textSecondary, marginBottom: 8 }}>
+                      {sp.startDate} → {sp.endDate}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: colors.primary }}>
+                          {PKR(sp.totals.salesTotal)}
+                        </Text>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary }}>
+                          {sp.totals.salesCount} sale{sp.totals.salesCount === 1 ? "" : "s"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Targets row */}
+                    <View style={{ flexDirection: "row", gap: 6, marginTop: 12, flexWrap: "wrap" }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#DCFCE7", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                        <Feather name="check-circle" size={12} color="#059669" />
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#059669" }}>{sp.totals.targetsAchieved} achieved</Text>
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                        <Feather name="clock" size={12} color="#D97706" />
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#D97706" }}>{sp.totals.pendingVerify} pending verify</Text>
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#DBEAFE", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                        <Feather name="target" size={12} color="#2563EB" />
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#2563EB" }}>{sp.totals.targetsActive} active</Text>
+                      </View>
+                      {sp.totals.targetsMissed > 0 && (
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#FEE2E2", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                          <Feather name="x-circle" size={12} color="#DC2626" />
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#DC2626" }}>{sp.totals.targetsMissed} missed</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* By Salesperson — horizontal bars sorted by revenue */}
+                  <Text style={s.sectionTitle}>By Salesperson</Text>
+                  {sp.byUser.length === 0 ? (
+                    <Text style={s.empty}>No sales by users in this period</Text>
+                  ) : (
+                    <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                      {sp.byUser.map(u => {
+                        const pct = Math.round((u.salesTotal / maxUserSales) * 100);
+                        return (
+                          <View key={u.userId}>
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }} numberOfLines={1}>
+                                {u.name || u.username}
+                              </Text>
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.primary }}>
+                                {PKR(u.salesTotal)}
+                              </Text>
+                            </View>
+                            <View style={{ height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: "hidden" }}>
+                              <View style={{ height: "100%", width: `${pct}%` as any, backgroundColor: colors.primary, borderRadius: 4 }} />
+                            </View>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                              {u.salesCount} sale{u.salesCount === 1 ? "" : "s"}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* By App / Game */}
+                  <Text style={s.sectionTitle}>By Game / App</Text>
+                  {sp.byApp.length === 0 ? (
+                    <Text style={s.empty}>No sales by app in this period</Text>
+                  ) : (
+                    <View style={{ backgroundColor: colors.card, borderRadius: 14, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: colors.border, gap: 10 }}>
+                      {sp.byApp.map(a => {
+                        const pct = Math.round((a.salesTotal / maxAppSales) * 100);
+                        return (
+                          <View key={a.locationId}>
+                            <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.text }} numberOfLines={1}>
+                                {a.name}
+                              </Text>
+                              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#8B5CF6" }}>
+                                {PKR(a.salesTotal)}
+                              </Text>
+                            </View>
+                            <View style={{ height: 8, backgroundColor: colors.border, borderRadius: 4, overflow: "hidden" }}>
+                              <View style={{ height: "100%", width: `${pct}%` as any, backgroundColor: "#8B5CF6", borderRadius: 4 }} />
+                            </View>
+                            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.textSecondary, marginTop: 2 }}>
+                              {a.salesCount} sale{a.salesCount === 1 ? "" : "s"}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  {/* Footer hint */}
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary, textAlign: "center", marginTop: 4 }}>
+                    Tip: pending verifications need an admin to tap "Verify & Pay" on the Targets screen.
+                  </Text>
+                </>
+              )}
             </>
           );
         })()}

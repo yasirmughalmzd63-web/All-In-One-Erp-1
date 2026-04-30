@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import {
   db, employeesTable, attendanceTable, payrollTable,
   employeeFinesTable, employeeBonusesTable, leaveRequestsTable,
+  salesTable, targetsTable, usersTable, locationsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
@@ -343,6 +344,218 @@ router.get("/hrm/report", requireAuth, async (req, res): Promise<void> => {
     fines: filteredFines.map(f => ({ ...f, createdAt: f.createdAt.toISOString() })),
     bonuses: filteredBonuses.map(b => ({ ...b, createdAt: b.createdAt.toISOString() })),
   });
+});
+
+/* ─────────────── SALES PERFORMANCE  (per-employee + per-app) ─────────────
+ * Returns a comprehensive sales view scoped to a date window. Used by the
+ * HRM "Sales Performance" report tab.
+ *
+ * Query params:
+ *   period = daily | weekly | monthly      (default: monthly)
+ *   date   = YYYY-MM-DD                    (anchor date, default: today)
+ *
+ * Window resolution:
+ *   daily   → that single date
+ *   weekly  → Mon..Sun containing the anchor date
+ *   monthly → 1st..last day of the anchor's month
+ * ────────────────────────────────────────────────────────────────────────── */
+router.get("/hrm/sales-performance", requireAuth, async (req, res): Promise<void> => {
+  const period = (req.query["period"] as string) || "monthly";
+  const dateStr = (req.query["date"] as string) || new Date().toISOString().slice(0, 10);
+
+  const anchor = new Date(`${dateStr}T00:00:00Z`);
+  if (isNaN(anchor.getTime())) { res.status(400).json({ error: "Invalid date" }); return; }
+
+  let startDate: string;
+  let endDate: string;
+  if (period === "daily") {
+    startDate = endDate = dateStr;
+  } else if (period === "weekly") {
+    // ISO week: Monday-start
+    const d = new Date(anchor);
+    const day = d.getUTCDay();           // 0=Sun..6=Sat
+    const diffToMon = (day + 6) % 7;     // shift so Mon=0
+    d.setUTCDate(d.getUTCDate() - diffToMon);
+    startDate = d.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() + 6);
+    endDate = d.toISOString().slice(0, 10);
+  } else {
+    // monthly
+    const y = anchor.getUTCFullYear(), m = anchor.getUTCMonth();
+    startDate = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+    endDate   = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
+  }
+
+  // Sales in window (location-scoped for non-admin)
+  const baseConditions = [
+    sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') >= ${startDate}::date`,
+    sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') <= ${endDate}::date`,
+    eq(salesTable.status, "completed"),
+  ];
+  if (!isAdmin(req) && req.userLocationId != null) {
+    baseConditions.push(eq(salesTable.locationId, req.userLocationId));
+  }
+
+  const sales = await db.select().from(salesTable).where(and(...baseConditions));
+
+  // Resolve users → employee mapping (sales.userId -> users -> employee by name match)
+  // The codebase keeps users (login accounts) and employees (HR records) as
+  // separate tables — sales link to userId, so we group by userId here.
+  const userIds = Array.from(new Set(sales.map(s => s.userId).filter((x): x is number => x != null)));
+  const users = userIds.length
+    ? await db.select().from(usersTable)
+    : [];
+  const userMap: Record<number, { id: number; name: string; username: string }> = {};
+  for (const u of users) userMap[u.id] = { id: u.id, name: u.name ?? u.username, username: u.username };
+
+  // Per-user (salesperson) totals
+  const byUser: Record<number, { userId: number; name: string; username: string; salesCount: number; salesTotal: number }> = {};
+  for (const s of sales) {
+    if (s.userId == null) continue;
+    const u = userMap[s.userId];
+    if (!byUser[s.userId]) {
+      byUser[s.userId] = {
+        userId: s.userId,
+        name: u?.name ?? `User #${s.userId}`,
+        username: u?.username ?? "",
+        salesCount: 0,
+        salesTotal: 0,
+      };
+    }
+    byUser[s.userId].salesCount += 1;
+    byUser[s.userId].salesTotal += parseFloat(s.total);
+  }
+
+  // Per-location (app) totals
+  const locations = await db.select().from(locationsTable);
+  const locMap: Record<number, string> = {};
+  for (const l of locations) locMap[l.id] = l.name;
+
+  const byApp: Record<number, { locationId: number; name: string; salesCount: number; salesTotal: number }> = {};
+  for (const s of sales) {
+    if (s.locationId == null) continue;
+    if (!byApp[s.locationId]) {
+      byApp[s.locationId] = {
+        locationId: s.locationId,
+        name: locMap[s.locationId] ?? `App #${s.locationId}`,
+        salesCount: 0,
+        salesTotal: 0,
+      };
+    }
+    byApp[s.locationId].salesCount += 1;
+    byApp[s.locationId].salesTotal += parseFloat(s.total);
+  }
+
+  // Targets that fall in the window — used to count achievements & list pending verifications.
+  // Non-admin users can only see targets at their own location (or location-less ones).
+  const allTargets = await db.select().from(targetsTable);
+  const scopeTargets = (!isAdmin(req) && req.userLocationId != null)
+    ? allTargets.filter(t => t.locationId == null || t.locationId === req.userLocationId)
+    : allTargets;
+  const windowTargets = scopeTargets.filter(t =>
+    // any overlap with window
+    t.startDate <= endDate && t.endDate >= startDate
+  );
+
+  const totals = {
+    salesCount: sales.length,
+    salesTotal: sales.reduce((sum, s) => sum + parseFloat(s.total), 0),
+    targetsAchieved: windowTargets.filter(t => t.status === "achieved" || t.status === "done").length,
+    targetsMissed:   windowTargets.filter(t => t.status === "missed").length,
+    targetsActive:   windowTargets.filter(t => t.status === "active").length,
+    pendingVerify:   windowTargets.filter(t => t.status === "achieved" && !t.verifiedAt).length,
+  };
+
+  res.json({
+    period,
+    startDate,
+    endDate,
+    totals,
+    byUser:   Object.values(byUser).sort((a, b) => b.salesTotal - a.salesTotal),
+    byApp:    Object.values(byApp).sort((a, b) => b.salesTotal - a.salesTotal),
+    targets:  windowTargets.map(t => ({ ...t, createdAt: t.createdAt.toISOString(), updatedAt: t.updatedAt.toISOString(), verifiedAt: t.verifiedAt?.toISOString() ?? null })),
+  });
+});
+
+/* ─────────────── EMPLOYEE BADGES — verified-sale tier per employee ───────
+ * Returns per-employee aggregate stats used to render achievement badges
+ * in HRM. Tiers are based on lifetime VERIFIED target achievements.
+ *
+ *   bronze   →  1+
+ *   silver   →  5+
+ *   gold     → 15+
+ *   platinum → 30+
+ * ────────────────────────────────────────────────────────────────────────── */
+router.get("/hrm/employee-badges", requireAuth, async (req, res): Promise<void> => {
+  // Restrict to the user's location for non-admin/manager — same scoping rule
+  // used by /hrm/employees so the badges always agree with what they can see.
+  const scopeByLocation = !isAdmin(req) && req.userLocationId != null;
+
+  // Pre-fetch the visible employee set so we never expose IDs from other locations,
+  // even via bonuses that happen to be tagged with another locationId.
+  const visibleEmployees = scopeByLocation
+    ? await db.select({ id: employeesTable.id }).from(employeesTable).where(eq(employeesTable.locationId, req.userLocationId!))
+    : await db.select({ id: employeesTable.id }).from(employeesTable);
+  const visibleEmpIds = new Set(visibleEmployees.map(e => e.id));
+
+  const allTargets = await db.select().from(targetsTable);
+  const allBonuses = await db.select().from(employeeBonusesTable);
+
+  const targets = scopeByLocation
+    ? allTargets.filter(t => t.locationId == null || t.locationId === req.userLocationId)
+    : allTargets;
+  const bonuses = scopeByLocation
+    ? allBonuses.filter(b => b.locationId == null || b.locationId === req.userLocationId)
+    : allBonuses;
+
+  const out: Record<number, {
+    verifiedCount: number;
+    pendingCount: number;
+    challengeCount: number;
+    totalBonusEarned: number;
+    tier: "none" | "bronze" | "silver" | "gold" | "platinum";
+  }> = {};
+
+  const tierFor = (n: number): "none" | "bronze" | "silver" | "gold" | "platinum" => {
+    if (n >= 30) return "platinum";
+    if (n >= 15) return "gold";
+    if (n >= 5)  return "silver";
+    if (n >= 1)  return "bronze";
+    return "none";
+  };
+
+  // Initialize from targets (skip employees we're not allowed to see)
+  for (const t of targets) {
+    if (!t.employeeId) continue;
+    if (!visibleEmpIds.has(t.employeeId)) continue;
+    if (!out[t.employeeId]) {
+      out[t.employeeId] = { verifiedCount: 0, pendingCount: 0, challengeCount: 0, totalBonusEarned: 0, tier: "none" };
+    }
+    if (t.status === "done" && t.verifiedAt) {
+      out[t.employeeId].verifiedCount += 1;
+      if (t.isChallenge) out[t.employeeId].challengeCount += 1;
+    } else if (t.status === "achieved" && !t.verifiedAt) {
+      out[t.employeeId].pendingCount += 1;
+    }
+  }
+
+  // Sum bonuses earned (any source — covers historical "auto-bonus" rows that
+  // pre-date the verification gate, plus current verified rows).
+  for (const b of bonuses) {
+    if (!visibleEmpIds.has(b.employeeId)) continue;
+    if (!out[b.employeeId]) {
+      out[b.employeeId] = { verifiedCount: 0, pendingCount: 0, challengeCount: 0, totalBonusEarned: 0, tier: "none" };
+    }
+    out[b.employeeId].totalBonusEarned += parseFloat(b.amount);
+  }
+
+  // Compute final tier
+  for (const empId of Object.keys(out)) {
+    const e = out[parseInt(empId)]!;
+    e.tier = tierFor(e.verifiedCount);
+  }
+
+  res.json(out);
 });
 
 /* ───────────────────────── LEAVE REQUESTS ───────────────────────────────── */

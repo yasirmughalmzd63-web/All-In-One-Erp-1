@@ -10,7 +10,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { getApiUrl } from "@/lib/api";
 
-type TargetType  = "daily" | "weekly";
+type TargetType  = "daily" | "weekly" | "monthly";
 type TargetScope = "user" | "app";
 type TargetStatus = "active" | "achieved" | "missed" | "done";
 type CommType = "flat" | "percentage";
@@ -32,8 +32,14 @@ interface Target {
   bonusId: number | null;
   locationId: number | null;
   notes: string | null;
+  isChallenge: boolean;
+  verifiedAt: string | null;
+  verifiedBy: number | null;
   createdAt: string;
 }
+
+// Bigger bonus on Challenge targets — keep in sync with server CHALLENGE_MULTIPLIER
+const CHALLENGE_MULTIPLIER = 1.5;
 
 interface Employee {
   id: number;
@@ -56,6 +62,17 @@ const todayStr = () => NOW.toISOString().slice(0, 10);
 const nextWeekStr = () => {
   const d = new Date(NOW); d.setDate(d.getDate() + 6);
   return d.toISOString().slice(0, 10);
+};
+// Last day of the month for the supplied YYYY-MM-DD anchor (defaults to today)
+const monthEndStr = (anchor?: string) => {
+  const a = anchor ? new Date(`${anchor}T00:00:00Z`) : new Date(NOW);
+  const end = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth() + 1, 0));
+  return end.toISOString().slice(0, 10);
+};
+const monthStartStr = (anchor?: string) => {
+  const a = anchor ? new Date(`${anchor}T00:00:00Z`) : new Date(NOW);
+  const start = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), 1));
+  return start.toISOString().slice(0, 10);
 };
 
 const STATUS_COLOR: Record<TargetStatus, string> = {
@@ -89,6 +106,7 @@ const blankForm = () => ({
   startDate: todayStr(),
   endDate: todayStr(),
   notes: "",
+  isChallenge: false,
 });
 
 export default function TargetsScreen() {
@@ -170,6 +188,7 @@ export default function TargetsScreen() {
       startDate: t.startDate,
       endDate: t.endDate,
       notes: t.notes ?? "",
+      isChallenge: t.isChallenge ?? false,
     });
     setShowModal(true);
   };
@@ -209,17 +228,16 @@ export default function TargetsScreen() {
       const achieved = parseFloat(data.achievedAmount ?? t.achievedAmount);
       const pct = Math.min(100, Math.round((achieved / parseFloat(t.targetAmount)) * 100));
 
-      if (data.autoBonus) {
-        // Commission was auto-applied — show a rich celebration alert
-        const empName = empMap[data.autoBonus.employeeId] ?? "the employee";
+      if (data.achieved && data.pendingVerify) {
+        // Goal hit, awaiting admin verification before bonus is released.
         Alert.alert(
           "🎉 Target Achieved!",
-          `Sales: ${PKR(achieved)}\nTarget: ${PKR(parseFloat(t.targetAmount))}\nProgress: ${pct}%\n\n✅ Bonus of ${PKR(parseFloat(data.autoBonus.amount))} automatically added to ${empName}'s HRM record!`,
+          `Sales: ${PKR(achieved)}\nTarget: ${PKR(parseFloat(t.targetAmount))}\nProgress: ${pct}%\n\n⏳ Awaiting admin verification — tap "Verify & Pay" to release the bonus into HRM/payroll.`,
         );
-      } else if (data.achieved || data.status === "done") {
+      } else if (data.status === "done") {
         Alert.alert(
-          "🎉 Target Achieved!",
-          `Sales: ${PKR(achieved)}\nTarget: ${PKR(parseFloat(t.targetAmount))}\nProgress: ${pct}%\nStatus: ${data.status}`,
+          "Target Verified ✓",
+          `Bonus already paid for "${t.title}".`,
         );
       } else {
         Alert.alert(
@@ -231,27 +249,34 @@ export default function TargetsScreen() {
     setChecking(null);
   };
 
-  const applyCommission = async (t: Target) => {
+  // Admin verification gate: explicitly releases the bonus into HRM/payroll.
+  // Server applies the 1.5× multiplier for Challenge targets automatically.
+  const verifyTarget = async (t: Target) => {
     if (!t.employeeId) {
-      Alert.alert("No Employee", "Link an employee to this target to apply commission.");
+      Alert.alert("No Employee", "Link an employee to this target to verify.");
       return;
     }
-    const commAmt = t.commissionType === "percentage"
+    const baseAmt = t.commissionType === "percentage"
       ? (parseFloat(t.achievedAmount) * parseFloat(t.commissionValue)) / 100
       : parseFloat(t.commissionValue);
+    const finalAmt = t.isChallenge ? baseAmt * CHALLENGE_MULTIPLIER : baseAmt;
+    const breakdown = t.isChallenge
+      ? `${PKR(baseAmt)} × ${CHALLENGE_MULTIPLIER}× challenge boost = ${PKR(finalAmt)}`
+      : `${PKR(finalAmt)}`;
+
     Alert.alert(
-      "Apply Commission",
-      `Apply ${PKR(commAmt)} bonus to ${empMap[t.employeeId] ?? "employee"} for target "${t.title}"?\n\nThis will add a bonus record to HRM.`,
+      "Verify & Pay Bonus",
+      `Release ${breakdown} bonus to ${empMap[t.employeeId] ?? "employee"} for target "${t.title}"?\n\nThis adds the bonus to HRM and the next payroll cycle.`,
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Apply", onPress: async () => {
+        { text: "Verify & Pay", onPress: async () => {
           setApplying(t.id);
           try {
-            const r = await fetch(getApiUrl(`/api/targets/${t.id}/apply-commission`), { method: "POST", headers });
+            const r = await fetch(getApiUrl(`/api/targets/${t.id}/verify`), { method: "POST", headers });
             if (!r.ok) { Alert.alert("Error", (await r.json()).error ?? "Failed"); return; }
             fetchAll();
-            Alert.alert("Done!", `${PKR(commAmt)} bonus added to HRM payroll for ${empMap[t.employeeId] ?? "employee"}.`);
-          } catch (_) { Alert.alert("Error", "Failed to apply commission"); }
+            Alert.alert("Done!", `${PKR(finalAmt)} bonus added for ${empMap[t.employeeId] ?? "employee"}. It will appear on the next monthly payroll.`);
+          } catch (_) { Alert.alert("Error", "Failed to verify"); }
           setApplying(null);
         }},
       ],
@@ -292,7 +317,7 @@ export default function TargetsScreen() {
           <View style={s.metaRow}>
             <View style={[s.chip2, { backgroundColor: colors.primary + "15" }]}>
               <Text style={[s.chip2Txt, { color: colors.primary }]}>
-                {t.type === "daily" ? "Daily" : "Weekly"}
+                {t.type === "daily" ? "Daily" : t.type === "weekly" ? "Weekly" : "Monthly"}
               </Text>
             </View>
             <View style={[s.chip2, { backgroundColor: "#8B5CF6" + "15" }]}>
@@ -300,6 +325,12 @@ export default function TargetsScreen() {
                 {t.scope === "app" ? "App Wise" : "User Wise"}
               </Text>
             </View>
+            {t.isChallenge && (
+              <View style={[s.chip2, { backgroundColor: "#F59E0B" + "20", flexDirection: "row", alignItems: "center", gap: 3 }]}>
+                <Feather name="zap" size={11} color="#D97706" />
+                <Text style={[s.chip2Txt, { color: "#D97706" }]}>Challenge {CHALLENGE_MULTIPLIER}×</Text>
+              </View>
+            )}
             <Text style={s.cardSub}>{t.startDate} → {t.endDate}</Text>
           </View>
 
@@ -361,19 +392,19 @@ export default function TargetsScreen() {
               </TouchableOpacity>
             )}
 
-            {/* Apply commission */}
+            {/* Verify & Pay (admin gate — releases bonus into HRM/payroll) */}
             {isAchieved && (
               <TouchableOpacity
                 style={[s.actionBtn, { backgroundColor: "#059669" + "15", borderColor: "#059669" + "40" }]}
-                onPress={() => applyCommission(t)}
+                onPress={() => verifyTarget(t)}
                 disabled={applying === t.id}
               >
                 {applying === t.id
                   ? <ActivityIndicator size="small" color="#059669" />
-                  : <Feather name="dollar-sign" size={13} color="#059669" />
+                  : <Feather name="check-circle" size={13} color="#059669" />
                 }
                 <Text style={[s.actionBtnTxt, { color: "#059669" }]}>
-                  {applying === t.id ? "Applying…" : "Apply Commission"}
+                  {applying === t.id ? "Verifying…" : "Verify & Pay"}
                 </Text>
               </TouchableOpacity>
             )}
@@ -383,7 +414,7 @@ export default function TargetsScreen() {
               <View style={[s.actionBtn, { backgroundColor: "#7C3AED" + "15", borderColor: "#7C3AED" + "40" }]}>
                 <Feather name="check-circle" size={13} color="#7C3AED" />
                 <Text style={[s.actionBtnTxt, { color: "#7C3AED" }]}>
-                  {t.bonusId ? "Bonus Auto-Added ✓" : "Commission Applied"}
+                  Bonus Released ✓
                 </Text>
               </View>
             )}
@@ -425,10 +456,10 @@ export default function TargetsScreen() {
         <View style={s.filterSection}>
           <Text style={s.filterLabel}>Period</Text>
           <View style={s.segRow}>
-            {(["all", "daily", "weekly"] as const).map(v => (
+            {(["all", "daily", "weekly", "monthly"] as const).map(v => (
               <TouchableOpacity key={v} style={[s.seg, filterType === v && s.segActive]} onPress={() => setFilterType(v)}>
                 <Text style={[s.segTxt, filterType === v && s.segTxtActive]}>
-                  {v === "all" ? "All" : v === "daily" ? "Daily" : "Weekly"}
+                  {v === "all" ? "All" : v === "daily" ? "Daily" : v === "weekly" ? "Weekly" : "Monthly"}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -489,13 +520,18 @@ export default function TargetsScreen() {
               {/* Type */}
               <Text style={s.fieldLabel}>Period</Text>
               <View style={s.segRow}>
-                {(["daily","weekly"] as TargetType[]).map(v => (
+                {(["daily","weekly","monthly"] as TargetType[]).map(v => (
                   <TouchableOpacity key={v} style={[s.seg, form.type === v && s.segActive]} onPress={() => {
-                    const end = v === "daily" ? todayStr() : nextWeekStr();
-                    setForm(p => ({ ...p, type: v, endDate: end }));
+                    // Auto-fill the date window to match the chosen period
+                    const start = v === "monthly" ? monthStartStr(form.startDate) : form.startDate || todayStr();
+                    const end =
+                      v === "daily"   ? start :
+                      v === "weekly"  ? nextWeekStr() :
+                                        monthEndStr(start);
+                    setForm(p => ({ ...p, type: v, startDate: start, endDate: end }));
                   }}>
                     <Text style={[s.segTxt, form.type === v && s.segTxtActive]}>
-                      {v === "daily" ? "Daily" : "Weekly"}
+                      {v === "daily" ? "Daily" : v === "weekly" ? "Weekly" : "Monthly"}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -564,6 +600,36 @@ export default function TargetsScreen() {
                 onChangeText={v => setForm(p => ({ ...p, commissionValue: v }))}
                 placeholder={form.commissionType === "percentage" ? "e.g. 5 (= 5%)" : "e.g. 2000 (₨)"}
                 placeholderTextColor={colors.textSecondary} />
+
+              {/* Challenge toggle — bigger bonus on stretch goals */}
+              <Text style={s.fieldLabel}>Challenge Target</Text>
+              <TouchableOpacity
+                onPress={() => setForm(p => ({ ...p, isChallenge: !p.isChallenge }))}
+                style={{
+                  flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+                  borderWidth: 1, borderColor: form.isChallenge ? "#F59E0B" : colors.border,
+                  borderRadius: 10, padding: 12, backgroundColor: form.isChallenge ? "#FEF3C7" : colors.background,
+                }}
+              >
+                <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                  <Feather name="zap" size={18} color={form.isChallenge ? "#D97706" : colors.textSecondary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: form.isChallenge ? "#D97706" : colors.text }}>
+                      {form.isChallenge ? `Challenge — ${CHALLENGE_MULTIPLIER}× bonus on success` : "Mark as Challenge / Stretch Goal"}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.textSecondary, marginTop: 2 }}>
+                      Harder goal · pays {CHALLENGE_MULTIPLIER}× the regular commission when verified
+                    </Text>
+                  </View>
+                </View>
+                <View style={{
+                  width: 44, height: 24, borderRadius: 12, padding: 2,
+                  backgroundColor: form.isChallenge ? "#D97706" : colors.border,
+                  alignItems: form.isChallenge ? "flex-end" : "flex-start",
+                }}>
+                  <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: "#fff" }} />
+                </View>
+              </TouchableOpacity>
 
               {/* Dates */}
               <Text style={s.fieldLabel}>Start Date (YYYY-MM-DD)</Text>

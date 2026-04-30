@@ -1,11 +1,11 @@
-import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
 export const targetsTable = pgTable("targets", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
-  type: text("type").notNull().default("daily"),         // daily | weekly
+  type: text("type").notNull().default("daily"),         // daily | weekly | monthly
   scope: text("scope").notNull().default("app"),          // user | app
   employeeId: integer("employee_id"),                     // nullable – user-wise only
   userId: integer("user_id"),                             // salesperson userId
@@ -19,6 +19,13 @@ export const targetsTable = pgTable("targets", {
   bonusId: integer("bonus_id"),                          // set after commission applied
   locationId: integer("location_id"),
   notes: text("notes"),
+  // Challenge targets get a higher bonus multiplier (set on the target itself);
+  // this flag is purely for badging + filtering.
+  isChallenge: boolean("is_challenge").notNull().default(false),
+  // Admin verification gate — bonus only accrues once an admin verifies the
+  // achievement. `verifiedAt` is null until an admin clicks Verify.
+  verifiedAt: timestamp("verified_at", { withTimezone: true }),
+  verifiedBy: integer("verified_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
