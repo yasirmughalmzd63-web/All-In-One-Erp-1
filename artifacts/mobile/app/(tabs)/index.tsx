@@ -30,6 +30,7 @@ type Customer = { id: number; name: string; phone?: string | null; creditBalance
 type Account = { id: number; name: string; type: string; balance: string; currency: string; locationId?: number | null };
 type Location = { id: number; name: string; address?: string | null };
 type RateMode = "normal" | "wholesale";
+type ValidationRule = { id: string; label: string; pass: boolean; severity: "error" | "warning" };
 
 // ── Account type helpers ────────────────────────────────────────────────
 function normalizeAcctType(raw: string): string {
@@ -612,6 +613,7 @@ export default function POSScreen() {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [dollarBalance, setDollarBalance] = useState<{ usd: number; pkr: number; rate: number } | null>(null);
   const [defaults, setDefaults] = useState<{ locationId?: number; accountId?: number; productId?: number }>({});
+  const [strictMode, setStrictMode] = useState(true);
 
   const { data: productsRaw } = useListProducts();
   const { data: customersRaw } = useListCustomers();
@@ -632,12 +634,15 @@ export default function POSScreen() {
       }).catch(() => {});
   }, []);
 
-  // ── Load persisted defaults ────────────────────────────────────────────
+  // ── Load persisted defaults + strict mode ─────────────────────────────
   React.useEffect(() => {
     AsyncStorage.getItem("pos_defaults").then(raw => {
       if (raw) {
         try { setDefaults(JSON.parse(raw)); } catch {}
       }
+    }).catch(() => {});
+    AsyncStorage.getItem("pos_strict_mode").then(v => {
+      if (v !== null) setStrictMode(v !== "false");
     }).catch(() => {});
   }, []);
 
@@ -669,6 +674,13 @@ export default function POSScreen() {
     const next = { ...defaults, [key]: id };
     setDefaults(next);
     try { await AsyncStorage.setItem("pos_defaults", JSON.stringify(next)); } catch {}
+  };
+
+  const toggleStrictMode = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    const next = !strictMode;
+    setStrictMode(next);
+    AsyncStorage.setItem("pos_strict_mode", String(next)).catch(() => {});
   };
 
   const products = (productsRaw ?? []) as unknown as Product[];
@@ -739,30 +751,77 @@ export default function POSScreen() {
     : 0;
   const qty = selectedProduct && parsedAmount > 0 && activePrice > 0 ? Math.round(parsedAmount / activePrice) : 0;
 
-  // ── Strict validation ──────────────────────────────────────────────────
-  const validations = useMemo(() => {
-    const errors: string[] = [];
-    const warnings: string[] = [];
-    if (!selectedProduct) errors.push("No product selected");
-    else {
-      if ((selectedProduct.stock ?? 0) <= 0) errors.push(`"${selectedProduct.name}" is out of stock`);
-      else if (qty > (selectedProduct.stock ?? 0)) errors.push(`Only ${selectedProduct.stock} in stock — need ${qty}`);
-    }
-    if (parsedAmount <= 0) errors.push("Enter an amount");
-    if (qty <= 0 && selectedProduct && parsedAmount > 0) warnings.push("Amount too small for one unit");
-    return { errors, warnings, canSell: errors.length === 0 };
-  }, [selectedProduct, qty, parsedAmount]);
+  // ── Rule-based strict validation ───────────────────────────────────────
+  const stock = selectedProduct?.stock ?? 0;
 
-  // For sales, cash is received INTO the account — no balance check needed
-  const balanceShortfall = 0;
+  const allRules = useMemo((): ValidationRule[] => [
+    {
+      id: "product",
+      label: "Product selected",
+      pass: !!selectedProduct,
+      severity: "error",
+    },
+    {
+      id: "stock_nonzero",
+      label: selectedProduct ? `In stock (${stock} ${selectedProduct.unit} avail.)` : "Product in stock",
+      pass: !selectedProduct || stock > 0,
+      severity: "error",
+    },
+    {
+      id: "qty_lte_stock",
+      label: `Qty ≤ stock (need ${qty}, have ${stock})`,
+      pass: !selectedProduct || qty <= stock,
+      severity: "error",
+    },
+    {
+      id: "amount_positive",
+      label: "Amount entered (> 0)",
+      pass: parsedAmount > 0,
+      severity: "error",
+    },
+    {
+      id: "qty_min",
+      label: "Qty ≥ 1 unit (amount large enough)",
+      pass: qty >= 1 || parsedAmount === 0 || !selectedProduct,
+      severity: "warning",
+    },
+  ], [selectedProduct, stock, qty, parsedAmount]);
+
+  const cashRules = useMemo((): ValidationRule[] => [
+    ...allRules,
+    {
+      id: "account",
+      label: "Payment account selected",
+      pass: !!selectedAccount,
+      severity: "error",
+    },
+  ], [allRules, selectedAccount]);
+
+  const creditRules = useMemo((): ValidationRule[] => [
+    ...allRules,
+    {
+      id: "customer",
+      label: "Customer selected for credit sale",
+      pass: !!selectedCustomer,
+      severity: "error",
+    },
+  ], [allRules, selectedCustomer]);
+
+  const validations = useMemo(() => {
+    const errors = allRules.filter(r => !r.pass && r.severity === "error").map(r => r.label);
+    const warnings = allRules.filter(r => !r.pass && r.severity === "warning").map(r => r.label);
+    return { errors, warnings, canSell: errors.length === 0 };
+  }, [allRules]);
 
   const cashValidations = useMemo(() => {
-    const errors = [...validations.errors];
-    if (!selectedAccount) {
-      errors.push("Select an account to receive payment");
-    }
+    const errors = cashRules.filter(r => !r.pass && r.severity === "error").map(r => r.label);
     return { errors, canComplete: errors.length === 0 };
-  }, [validations.errors, selectedAccount]);
+  }, [cashRules]);
+
+  const creditValidations = useMemo(() => {
+    const errors = creditRules.filter(r => !r.pass && r.severity === "error").map(r => r.label);
+    return { errors, canComplete: errors.length === 0 };
+  }, [creditRules]);
 
   // ── Dashboard figures (location/user-filtered for non-admin) ───────────
   const dashParams = isAdmin
@@ -899,12 +958,8 @@ export default function POSScreen() {
       Alert.alert("Access Denied", "You do not have permission to make credit sales.");
       return;
     }
-    if (!validations.canSell) {
-      Alert.alert("Cannot Process Credit Sale", validations.errors.map(e => `• ${e}`).join("\n"));
-      return;
-    }
-    if (!selectedCustomer) {
-      Alert.alert("Customer Required", "Please select a customer to record a credit sale.");
+    if (!creditValidations.canComplete) {
+      Alert.alert("Cannot Process Credit Sale", creditValidations.errors.map(e => `• ${e}`).join("\n"));
       return;
     }
     if (!user) return;
@@ -912,7 +967,7 @@ export default function POSScreen() {
       await (createSaleMutation as unknown as { mutateAsync: (a: { data: unknown }) => Promise<unknown> }).mutateAsync({
         data: {
           userId: user.id,
-          customerId: selectedCustomer.id,
+          customerId: selectedCustomer!.id,
           accountId: selectedAccount?.id ?? null,
           locationId: selectedLocation?.id ?? user.locationId ?? null,
           items: [{ productId: selectedProduct!.id, qty, unitPrice: activePrice.toFixed(8) }],
@@ -927,7 +982,7 @@ export default function POSScreen() {
       setAmount("0");
       Alert.alert(
         "Credit Entry Added",
-        `${selectedProduct!.name}\nQTY: ${qty} ${selectedProduct!.unit}\nTotal: ${parsedAmount.toFixed(2)}\nCustomer: ${selectedCustomer.name}\n\nEntry saved to Credits.`,
+        `${selectedProduct!.name}\nQTY: ${qty} ${selectedProduct!.unit}\nTotal: ${parsedAmount.toFixed(2)}\nCustomer: ${selectedCustomer!.name}\n\nEntry saved to Credits.`,
         [{ text: "New Sale", onPress: () => { setSelectedProduct(null); setSelectedCustomer(null); } }, { text: "OK" }]
       );
     } catch (e: unknown) {
@@ -945,6 +1000,23 @@ export default function POSScreen() {
       {/* Header */}
       <LinearGradient colors={[colors.headerBg, colors.primary]} style={[styles.header, { paddingTop: topPad + 8, justifyContent: "center" }]}>
         <Text style={[styles.headerTitle, { textAlign: "center", fontSize: 22, letterSpacing: 2 }]}>COINS DYNASTY</Text>
+        <TouchableOpacity
+          onPress={toggleStrictMode}
+          activeOpacity={0.7}
+          style={{
+            position: "absolute", right: 16, bottom: 12,
+            flexDirection: "row", alignItems: "center", gap: 4,
+            paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10,
+            borderWidth: 1,
+            borderColor: strictMode ? "#FCA5A5" : "rgba(255,255,255,0.3)",
+            backgroundColor: strictMode ? "rgba(220,38,38,0.2)" : "rgba(255,255,255,0.1)",
+          }}
+        >
+          <Text style={{ fontSize: 10 }}>{strictMode ? "🔒" : "🔓"}</Text>
+          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 8, color: strictMode ? "#FECACA" : "rgba(255,255,255,0.65)", letterSpacing: 0.8 }}>
+            {strictMode ? "STRICT" : "RELAXED"}
+          </Text>
+        </TouchableOpacity>
       </LinearGradient>
 
       {/* ── Location banner ─────────────────────────────────────────────── */}
@@ -1374,6 +1446,11 @@ export default function POSScreen() {
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: selectedCustomer ? colors.text : colors.mutedForeground }} numberOfLines={1}>
                     {selectedCustomer?.name ?? "Walk-in"}
                   </Text>
+                  {selectedCustomer?.creditBalance && parseFloat(selectedCustomer.creditBalance) > 0 && (
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: colors.danger }}>
+                      Outstanding: ₨{parseFloat(selectedCustomer.creditBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    </Text>
+                  )}
                 </View>
                 <Text style={{ fontSize: 13, color: colors.mutedForeground }}>›</Text>
               </TouchableOpacity>
@@ -1474,11 +1551,11 @@ export default function POSScreen() {
           {canCreditSale && (
             <TouchableOpacity
               style={[styles.creditBtn, {
-                backgroundColor: validations.canSell && selectedCustomer ? colors.credit : colors.mutedForeground,
-                opacity: createSaleMutation.isPending ? 0.7 : 1,
+                backgroundColor: creditValidations.canComplete ? colors.credit : colors.mutedForeground,
+                opacity: (createSaleMutation.isPending || (strictMode && !creditValidations.canComplete)) ? 0.5 : 1,
               }]}
               onPress={handleCreditSale}
-              disabled={createSaleMutation.isPending}
+              disabled={createSaleMutation.isPending || (strictMode && !creditValidations.canComplete)}
             >
               
               <Text style={styles.actionBtnText}>Credit</Text>
@@ -1488,11 +1565,11 @@ export default function POSScreen() {
           <TouchableOpacity
             style={[styles.completeBtn, {
               backgroundColor: cashValidations.canComplete ? colors.success : colors.mutedForeground,
-              opacity: createSaleMutation.isPending ? 0.7 : 1,
+              opacity: (createSaleMutation.isPending || (strictMode && !cashValidations.canComplete)) ? 0.5 : 1,
               flex: canCreditSale ? 2 : 3,
             }]}
             onPress={handleCompleteSale}
-            disabled={createSaleMutation.isPending}
+            disabled={createSaleMutation.isPending || (strictMode && !cashValidations.canComplete)}
           >
             {createSaleMutation.isPending
               ? <Text style={styles.actionBtnText}>Processing...</Text>
@@ -1500,22 +1577,89 @@ export default function POSScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Validation checklist ──────────────────────────────────────── */}
-        {(cashValidations.errors.length > 0 || validations.warnings.length > 0) && (
-          <View style={[styles.validationBox, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.validationTitle, { color: colors.mutedForeground }]}>CHECKLIST</Text>
-            {cashValidations.errors.map((e, i) => (
-              <View key={i} style={styles.validationRow}>
-                
-                <Text style={[styles.validationText, { color: colors.danger }]}>{e}</Text>
+        {/* ── Validation Checklist ─────────────────────────────────────── */}
+        {(strictMode || cashRules.some(r => !r.pass)) && (
+          <View style={[styles.validationBox, {
+            backgroundColor: strictMode
+              ? (cashValidations.canComplete ? "#F0FDF4" : "#FEF2F2")
+              : colors.card,
+            borderColor: strictMode
+              ? (cashValidations.canComplete ? "#A7F3D0" : "#FCA5A5")
+              : colors.border,
+          }]}>
+            {/* Header row */}
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+                <Text style={{ fontSize: 11 }}>{strictMode ? "🔒" : "🔓"}</Text>
+                <Text style={[styles.validationTitle, {
+                  color: strictMode
+                    ? (cashValidations.canComplete ? "#065F46" : "#991B1B")
+                    : colors.mutedForeground,
+                }]}>
+                  {strictMode ? "STRICT MODE — ALL RULES ENFORCED" : "VALIDATION CHECKLIST"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={toggleStrictMode}
+                style={{
+                  paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7, borderWidth: 1,
+                  borderColor: strictMode ? "#FCA5A5" : "#A7F3D0",
+                  backgroundColor: strictMode ? "#FEE2E2" : "#ECFDF5",
+                }}
+              >
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 8, color: strictMode ? "#991B1B" : "#065F46" }}>
+                  {strictMode ? "DISABLE STRICT" : "ENABLE STRICT"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Cash sale rules */}
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: colors.mutedForeground, letterSpacing: 0.8, marginBottom: 4 }}>CASH SALE REQUIREMENTS</Text>
+            {cashRules.map(rule => (
+              <View key={rule.id} style={[styles.validationRow, {
+                backgroundColor: rule.pass ? "transparent" : rule.severity === "error" ? "#FEF2F2" : "#FFFBEB",
+                borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3, marginBottom: 2,
+              }]}>
+                <Text style={{ fontSize: 12, width: 18 }}>
+                  {rule.pass ? "✅" : rule.severity === "error" ? "❌" : "⚠️"}
+                </Text>
+                <Text style={[styles.validationText, {
+                  fontSize: 11,
+                  color: rule.pass ? (strictMode ? "#065F46" : colors.mutedForeground) : rule.severity === "error" ? colors.danger : "#D97706",
+                  fontFamily: rule.pass ? "Inter_400Regular" : "Inter_600SemiBold",
+                }]}>
+                  {rule.label}
+                </Text>
               </View>
             ))}
-            {validations.warnings.map((w, i) => (
-              <View key={i} style={styles.validationRow}>
-                
-                <Text style={[styles.validationText, { color: "#D97706" }]}>{w}</Text>
+
+            {/* Credit sale extra rule */}
+            {canCreditSale && (
+              <>
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: colors.mutedForeground, letterSpacing: 0.8, marginTop: 6, marginBottom: 4 }}>CREDIT SALE (EXTRA)</Text>
+                <View style={[styles.validationRow, {
+                  backgroundColor: selectedCustomer ? "transparent" : "#FFFBEB",
+                  borderRadius: 7, paddingHorizontal: 6, paddingVertical: 3,
+                }]}>
+                  <Text style={{ fontSize: 12, width: 18 }}>{selectedCustomer ? "✅" : "⚠️"}</Text>
+                  <Text style={[styles.validationText, {
+                    fontSize: 11,
+                    color: selectedCustomer ? (strictMode ? "#065F46" : colors.mutedForeground) : "#D97706",
+                    fontFamily: selectedCustomer ? "Inter_400Regular" : "Inter_600SemiBold",
+                  }]}>
+                    Customer selected for credit sale
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {cashValidations.canComplete && (
+              <View style={{ marginTop: 6, paddingHorizontal: 6, paddingVertical: 4, backgroundColor: "#ECFDF5", borderRadius: 8, alignItems: "center" }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#065F46", letterSpacing: 0.5 }}>
+                  ✅ ALL CLEAR — READY TO COMPLETE SALE
+                </Text>
               </View>
-            ))}
+            )}
           </View>
         )}
 
