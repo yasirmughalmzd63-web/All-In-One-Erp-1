@@ -216,13 +216,9 @@ export default function POSScreen() {
   const outstanding = dashboardRaw?.creditPayable    ? parseFloat(dashboardRaw.creditPayable)    : null;
 
   // ── Display helpers ────────────────────────────────────────────────────
-  const { typedPart, ghostPart } = (() => {
-    if (amount.includes(".")) {
-      const [intPart, decPart = ""] = amount.split(".");
-      return { typedPart: intPart + "." + decPart, ghostPart: "0".repeat(Math.max(0, 8 - decPart.length)) };
-    }
-    return { typedPart: amount + ".", ghostPart: "00000000" };
-  })();
+  // Show only what the user has typed — no ghost trailing zeros
+  const typedPart = amount;
+  const ghostPart = "";
 
   const handleNumpad = (key: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
