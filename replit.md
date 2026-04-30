@@ -123,3 +123,7 @@ lib/db/src/schema/   — 14 table definitions
 - New admin-only routes `POST /api/dollar-wallet/:id/verify-proof` and `POST /api/dollar-wallet/:id/unverify-proof`.
 - Mobile Buy USD modal: dashed "Attach Payment Screenshot" picker + thumbnail preview/remove. Uploads via existing `/api/upload/product-image`.
 - Mobile transactions list: shows pending/verified badge with thumb on entries that have a proof. Tapping opens a full-screen image viewer with zoom (admins see Verify / Unverify button).
+
+### Apr 30, 2026 — Payment screenshot compression + wallet rename
+- **Compression**: Added `expo-image-manipulator` to the mobile app. `pickAndUploadProof` now resizes payment screenshots down to max 1280px wide and re-encodes them as JPEG at ~60% quality before uploading. This typically takes a 2-8 MB phone-gallery shot down to ~80-200 KB — much faster on slow connections and far less storage usage.
+- **Rename wallets**: Long-pressing a wallet card on the Dollar Wallet screen opens a Rename modal. New backend route `PATCH /api/wallets/:id` (auth-required) updates the wallet name, validates non-empty, and writes an audit log entry like `Renamed "X" → "Y"`. The local wallet list updates in place — no full reload needed.

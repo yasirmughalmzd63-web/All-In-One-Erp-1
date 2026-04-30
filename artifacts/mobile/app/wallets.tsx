@@ -1,5 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
@@ -116,6 +117,9 @@ export default function WalletsScreen() {
   const [showBuyModal, setShowBuyModal] = useState(false);
   const [showTopupModal, setShowTopupModal] = useState(false);
   const [showSplitModal, setShowSplitModal] = useState(false);
+  const [renameWallet, setRenameWallet] = useState<Wallet | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming, setRenaming] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [buyForm, setBuyForm] = useState(emptyBuyForm);
   const [topupForm, setTopupForm] = useState(emptyTopupForm);
@@ -140,18 +144,28 @@ export default function WalletsScreen() {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false, quality: 0.7, base64: true,
+      allowsEditing: false,
+      quality: 1,
     });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0]!;
-    if (!asset.base64) { Alert.alert("Error", "Could not read image data"); return; }
     setProofUploading(true);
     try {
-      const mime = asset.mimeType ?? "image/jpeg";
+      // Compress: resize down to max 1280px wide and re-encode as JPEG ~60% quality.
+      // Payment screenshots are usually 2-8 MB straight from the gallery; this brings them
+      // down to ~80-200 KB, dramatically improving upload time on slow connections.
+      const MAX_WIDTH = 1280;
+      const needsResize = (asset.width ?? 0) > MAX_WIDTH;
+      const manipulated = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        needsResize ? [{ resize: { width: MAX_WIDTH } }] : [],
+        { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      if (!manipulated.base64) { Alert.alert("Error", "Could not process image"); return; }
       const { url, key } = await customFetch<{ url: string; key: string }>("/api/upload/product-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ base64: asset.base64, mimeType: mime }),
+        body: JSON.stringify({ base64: manipulated.base64, mimeType: "image/jpeg" }),
       });
       setBuyForm(f => ({ ...f, paymentProofUrl: url, paymentProofKey: key }));
     } catch (e) {
@@ -565,6 +579,8 @@ export default function WalletsScreen() {
                   <TouchableOpacity
                     key={w.id}
                     onPress={() => openWalletDetail(w)}
+                    onLongPress={() => { setRenameWallet(w); setRenameValue(w.name); }}
+                    delayLongPress={350}
                     activeOpacity={0.75}
                     style={{
                       backgroundColor: "rgba(255,255,255,0.18)",
@@ -579,7 +595,7 @@ export default function WalletsScreen() {
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#4ADE80", marginTop: 2 }}>
                       ${parseFloat(w.balance).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </Text>
-                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.7)", textTransform: "uppercase" }}>{w.type} · tap</Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.7)", textTransform: "uppercase" }}>{w.type} · long-press to rename</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -1699,6 +1715,58 @@ export default function WalletsScreen() {
                 <Text style={{ fontFamily: "Inter_500Medium", fontSize: 14, color: colors.mutedForeground, marginTop: 8 }}>No data available</Text>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* RENAME WALLET MODAL */}
+      <Modal visible={!!renameWallet} animationType="fade" transparent
+        onRequestClose={() => { if (!renaming) setRenameWallet(null); }}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "center", padding: 24 }}>
+          <View style={{ backgroundColor: colors.background, borderRadius: 18, padding: 20 }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text, marginBottom: 4 }}>Rename Wallet</Text>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginBottom: 14 }}>
+              Choose a new name for "{renameWallet?.name}". The balance and history stay the same.
+            </Text>
+            <TextInput
+              value={renameValue}
+              onChangeText={setRenameValue}
+              placeholder="Wallet name"
+              placeholderTextColor={colors.mutedForeground}
+              autoFocus
+              editable={!renaming}
+              style={[styles.input, { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, marginBottom: 14 }]}
+            />
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TouchableOpacity disabled={renaming} onPress={() => setRenameWallet(null)}
+                style={{ flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center", borderWidth: 1, borderColor: colors.border, opacity: renaming ? 0.6 : 1 }}>
+                <Text style={{ color: colors.text, fontFamily: "Inter_600SemiBold", fontSize: 14 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={renaming || !renameValue.trim() || renameValue.trim() === renameWallet?.name}
+                onPress={async () => {
+                  const w = renameWallet;
+                  const newName = renameValue.trim();
+                  if (!w || !newName || newName === w.name) return;
+                  setRenaming(true);
+                  try {
+                    await customFetch(`/api/wallets/${w.id}`, { method: "PATCH", body: JSON.stringify({ name: newName }) });
+                    setDollarWallets(prev => prev.map(x => (x.id === w.id ? { ...x, name: newName } : x)));
+                    setRenameWallet(null);
+                  } catch (e) {
+                    Alert.alert("Rename failed", e instanceof Error ? e.message : "Try again");
+                  } finally {
+                    setRenaming(false);
+                  }
+                }}
+                style={{
+                  flex: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center",
+                  backgroundColor: "#0891B2",
+                  opacity: (renaming || !renameValue.trim() || renameValue.trim() === renameWallet?.name) ? 0.5 : 1,
+                }}>
+                <Text style={{ color: "#FFF", fontFamily: "Inter_700Bold", fontSize: 14 }}>{renaming ? "Saving..." : "Save"}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

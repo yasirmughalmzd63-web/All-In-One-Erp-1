@@ -19,6 +19,21 @@ router.post("/wallets", requireAuth, async (req, res): Promise<void> => {
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
 
+// PATCH /wallets/:id — rename a wallet (only `name` is editable here)
+router.patch("/wallets/:id", requireAuth, async (req, res): Promise<void> => {
+  const idParam = req.params.id;
+  const id = parseInt(typeof idParam === "string" ? idParam : "", 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const { name } = req.body as { name?: string };
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (!trimmed) { res.status(400).json({ error: "name is required" }); return; }
+  const [existing] = await db.select().from(walletsTable).where(eq(walletsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Wallet not found" }); return; }
+  const [row] = await db.update(walletsTable).set({ name: trimmed }).where(eq(walletsTable.id, id)).returning();
+  await logAudit(req.userId, "update", "wallet", id, `Renamed "${existing.name}" → "${trimmed}"`);
+  res.json({ ...row!, createdAt: row!.createdAt.toISOString() });
+});
+
 router.post("/wallets/transfer", requireAuth, async (req, res): Promise<void> => {
   const { fromWalletId, toWalletId, amount, notes } = req.body as {
     fromWalletId?: number | null; toWalletId?: number | null; amount: string; notes?: string | null;
