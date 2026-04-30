@@ -13,7 +13,7 @@ router.post("/seed", async (_req, res): Promise<void> => {
     }
 
     await db.insert(usersTable).values([
-      { username: "admin", name: "Administrator", passwordHash: hashPassword("admin123"), role: "admin" },
+      { username: "admin", name: "Administrator", passwordHash: hashPassword("admin123"), role: "super_admin" },
       { username: "cashier", name: "Cashier 1", passwordHash: hashPassword("cashier123"), role: "cashier" },
     ]);
 
