@@ -345,23 +345,30 @@ export default function POSScreen() {
         onPress={isAdmin ? () => setShowLocationModal(true) : undefined}
         activeOpacity={isAdmin ? 0.7 : 1}
       >
-        <View style={[styles.locationIconWrap, { backgroundColor: selectedLocation ? "#D1FAE5" : colors.secondary }]}>
-          
+        <View style={[styles.locationIconWrap, { backgroundColor: selectedLocation ? "#059669" : colors.primary }]}>
+          <Text style={{ fontSize: 17, color: "#FFF", lineHeight: 22 }}>
+            {selectedLocation ? "◉" : "⊕"}
+          </Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.locationBannerLabel, { color: colors.mutedForeground }]}>
             {isAdmin ? "ACTIVE APP" : "YOUR APP"}
           </Text>
-          <Text style={[styles.locationBannerName, { color: selectedLocation ? "#065F46" : colors.mutedForeground }]}>
-            {selectedLocation?.name ?? (isAdmin ? "Select App" : "No app assigned")}
+          <Text style={[styles.locationBannerName, { color: selectedLocation ? "#065F46" : colors.primary }]}>
+            {selectedLocation?.name ?? (isAdmin ? "Tap to select app" : "No app assigned")}
           </Text>
         </View>
-        {null}
-        {!isAdmin && selectedLocation && (
-          <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#065F46" }}>ASSIGNED</Text>
+        {selectedLocation ? (
+          <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#A7F3D0" }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#065F46" }}>
+              {isAdmin ? "ACTIVE ›" : "ASSIGNED"}
+            </Text>
           </View>
-        )}
+        ) : isAdmin ? (
+          <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.border }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.primary }}>›</Text>
+          </View>
+        ) : null}
       </TouchableOpacity>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
