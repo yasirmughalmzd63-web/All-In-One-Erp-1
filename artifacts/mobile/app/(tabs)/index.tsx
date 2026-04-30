@@ -433,14 +433,19 @@ export default function POSScreen() {
                   )}
                 </>
               ) : (
-                <>
-                  <Text style={[styles.productPlaceholder, { color: colors.mutedForeground }]}>Tap to select product</Text>
-                  <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Required to begin sale</Text>
-                </>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  <View style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: "#EFF6FF", alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontSize: 24 }}>🛍️</Text>
+                  </View>
+                  <View>
+                    <Text style={[styles.productPlaceholder, { color: colors.primary }]}>Tap to select product</Text>
+                    <Text style={[styles.productSub, { color: colors.mutedForeground }]}>Required to begin sale</Text>
+                  </View>
+                </View>
               )}
             </View>
             <View style={[styles.productChevron, { backgroundColor: colors.secondary }]}>
-              
+              <Text style={{ fontSize: 16, color: colors.primary, fontFamily: "Inter_700Bold" }}>›</Text>
             </View>
           </TouchableOpacity>
         ) : (
@@ -481,9 +486,9 @@ export default function POSScreen() {
                   <TouchableOpacity
                     key={p.id}
                     style={{
-                      alignItems: "center", gap: 5,
+                      alignItems: "center", gap: 4,
                       paddingHorizontal: 12, paddingVertical: 9,
-                      borderRadius: 12, borderWidth: 2,
+                      borderRadius: 14, borderWidth: 2,
                       backgroundColor: isSelected ? colors.primary : inStock ? colors.secondary : colors.dangerBg,
                       borderColor: isSelected ? colors.primary : inStock ? colors.border : colors.danger,
                       minWidth: 70,
@@ -495,7 +500,7 @@ export default function POSScreen() {
                     }}
                     activeOpacity={0.75}
                   >
-                    
+                    <Text style={{ fontSize: 20, lineHeight: 24 }}>{inStock ? "📦" : "🚫"}</Text>
                     <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: isSelected ? "#FFF" : colors.text, textAlign: "center" }} numberOfLines={2}>
                       {p.name}
                     </Text>
@@ -548,44 +553,43 @@ export default function POSScreen() {
         )}
 
         {/* ── Amount + QTY + Presets (unified card) ───────────────────── */}
-        <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border, overflow: "hidden" }]}>
 
           {/* Single row: AMOUNT | divider | QTY + copy */}
           <View style={{ flexDirection: "row", alignItems: "stretch" }}>
-            {/* Amount side */}
-            <View style={{ flex: 1.1, padding: 12, paddingRight: 10 }}>
-              <Text style={[styles.amountLabel, { color: colors.mutedForeground, marginBottom: 2 }]}>AMOUNT</Text>
-              <Text style={[styles.amountValue, { color: colors.text, fontSize: 22 }]} numberOfLines={1} adjustsFontSizeToFit>
+            {/* Amount side — blue tinted */}
+            <View style={{ flex: 1.1, padding: 12, paddingRight: 10, backgroundColor: "#EFF6FF" }}>
+              <Text style={[styles.amountLabel, { color: "#3B82F6", marginBottom: 2 }]}>💵 AMOUNT</Text>
+              <Text style={[styles.amountValue, { color: "#1E40AF", fontSize: 24 }]} numberOfLines={1} adjustsFontSizeToFit>
                 {typedPart}
-                <Text style={{ color: colors.mutedForeground, opacity: 0.3 }}>{ghostPart}</Text>
+                <Text style={{ color: "#93C5FD", opacity: 0.5 }}>{ghostPart}</Text>
               </Text>
             </View>
 
             {/* Vertical separator */}
-            <View style={{ width: 1, backgroundColor: colors.border, marginVertical: 10 }} />
+            <View style={{ width: 1, backgroundColor: colors.border }} />
 
-            {/* QTY side */}
-            <View style={{ flex: 1, padding: 12, paddingLeft: 10 }}>
-              <Text style={[styles.qtyLabel, { color: colors.mutedForeground, marginBottom: 2 }]}>
-                QTY{selectedProduct ? ` @ ${activePrice.toFixed(2)}` : ""}
+            {/* QTY side — emerald tinted */}
+            <View style={{ flex: 1, padding: 12, paddingLeft: 10, backgroundColor: "#ECFDF5" }}>
+              <Text style={[styles.qtyLabel, { color: "#059669", marginBottom: 2 }]}>
+                📦 QTY{selectedProduct ? ` @ ${activePrice.toFixed(0)}` : ""}
               </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 32, lineHeight: 38 }, {
-                  color: stockWarning ? colors.danger : qty > 0 ? colors.success : colors.mutedForeground,
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 30, lineHeight: 36 }, {
+                  color: stockWarning ? colors.danger : qty > 0 ? "#065F46" : "#6EE7B7",
                 }]}>
                   {qty > 0 ? qty.toLocaleString() : "—"}
                 </Text>
                 <TouchableOpacity
                   style={[styles.copyBtn, {
-                    backgroundColor: copyError ? "#FEF2F2" : copiedQty ? colors.saleBg : colors.secondary,
-                    borderColor: copyError ? colors.danger : copiedQty ? colors.success : colors.border,
-                    paddingHorizontal: 14, paddingVertical: 10, gap: 5,
+                    backgroundColor: copyError ? "#FEF2F2" : copiedQty ? "#D1FAE5" : "#FFF",
+                    borderColor: copyError ? colors.danger : copiedQty ? "#059669" : "#A7F3D0",
+                    paddingHorizontal: 10, paddingVertical: 8, gap: 4,
                   }]}
                   onPress={handleCopyQty} disabled={qty <= 0}
                 >
-                  
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: copyError ? colors.danger : copiedQty ? colors.success : colors.primary }}>
-                    {copyError ? "Error!" : copiedQty ? "Copied" : "Copy"}
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: copyError ? colors.danger : copiedQty ? "#059669" : "#065F46" }}>
+                    {copyError ? "Error!" : copiedQty ? "✓ Copied" : "Copy"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -594,28 +598,38 @@ export default function POSScreen() {
 
           {/* Preset buttons row */}
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
-          <View style={{ flexDirection: "row", gap: 8, padding: 10 }}>
-            {[500, 1000, 2000, 5000].map(preset => {
-              const isSelected = parseFloat(amount) === preset;
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: "row", gap: 7, paddingHorizontal: 10, paddingVertical: 9 }}>
+            {([
+              { v: 100,  label: "100",  bg: "#FEF3C7", border: "#F59E0B", text: "#92400E" },
+              { v: 200,  label: "200",  bg: "#FCE7F3", border: "#EC4899", text: "#831843" },
+              { v: 300,  label: "300",  bg: "#EDE9FE", border: "#8B5CF6", text: "#4C1D95" },
+              { v: 500,  label: "500",  bg: "#DBEAFE", border: "#3B82F6", text: "#1E3A8A" },
+              { v: 1000, label: "1K",   bg: "#E0E7FF", border: "#6366F1", text: "#312E81" },
+              { v: 1500, label: "1.5K", bg: "#FEE2E2", border: "#EF4444", text: "#7F1D1D" },
+              { v: 5000, label: "5K",   bg: "#D1FAE5", border: "#10B981", text: "#064E3B" },
+            ] as const).map(({ v, label, bg, border, text }) => {
+              const isSelected = parseFloat(amount) === v;
               return (
                 <TouchableOpacity
-                  key={preset}
-                  style={[styles.presetBtn, {
-                    backgroundColor: isSelected ? colors.primary : colors.secondary,
-                    borderColor: isSelected ? colors.primary : colors.border,
-                  }]}
+                  key={v}
+                  style={{
+                    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1.5,
+                    backgroundColor: isSelected ? border : bg,
+                    borderColor: border,
+                    minWidth: 52, alignItems: "center",
+                  }}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                    setAmount(String(preset));
+                    setAmount(String(v));
                   }}
                 >
-                  <Text style={[styles.presetBtnText, { color: isSelected ? "#FFF" : colors.primary }]}>
-                    {preset >= 1000 ? `${preset / 1000}K` : preset}
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: isSelected ? "#FFF" : text }}>
+                    {label}
                   </Text>
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
         </View>
 
         {/* ── Customer + Location + Account pickers ───────────────────── */}
