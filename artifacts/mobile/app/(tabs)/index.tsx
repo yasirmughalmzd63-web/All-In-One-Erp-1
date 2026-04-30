@@ -983,67 +983,62 @@ export default function POSScreen() {
           </View>
         )}
 
-        {/* ── Amount + QTY + Presets (unified card) ───────────────────── */}
-        <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border, overflow: "hidden" }]}>
+        {/* ── Amount | QTY | Copy — 3 separate colorful cards ────────── */}
+        <View style={{ flexDirection: "row", gap: 7, marginHorizontal: 14, marginTop: 6 }}>
 
-          {/* Single compact line: AMOUNT | divider | QTY + copy */}
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            {/* Amount side */}
-            <View style={{ flex: 1.1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: balanceShortfall > 0 ? "#FEF2F2" : "#EFF6FF" }}>
-              <Text style={{ fontSize: 14 }}>{balanceShortfall > 0 ? "⚠️" : "💵"}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: balanceShortfall > 0 ? "#EF4444" : "#3B82F6", letterSpacing: 0.8 }}>AMOUNT</Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: balanceShortfall > 0 ? "#DC2626" : "#1E40AF", lineHeight: 26 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-                  {typedPart}<Text style={{ color: "#93C5FD", opacity: 0.5 }}>{ghostPart}</Text>
-                </Text>
-                {balanceShortfall > 0 && (
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444" }}>
-                    Short ₨{balanceShortfall.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            {/* Vertical separator */}
-            <View style={{ width: 1, alignSelf: "stretch", backgroundColor: colors.border }} />
-
-            {/* QTY side */}
-            <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: stockWarning ? "#FEF2F2" : "#ECFDF5" }}>
-              <Text style={{ fontSize: 14 }}>{stockWarning ? "⚠️" : "📦"}</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: stockWarning ? "#EF4444" : "#059669", letterSpacing: 0.8 }}>
-                  QTY{selectedProduct ? ` @ ${activePrice.toFixed(0)}` : ""}
-                </Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: stockWarning ? "#DC2626" : qty > 0 ? "#065F46" : "#6EE7B7", lineHeight: 26 }}>
-                  {qty > 0 ? qty.toLocaleString() : "—"}
-                </Text>
-                {stockWarning === "exceeds-stock" && selectedProduct && (
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444" }}>Max {selectedProduct.stock} {selectedProduct.unit}</Text>
-                )}
-                {stockWarning === "out-of-stock" && (
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444" }}>Out of stock</Text>
-                )}
-              </View>
-              <TouchableOpacity
-                style={{
-                  flexDirection: "row", alignItems: "center", gap: 4,
-                  paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10,
-                  backgroundColor: copyError ? "#FEE2E2" : copiedQty ? "#D1FAE5" : "#E0E7FF",
-                  opacity: qty <= 0 ? 0.4 : 1,
-                }}
-                onPress={handleCopyQty} disabled={qty <= 0}
-                activeOpacity={0.7}
-              >
-                <Text style={{ fontSize: 13 }}>{copyError ? "⚠️" : copiedQty ? "✅" : "📋"}</Text>
-                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: copyError ? "#B91C1C" : copiedQty ? "#065F46" : "#3730A3" }}>
-                  {copyError ? "Error" : copiedQty ? "Copied!" : "Copy"}
-                </Text>
-              </TouchableOpacity>
-            </View>
+          {/* 💵 AMOUNT card — blue */}
+          <View style={{ flex: 1.1, backgroundColor: "#EFF6FF", borderRadius: 14, borderWidth: 2, borderColor: "#93C5FD", paddingHorizontal: 11, paddingVertical: 9 }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: "#3B82F6", letterSpacing: 0.9, marginBottom: 2 }}>💵 AMOUNT</Text>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: "#1E40AF", lineHeight: 26 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>
+              {typedPart}<Text style={{ color: "#93C5FD", opacity: 0.6 }}>{ghostPart}</Text>
+            </Text>
           </View>
 
-          {/* Preset buttons row */}
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          {/* 📦 QTY card — green */}
+          <View style={{
+            flex: 1,
+            backgroundColor: stockWarning ? "#FEF2F2" : "#ECFDF5",
+            borderRadius: 14, borderWidth: 2,
+            borderColor: stockWarning ? "#FCA5A5" : "#6EE7B7",
+            paddingHorizontal: 10, paddingVertical: 9,
+          }}>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: stockWarning ? "#EF4444" : "#059669", letterSpacing: 0.9, marginBottom: 2 }}>
+              {stockWarning ? "⚠️ QTY" : "📦 QTY"}{selectedProduct ? ` @ ${activePrice.toFixed(0)}` : ""}
+            </Text>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: stockWarning ? "#DC2626" : qty > 0 ? "#065F46" : "#A7F3D0", lineHeight: 26 }}>
+              {qty > 0 ? qty.toLocaleString() : "—"}
+            </Text>
+            {stockWarning === "exceeds-stock" && selectedProduct && (
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444", marginTop: 1 }}>Max {selectedProduct.stock} {selectedProduct.unit}</Text>
+            )}
+            {stockWarning === "out-of-stock" && (
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#EF4444", marginTop: 1 }}>Out of stock</Text>
+            )}
+          </View>
+
+          {/* 📋 COPY card — indigo */}
+          <TouchableOpacity
+            style={{
+              backgroundColor: copyError ? "#FEF2F2" : copiedQty ? "#ECFDF5" : "#EEF2FF",
+              borderRadius: 14, borderWidth: 2,
+              borderColor: copyError ? "#FCA5A5" : copiedQty ? "#6EE7B7" : "#A5B4FC",
+              paddingHorizontal: 10, paddingVertical: 9,
+              alignItems: "center", justifyContent: "center", gap: 3,
+              opacity: qty <= 0 ? 0.4 : 1,
+            }}
+            onPress={handleCopyQty} disabled={qty <= 0}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 18 }}>{copyError ? "⚠️" : copiedQty ? "✅" : "📋"}</Text>
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: copyError ? "#B91C1C" : copiedQty ? "#065F46" : "#3730A3", textAlign: "center" }}>
+              {copyError ? "Error" : copiedQty ? "Copied!" : "Copy\nQTY"}
+            </Text>
+          </TouchableOpacity>
+
+        </View>
+
+        {/* ── Quick preset amounts ─────────────────────────────────────── */}
+        <View style={[styles.displayCard, { backgroundColor: colors.card, borderColor: colors.border, overflow: "hidden" }]}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: "row", gap: 7, paddingHorizontal: 10, paddingVertical: 9 }}>
             {([
               { v: 100,  label: "100",  bg: "#FEF3C7", border: "#F59E0B", text: "#92400E" },
