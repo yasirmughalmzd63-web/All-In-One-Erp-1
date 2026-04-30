@@ -142,21 +142,6 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Role badges */}
-      <View style={styles.rolesRow}>
-        {[
-          { role: "Super Admin", emoji: "👑", color: "#FCD34D" },
-          { role: "Admin", emoji: "🛡", color: "#A5F3FC" },
-          { role: "Manager", emoji: "📊", color: "#BBF7D0" },
-          { role: "Cashier", emoji: "💵", color: "#FDE68A" },
-        ].map(r => (
-          <View key={r.role} style={[styles.roleBadge, { borderColor: "rgba(255,255,255,0.2)" }]}>
-            <Text style={{ fontSize: 12 }}>{r.emoji}</Text>
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: r.color }}>{r.role}</Text>
-          </View>
-        ))}
-      </View>
-
       <View style={[styles.footer, { paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 16 }]}>
         <Text style={styles.footerText}>Coins Sale v1.0 • Secure Business Platform</Text>
         <Text style={[styles.footerText, { marginTop: 4 }]}>Made by Yasir Mughal</Text>
@@ -312,23 +297,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#3B82F6",
     marginTop: 1,
-  },
-  rolesRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 18,
-    flexWrap: "wrap",
-    justifyContent: "center",
-  },
-  roleBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
   },
   footer: {
     marginTop: 20,

@@ -87,8 +87,12 @@ router.get("/registrations", requireAuth, async (req, res): Promise<void> => {
   })));
 });
 
-// PATCH /api/registrations/:id — admin only, approve or reject
+// PATCH /api/registrations/:id — super_admin only, approve or reject
 router.patch("/registrations/:id", requireAuth, async (req, res): Promise<void> => {
+  if (req.userRole !== "super_admin") {
+    res.status(403).json({ error: "Only super admins can approve or reject registrations" });
+    return;
+  }
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw!, 10);
   const { action, rejectionReason } = req.body as { action?: string; rejectionReason?: string };

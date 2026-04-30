@@ -79,6 +79,29 @@ const PACKAGES: {
 
 const BUSINESS_TYPES = ["Retail", "Wholesale", "Services", "Manufacturing", "Import/Export", "Other"];
 
+const BUSINESS_NATURES = [
+  { emoji: "🛒", label: "Products / POS" },
+  { emoji: "👗", label: "Fashion & Clothing" },
+  { emoji: "🏥", label: "Medical" },
+  { emoji: "👟", label: "Footwear" },
+  { emoji: "🔧", label: "Hardware" },
+  { emoji: "💇", label: "Salon & Spa" },
+  { emoji: "📱", label: "Electronics & Mobile" },
+  { emoji: "🏪", label: "Department Store" },
+  { emoji: "🍽️", label: "Restaurant" },
+  { emoji: "🏗️", label: "Sanitary" },
+  { emoji: "🌐", label: "Web & Agency" },
+  { emoji: "📚", label: "Stationary" },
+  { emoji: "🔌", label: "Repair Shop" },
+  { emoji: "🍞", label: "Daily Needs" },
+  { emoji: "🍶", label: "Liquor" },
+  { emoji: "💼", label: "Consulting" },
+  { emoji: "📦", label: "Wholesale" },
+  { emoji: "🏭", label: "Manufacturing" },
+  { emoji: "✈️", label: "Import / Export" },
+  { emoji: "🔑", label: "Other" },
+];
+
 // ── Industries from image ────────────────────────────────────────────────────
 const INDUSTRIES = [
   "Products", "All Services", "Fashion & Clothing", "Department Stores",
@@ -107,7 +130,10 @@ export default function RegisterScreen() {
   // Step 1: Business Info
   const [businessName, setBusinessName] = useState("");
   const [businessType, setBusinessType] = useState("");
+  const [businessNature, setBusinessNature] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [ownerPhone, setOwnerPhone] = useState("");
+  const [ownerCnic, setOwnerCnic] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -124,6 +150,7 @@ export default function RegisterScreen() {
 
   const validateStep1 = () => {
     if (!businessName.trim()) { Alert.alert("Required", "Please enter your business name."); return false; }
+    if (!businessNature) { Alert.alert("Required", "Please select the business nature."); return false; }
     if (!businessType) { Alert.alert("Required", "Please select your business type."); return false; }
     if (!ownerName.trim()) { Alert.alert("Required", "Please enter the owner name."); return false; }
     return true;
@@ -146,8 +173,11 @@ export default function RegisterScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           businessName: businessName.trim(),
+          businessNature,
           businessType,
           ownerName: ownerName.trim(),
+          ownerPhone: ownerPhone.trim() || undefined,
+          ownerCnic: ownerCnic.trim() || undefined,
           email: email.trim() || undefined,
           phone: phone.trim() || undefined,
           address: address.trim() || undefined,
@@ -241,8 +271,23 @@ export default function RegisterScreen() {
 
             <View style={styles.card}>
               <Field label="Business Name *" value={businessName} onChangeText={setBusinessName} placeholder="e.g. Coins Dynasty Ltd" />
-              <Field label="Owner Name *" value={ownerName} onChangeText={setOwnerName} placeholder="Full name of the owner" />
 
+              {/* Business Nature */}
+              <Text style={styles.fieldLabel}>Business Nature *</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                {BUSINESS_NATURES.map(n => (
+                  <TouchableOpacity
+                    key={n.label}
+                    onPress={() => setBusinessNature(n.label)}
+                    style={[styles.typePill, businessNature === n.label && styles.typePillSelected]}
+                  >
+                    <Text style={{ fontSize: 13 }}>{n.emoji}</Text>
+                    <Text style={[styles.typePillText, businessNature === n.label && { color: "#FFF" }]}>{n.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Business Type */}
               <Text style={styles.fieldLabel}>Business Type *</Text>
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
                 {BUSINESS_TYPES.map(t => (
@@ -256,10 +301,18 @@ export default function RegisterScreen() {
                 ))}
               </View>
 
-              <Field label="Phone" value={phone} onChangeText={setPhone} placeholder="+92 300 0000000" keyboardType="phone-pad" />
-              <Field label="Email" value={email} onChangeText={setEmail} placeholder="business@email.com" keyboardType="email-address" />
+              {/* Owner Details */}
+              <View style={{ marginBottom: 16, backgroundColor: "#F0F9FF", borderRadius: 12, padding: 14, borderWidth: 1, borderColor: "#BAE6FD" }}>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: "#0369A1", marginBottom: 12 }}>👤 Owner Details</Text>
+                <Field label="Owner Name *" value={ownerName} onChangeText={setOwnerName} placeholder="Full legal name" />
+                <Field label="Owner Phone" value={ownerPhone} onChangeText={setOwnerPhone} placeholder="+92 300 0000000" keyboardType="phone-pad" />
+                <Field label="Owner CNIC" value={ownerCnic} onChangeText={setOwnerCnic} placeholder="35202-1234567-1" keyboardType="phone-pad" />
+              </View>
+
+              <Field label="Business Phone" value={phone} onChangeText={setPhone} placeholder="+92 300 0000000" keyboardType="phone-pad" />
+              <Field label="Business Email" value={email} onChangeText={setEmail} placeholder="business@email.com" keyboardType="email-address" />
               <Field label="Address" value={address} onChangeText={setAddress} placeholder="City, Province" />
-              <Field label="Business Purpose / Description" value={purpose} onChangeText={setPurpose} placeholder="What does your business do?" multiline />
+              <Field label="Business Description" value={purpose} onChangeText={setPurpose} placeholder="What does your business do?" multiline />
 
               <TouchableOpacity
                 style={styles.nextBtn}
@@ -398,6 +451,7 @@ export default function RegisterScreen() {
                 </View>
               </View>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#1E40AF" }}>🏢 {businessName}</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#1E40AF" }}>🏷️ {businessNature} · {businessType}</Text>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "#1E40AF" }}>
                 {selectedPkg.emoji} {selectedPkg.name} Plan — {selectedPkg.price}
               </Text>

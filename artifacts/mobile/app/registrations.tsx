@@ -46,7 +46,7 @@ export default function RegistrationsScreen() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectingId, setRejectingId] = useState<number | null>(null);
 
-  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const isAdmin = user?.role === "super_admin";
 
   const load = useCallback(async () => {
     try {
