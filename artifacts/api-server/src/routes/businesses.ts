@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db, businessRegistrationsTable, usersTable } from "@workspace/db";
 import { hashPassword } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -24,10 +24,16 @@ export const PACKAGE_PRIVILEGES: Record<string, string[]> = {
   enterprise: ["dashboard", "pos", "sales", "purchases", "expenses", "credits", "inventory", "customers", "suppliers", "accounts", "locations", "categories", "users", "audit", "currency", "cash_count", "reconciliation", "pos_product", "pos_location", "pos_account", "pos_credit_customer"],
 };
 
-// ── GET /api/businesses — super admin: list all approved businesses ────────────
+const PACKAGE_MONTHLY_FEE: Record<string, string> = {
+  free: "0.00",
+  basic: "999.00",
+  professional: "2499.00",
+  enterprise: "4999.00",
+};
+
+// ── GET /api/businesses — super admin: list all businesses (all statuses) ─────
 router.get("/businesses", requireAuth, requireSuperAdmin, async (req, res): Promise<void> => {
   const regs = await db.select().from(businessRegistrationsTable)
-    .where(eq(businessRegistrationsTable.status, "approved"))
     .orderBy(businessRegistrationsTable.createdAt);
 
   const usernames = regs.map(r => r.adminUsername);
@@ -49,7 +55,14 @@ router.get("/businesses", requireAuth, requireSuperAdmin, async (req, res): Prom
     package: r.package,
     adminUsername: r.adminUsername,
     status: r.status,
+    rejectionReason: r.rejectionReason,
+    paymentMethod: r.paymentMethod,
+    paymentStatus: r.paymentStatus,
+    subscriptionEndDate: r.subscriptionEndDate,
+    monthlyFee: r.monthlyFee,
+    notes: r.notes,
     createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
     adminUser: userMap[r.adminUsername] ?? null,
     modules: userMap[r.adminUsername]?.privileges
       ? JSON.parse(userMap[r.adminUsername]!.privileges!)
@@ -57,16 +70,58 @@ router.get("/businesses", requireAuth, requireSuperAdmin, async (req, res): Prom
   })));
 });
 
+// ── GET /api/businesses/stats — super admin: aggregate stats ──────────────────
+router.get("/businesses/stats", requireAuth, requireSuperAdmin, async (req, res): Promise<void> => {
+  const regs = await db.select().from(businessRegistrationsTable);
+
+  const users = regs.length > 0
+    ? await db.select({ username: usersTable.username, isActive: usersTable.isActive }).from(usersTable)
+    : [];
+  const userMap = Object.fromEntries(users.map(u => [u.username, u]));
+
+  const approved = regs.filter(r => r.status === "approved");
+  const pending  = regs.filter(r => r.status === "pending");
+  const rejected = regs.filter(r => r.status === "rejected");
+
+  const byPackage: Record<string, number> = { free: 0, basic: 0, professional: 0, enterprise: 0 };
+  const byPaymentStatus: Record<string, number> = { trial: 0, active: 0, overdue: 0, cancelled: 0 };
+  let monthlyRevenue = 0;
+  let activeCount = 0;
+
+  for (const r of approved) {
+    byPackage[r.package] = (byPackage[r.package] ?? 0) + 1;
+    const ps = r.paymentStatus ?? "trial";
+    byPaymentStatus[ps] = (byPaymentStatus[ps] ?? 0) + 1;
+    if (r.monthlyFee) monthlyRevenue += parseFloat(r.monthlyFee);
+    if (userMap[r.adminUsername]?.isActive) activeCount++;
+  }
+
+  res.json({
+    total: regs.length,
+    approved: approved.length,
+    pending:  pending.length,
+    rejected: rejected.length,
+    active:   activeCount,
+    inactive: approved.length - activeCount,
+    byPackage,
+    byPaymentStatus,
+    monthlyRevenue: monthlyRevenue.toFixed(2),
+  });
+});
+
 // ── POST /api/businesses — super admin creates a business directly ─────────────
 router.post("/businesses", requireAuth, requireSuperAdmin, async (req, res): Promise<void> => {
   const {
     businessName, businessType, ownerName, email, phone, address,
     package: pkg, adminUsername, adminPassword, modules,
+    paymentMethod, paymentStatus, subscriptionEndDate, monthlyFee, notes,
   } = req.body as {
     businessName?: string; businessType?: string; ownerName?: string;
     email?: string; phone?: string; address?: string;
     package?: string; adminUsername?: string; adminPassword?: string;
     modules?: string[] | null;
+    paymentMethod?: string; paymentStatus?: string;
+    subscriptionEndDate?: string; monthlyFee?: string; notes?: string;
   };
 
   if (!businessName || !businessType || !ownerName || !adminUsername || !adminPassword || !pkg) {
@@ -82,12 +137,18 @@ router.post("/businesses", requireAuth, requireSuperAdmin, async (req, res): Pro
 
   const privileges = modules ?? PACKAGE_PRIVILEGES[pkg] ?? PACKAGE_PRIVILEGES.basic!;
   const passwordHash = hashPassword(adminPassword);
+  const fee = monthlyFee ?? PACKAGE_MONTHLY_FEE[pkg] ?? "0.00";
 
   const [reg] = await db.insert(businessRegistrationsTable).values({
     businessName, businessType, ownerName,
     email: email ?? null, phone: phone ?? null, address: address ?? null,
     package: pkg, adminUsername, adminPasswordHash: passwordHash,
     status: "approved",
+    paymentMethod: paymentMethod ?? null,
+    paymentStatus: paymentStatus ?? (pkg === "free" ? "active" : "trial"),
+    subscriptionEndDate: subscriptionEndDate ?? null,
+    monthlyFee: fee,
+    notes: notes ?? null,
   }).returning();
 
   const [newUser] = await db.insert(usersTable).values({
@@ -131,19 +192,40 @@ router.patch("/businesses/:id/modules", requireAuth, requireSuperAdmin, async (r
   res.json({ success: true, modules });
 });
 
-// ── PATCH /api/businesses/:id — super admin updates business info/package ────
+// ── PATCH /api/businesses/:id — super admin updates business info/package/payment
 router.patch("/businesses/:id", requireAuth, requireSuperAdmin, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
-  const { package: pkg, isActive } = req.body as { package?: string; isActive?: boolean };
+  const {
+    package: pkg, isActive,
+    paymentMethod, paymentStatus, subscriptionEndDate, monthlyFee, notes,
+  } = req.body as {
+    package?: string; isActive?: boolean;
+    paymentMethod?: string; paymentStatus?: string;
+    subscriptionEndDate?: string; monthlyFee?: string; notes?: string;
+  };
 
   const [reg] = await db.select().from(businessRegistrationsTable).where(eq(businessRegistrationsTable.id, id));
   if (!reg) { res.status(404).json({ error: "Business not found" }); return; }
+
+  const bizUpdates: Record<string, unknown> = {};
 
   if (pkg) {
     if (!["free", "basic", "professional", "enterprise"].includes(pkg)) {
       res.status(400).json({ error: "Invalid package" }); return;
     }
-    await db.update(businessRegistrationsTable).set({ package: pkg }).where(eq(businessRegistrationsTable.id, id));
+    bizUpdates.package = pkg;
+    // Auto-update monthlyFee when package changes (unless explicitly overridden)
+    if (!monthlyFee) bizUpdates.monthlyFee = PACKAGE_MONTHLY_FEE[pkg] ?? "0.00";
+  }
+
+  if (paymentMethod !== undefined) bizUpdates.paymentMethod = paymentMethod;
+  if (paymentStatus !== undefined) bizUpdates.paymentStatus = paymentStatus;
+  if (subscriptionEndDate !== undefined) bizUpdates.subscriptionEndDate = subscriptionEndDate || null;
+  if (monthlyFee !== undefined)         bizUpdates.monthlyFee = monthlyFee;
+  if (notes !== undefined)              bizUpdates.notes = notes;
+
+  if (Object.keys(bizUpdates).length > 0) {
+    await db.update(businessRegistrationsTable).set(bizUpdates).where(eq(businessRegistrationsTable.id, id));
   }
 
   if (isActive !== undefined) {
@@ -153,7 +235,7 @@ router.patch("/businesses/:id", requireAuth, requireSuperAdmin, async (req, res)
     }
   }
 
-  await logAudit(req.userId, "update", "business", id, `Updated business ${reg.businessName}: pkg=${pkg ?? "unchanged"} active=${isActive ?? "unchanged"}`);
+  await logAudit(req.userId, "update", "business", id, `Updated business ${reg.businessName}: pkg=${pkg ?? "unchanged"} payStatus=${paymentStatus ?? "unchanged"} active=${isActive ?? "unchanged"}`);
   res.json({ success: true });
 });
 

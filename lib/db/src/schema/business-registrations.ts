@@ -16,6 +16,12 @@ export const businessRegistrationsTable = pgTable("business_registrations", {
   adminPasswordHash: text("admin_password_hash").notNull(),
   status: text("status").notNull().default("pending"),
   rejectionReason: text("rejection_reason"),
+  // Subscription / Payment tracking
+  paymentMethod: text("payment_method"),        // cash | easypaisa | jazzcash | bank_transfer | stripe | none
+  paymentStatus: text("payment_status").default("trial"), // trial | active | overdue | cancelled
+  subscriptionEndDate: text("subscription_end_date"),     // YYYY-MM-DD
+  monthlyFee: text("monthly_fee"),              // numeric string e.g. "2499.00"
+  notes: text("notes"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
