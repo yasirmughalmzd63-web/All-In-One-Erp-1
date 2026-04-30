@@ -27,7 +27,7 @@ function formatK(n: number): string {
 
 type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null; categoryName?: string | null; locationId?: number | null };
 type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null; locationId?: number | null };
-type Account = { id: number; name: string; type: string; balance: string; currency: string };
+type Account = { id: number; name: string; type: string; balance: string; currency: string; locationId?: number | null };
 type Location = { id: number; name: string; address?: string | null };
 type RateMode = "normal" | "wholesale";
 
@@ -430,7 +430,11 @@ export default function POSScreen() {
     .filter(p => !selectedLocation || p.locationId === selectedLocation.id);
 
   const allowedAccounts = accounts
-    .filter(a => allowedAccountIds === null || allowedAccountIds.has(a.id));
+    .filter(a => allowedAccountIds === null || allowedAccountIds.has(a.id))
+    .filter(a => !selectedLocation || a.locationId === selectedLocation.id);
+
+  const activeCustomers = customers
+    .filter(c => !selectedLocation || c.locationId === selectedLocation.id);
 
   const allowedLocations = locations
     .filter(l => allowedLocationIds === null || allowedLocationIds.has(l.id));
@@ -458,10 +462,17 @@ export default function POSScreen() {
     }
   }, [locations.length, user?.locationId, isAdmin]);
 
-  // Clear selected product when location changes and product doesn't belong there
+  // Clear product/account/customer when location changes and they don't belong there
   React.useEffect(() => {
-    if (selectedProduct && selectedLocation && selectedProduct.locationId !== selectedLocation.id) {
+    if (!selectedLocation) return;
+    if (selectedProduct && selectedProduct.locationId !== selectedLocation.id) {
       setSelectedProduct(null);
+    }
+    if (selectedAccount && selectedAccount.locationId !== selectedLocation.id) {
+      setSelectedAccount(null);
+    }
+    if (selectedCustomer && selectedCustomer.locationId !== selectedLocation.id) {
+      setSelectedCustomer(null);
     }
   }, [selectedLocation?.id]);
 
@@ -1279,7 +1290,7 @@ export default function POSScreen() {
         onClose={() => setShowProductModal(false)}
       />
       <PickerModal<Customer>
-        visible={showCustomerModal} title="Select Customer" items={customers}
+        visible={showCustomerModal} title="Select Customer" items={activeCustomers}
         onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)}
         renderSub={c => c.phone ?? ""}
       />
