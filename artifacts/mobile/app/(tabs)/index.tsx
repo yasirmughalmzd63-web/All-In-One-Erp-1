@@ -662,7 +662,7 @@ export default function POSScreen() {
         activeOpacity={isAdmin ? 0.7 : 1}
       >
         <View style={[styles.locationIconWrap, { backgroundColor: selectedLocation ? "#059669" : colors.primary }]}>
-          <Text style={{ fontSize: 17, color: "#FFF", lineHeight: 22 }}>
+          <Text style={{ fontSize: 13, color: "#FFF", lineHeight: 18 }}>
             {selectedLocation ? "◉" : "⊕"}
           </Text>
         </View>
@@ -803,50 +803,48 @@ export default function POSScreen() {
             <View style={{ flex: 1 }}>
               {selectedProduct ? (
                 <>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                    <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }} />
-                    <Text style={[styles.productName, { color: colors.text }]}>{selectedProduct.name}</Text>
-                    <View style={[styles.stockBadge, { backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.saleBg : colors.dangerBg }]}>
-                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }}>
-                        Stock: {selectedProduct.stock ?? 0} {selectedProduct.unit}
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
-                    <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.primary }}>Retail {parseFloat(selectedProduct.unitPrice).toFixed(2)}</Text>
-                    </View>
-                    <View style={{ backgroundColor: colors.purchaseBg, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 }}>
-                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.purchase }}>WS {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
-                    </View>
-                  </View>
-                  {stockWarning === "out-of-stock" && (
-                    <View style={[styles.alertRow, { backgroundColor: colors.dangerBg }]}>
-                      
-                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
-                    </View>
-                  )}
-                  {stockWarning === "exceeds-stock" && (
-                    <View style={[styles.alertRow, { backgroundColor: "#FEF3C7" }]}>
-                      
-                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct.stock}</Text>
-                    </View>
-                  )}
-                  {/* Set Default button for product */}
-                  <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
+                  {/* Row 1: dot + name + [Set Default] + [Stock] */}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }} />
+                    <Text style={[styles.productName, { color: colors.text, flex: 1, fontSize: 14 }]} numberOfLines={1}>{selectedProduct.name}</Text>
                     {selectedProduct.id !== defaults.productId ? (
                       <TouchableOpacity
                         onPress={e => { e.stopPropagation?.(); saveDefault("productId", selectedProduct.id); }}
-                        style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#FDE68A", alignSelf: "flex-start" }}
+                        style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7, borderWidth: 1, borderColor: "#FDE68A" }}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#92400E" }}>★ Set Default</Text>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#92400E" }}>★ Default</Text>
                       </TouchableOpacity>
                     ) : (
-                      <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: "#BBF7D0", alignSelf: "flex-start" }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#166534" }}>★ Default</Text>
+                      <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 7, paddingVertical: 3, borderRadius: 7, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#166534" }}>★ Default</Text>
                       </View>
                     )}
+                    <View style={[styles.stockBadge, { backgroundColor: (selectedProduct.stock ?? 0) > 0 ? colors.saleBg : colors.dangerBg }]}>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: (selectedProduct.stock ?? 0) > 0 ? colors.success : colors.danger }}>
+                        {selectedProduct.stock ?? 0} {selectedProduct.unit}
+                      </Text>
+                    </View>
                   </View>
+                  {/* Row 2: prices */}
+                  <View style={{ flexDirection: "row", gap: 6 }}>
+                    <View style={{ backgroundColor: colors.secondary, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 7 }}>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.primary }}>Retail {parseFloat(selectedProduct.unitPrice).toFixed(2)}</Text>
+                    </View>
+                    <View style={{ backgroundColor: colors.purchaseBg, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 7 }}>
+                      <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.purchase }}>WS {parseFloat(selectedProduct.wholesalePrice || selectedProduct.unitPrice).toFixed(2)}</Text>
+                    </View>
+                  </View>
+                  {stockWarning === "out-of-stock" && (
+                    <View style={[styles.alertRow, { backgroundColor: colors.dangerBg, marginTop: 5 }]}>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: colors.danger }}>OUT OF STOCK — Cannot sell</Text>
+                    </View>
+                  )}
+                  {stockWarning === "exceeds-stock" && (
+                    <View style={[styles.alertRow, { backgroundColor: "#FEF3C7", marginTop: 5 }]}>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: "#D97706" }}>QTY {qty} exceeds stock of {selectedProduct.stock}</Text>
+                    </View>
+                  )}
                 </>
               ) : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -1360,10 +1358,10 @@ const styles = StyleSheet.create({
   dollarPkr: { fontFamily: "Inter_400Regular", fontSize: 10, color: "#475569", lineHeight: 13 },
   userBadge: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#FFFFFF", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
   // Location banner
-  locationBanner: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1 },
-  locationIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
-  locationBannerLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8 },
-  locationBannerName: { fontFamily: "Inter_700Bold", fontSize: 14, marginTop: 1 },
+  locationBanner: { flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 14, paddingVertical: 7, borderBottomWidth: 1 },
+  locationIconWrap: { width: 28, height: 28, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  locationBannerLabel: { fontFamily: "Inter_500Medium", fontSize: 8, letterSpacing: 0.8 },
+  locationBannerName: { fontFamily: "Inter_700Bold", fontSize: 13, marginTop: 0 },
   // Balance tiles
   balanceGrid: { marginHorizontal: 12, marginTop: 12, flexDirection: "row", gap: 7 },
   balanceTile: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 13, borderWidth: 1 },
@@ -1373,17 +1371,17 @@ const styles = StyleSheet.create({
   balanceValue: { fontFamily: "Inter_700Bold", fontSize: 13 },
   balSep: { width: 1, marginVertical: 12 },
   // Product
-  productCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
-  productName: { fontFamily: "Inter_700Bold", fontSize: 15 },
-  productPlaceholder: { fontFamily: "Inter_600SemiBold", fontSize: 15 },
-  productSub: { fontFamily: "Inter_400Regular", fontSize: 12, marginTop: 3 },
-  productChevron: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  stockBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
-  alertRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 8, padding: 7, borderRadius: 8 },
+  productCard: { marginHorizontal: 14, marginTop: 6, borderRadius: 14, borderWidth: 2, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  productName: { fontFamily: "Inter_700Bold", fontSize: 14 },
+  productPlaceholder: { fontFamily: "Inter_600SemiBold", fontSize: 14 },
+  productSub: { fontFamily: "Inter_400Regular", fontSize: 11, marginTop: 2 },
+  productChevron: { width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center" },
+  stockBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 7 },
+  alertRow: { flexDirection: "row", alignItems: "center", gap: 5, padding: 6, borderRadius: 7 },
   // Rate toggle
-  rateToggle: { marginHorizontal: 14, marginTop: 8, borderRadius: 14, borderWidth: 1, flexDirection: "row", padding: 4, gap: 4 },
-  rateBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 11 },
-  rateBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  rateToggle: { marginHorizontal: 14, marginTop: 6, borderRadius: 12, borderWidth: 1, flexDirection: "row", padding: 3, gap: 3 },
+  rateBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingVertical: 7, borderRadius: 10 },
+  rateBtnText: { fontFamily: "Inter_600SemiBold", fontSize: 12 },
   // Display
   displayCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
   amountSection: { padding: 16, paddingBottom: 12 },
@@ -1402,10 +1400,10 @@ const styles = StyleSheet.create({
   copyText: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
   // Options
   optionsCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, overflow: "hidden" },
-  optionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, gap: 10, borderBottomWidth: 1 },
-  optionIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
-  optionLabel: { fontFamily: "Inter_500Medium", fontSize: 13, width: 72 },
-  optionValue: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 13, textAlign: "right", marginRight: 4 },
+  optionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 10, gap: 9, borderBottomWidth: 1 },
+  optionIcon: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+  optionLabel: { fontFamily: "Inter_500Medium", fontSize: 12, width: 66 },
+  optionValue: { flex: 1, fontFamily: "Inter_600SemiBold", fontSize: 12, textAlign: "right", marginRight: 4 },
   balBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   // Numpad
   numpadContainer: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 1, padding: 10, gap: 8 },
