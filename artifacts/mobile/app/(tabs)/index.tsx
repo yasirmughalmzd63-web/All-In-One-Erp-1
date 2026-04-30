@@ -24,7 +24,7 @@ function formatK(n: number): string {
 }
 
 type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean };
-type Customer = { id: number; name: string; phone?: string | null };
+type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string };
 type Location = { id: number; name: string; address?: string | null };
 type RateMode = "normal" | "wholesale";
@@ -637,17 +637,36 @@ export default function POSScreen() {
           {/* Customer — only shown if credit sale is allowed */}
           {canCreditSale && (
             <TouchableOpacity
-              style={[styles.optionRow, { borderBottomColor: colors.border }]}
+              style={[styles.optionRow, { borderBottomColor: colors.border, alignItems: "flex-start", paddingVertical: selectedCustomer?.creditBalance ? 11 : 13 }]}
               onPress={() => setShowCustomerModal(true)}
             >
-              <View style={[styles.optionIcon, { backgroundColor: colors.secondary }]}>
-                
+              <View style={[styles.optionIcon, { backgroundColor: selectedCustomer ? "#FEF3C7" : colors.secondary, marginTop: 2 }]}>
+                <Text style={{ fontSize: 16 }}>{selectedCustomer ? "👤" : "👥"}</Text>
               </View>
-              <Text style={[styles.optionLabel, { color: colors.mutedForeground }]}>Customer</Text>
-              <Text style={[styles.optionValue, { color: selectedCustomer ? colors.text : colors.mutedForeground }]}>
-                {selectedCustomer?.name ?? "Walk-in"}
-              </Text>
-              
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.mutedForeground, letterSpacing: 0.4 }}>CUSTOMER</Text>
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: selectedCustomer ? colors.text : colors.mutedForeground, marginTop: 1 }}>
+                  {selectedCustomer?.name ?? "Walk-in"}
+                </Text>
+                {selectedCustomer?.creditBalance !== undefined && selectedCustomer.creditBalance !== null && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 }}>
+                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.mutedForeground }}>Previous credit:</Text>
+                    <View style={{
+                      backgroundColor: parseFloat(selectedCustomer.creditBalance) > 0 ? "#FEF3C7" : "#ECFDF5",
+                      paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
+                    }}>
+                      <Text style={{
+                        fontFamily: "Inter_700Bold", fontSize: 10,
+                        color: parseFloat(selectedCustomer.creditBalance) > 0 ? "#92400E" : "#065F46",
+                      }}>
+                        ₨{parseFloat(selectedCustomer.creditBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        {parseFloat(selectedCustomer.creditBalance) > 0 ? " ⚠️ owing" : " ✓ clear"}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 18, color: colors.mutedForeground }}>›</Text>
             </TouchableOpacity>
           )}
 
