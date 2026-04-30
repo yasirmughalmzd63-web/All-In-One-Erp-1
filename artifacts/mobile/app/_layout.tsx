@@ -55,6 +55,7 @@ function RootLayoutNav() {
       <Stack.Screen name="register" options={{ headerShown: false }} />
       <Stack.Screen name="customer-profile" options={{ headerShown: false }} />
       <Stack.Screen name="cash-management" options={{ headerShown: false }} />
+      <Stack.Screen name="dollar-statement" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="customers" options={{ title: "Customers", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
       <Stack.Screen name="suppliers" options={{ title: "Suppliers", headerStyle: { backgroundColor: "#1E40AF" }, headerTintColor: "#FFFFFF", headerTitleStyle: { fontFamily: "Inter_600SemiBold" } }} />
