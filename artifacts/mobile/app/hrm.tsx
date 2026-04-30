@@ -11,7 +11,7 @@ import { useAuth, isAdminOrAbove } from "@/context/AuthContext";
 import { useColors } from "@/hooks/useColors";
 import { getApiUrl } from "@/lib/api";
 
-type Tab = "employees" | "attendance" | "payroll" | "report" | "leaves";
+type Tab = "employees" | "attendance" | "payroll" | "fines" | "report" | "leaves";
 type AttendanceStatus = "present" | "absent" | "late" | "half_day" | "holiday";
 type LeaveStatus = "pending" | "approved" | "rejected" | "cancelled";
 type LeaveType  = "annual" | "sick" | "casual" | "unpaid" | "emergency";
@@ -254,6 +254,7 @@ export default function HrmScreen() {
   }, [fetchEmployees, fetchPendingAchievements]);
   useEffect(() => { if (activeTab === "attendance") fetchAttendance(); }, [activeTab, fetchAttendance]);
   useEffect(() => { if (activeTab === "payroll") { fetchPayroll(); fetchFinesAndBonuses(); } }, [activeTab, fetchPayroll, fetchFinesAndBonuses]);
+  useEffect(() => { if (activeTab === "fines")    fetchFinesAndBonuses(); }, [activeTab, fetchFinesAndBonuses]);
   useEffect(() => { if (activeTab === "report") fetchReport(); }, [activeTab, fetchReport]);
   useEffect(() => { if (activeTab === "leaves") fetchLeaves(); }, [activeTab, fetchLeaves]);
 
@@ -662,6 +663,106 @@ export default function HrmScreen() {
       />
     </View>
   );
+
+  /* ─── Fines tab — dedicated view ────────────────────────────────────── */
+  const renderFinesTab = () => {
+    const totalFines    = filteredFines.reduce((sum, f) => sum + parseFloat(f.amount), 0);
+    const totalBonuses  = filteredBonuses.reduce((sum, b) => sum + parseFloat(b.amount), 0);
+
+    return (
+      <View style={{ flex: 1 }}>
+        {/* Employee filter */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.hScroll} contentContainerStyle={s.hScrollContent}>
+          <TouchableOpacity style={[s.pill, !fbEmployee && s.pillActive]} onPress={() => setFbEmployee(null)}>
+            <Text style={[s.pillTxt, !fbEmployee && s.pillTxtActive]}>All Employees</Text>
+          </TouchableOpacity>
+          {employees.filter(e => e.status === "active").map(e => (
+            <TouchableOpacity key={e.id} style={[s.pill, fbEmployee === e.id && s.pillActive]} onPress={() => setFbEmployee(e.id)}>
+              <Text style={[s.pillTxt, fbEmployee === e.id && s.pillTxtActive]}>{e.name}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* Stat row */}
+        <View style={{ flexDirection: "row", paddingHorizontal: 12, paddingVertical: 8, gap: 8 }}>
+          <View style={{ flex: 1, backgroundColor: "#FEE2E2", borderRadius: 12, padding: 12 }}>
+            <Text style={{ fontSize: 11, color: "#991B1B", fontFamily: "Inter_600SemiBold" }}>Total Fines</Text>
+            <Text style={{ fontSize: 20, color: "#DC2626", fontFamily: "Inter_700Bold", marginTop: 2 }}>{PKR(totalFines)}</Text>
+            <Text style={{ fontSize: 10, color: "#7F1D1D", marginTop: 2 }}>{filteredFines.length} record{filteredFines.length !== 1 ? "s" : ""}</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: "#D1FAE5", borderRadius: 12, padding: 12 }}>
+            <Text style={{ fontSize: 11, color: "#065F46", fontFamily: "Inter_600SemiBold" }}>Total Bonuses</Text>
+            <Text style={{ fontSize: 20, color: "#059669", fontFamily: "Inter_700Bold", marginTop: 2 }}>{PKR(totalBonuses)}</Text>
+            <Text style={{ fontSize: 10, color: "#064E3B", marginTop: 2 }}>{filteredBonuses.length} record{filteredBonuses.length !== 1 ? "s" : ""}</Text>
+          </View>
+        </View>
+
+        {/* Add buttons */}
+        <View style={{ flexDirection: "row", paddingHorizontal: 12, gap: 8, marginBottom: 4 }}>
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: "#DC2626", borderRadius: 10, paddingVertical: 11, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6 }}
+            onPress={() => { setFbMode("fine"); setFbForm({ amount: "", reason: "", date: NOW.toISOString().slice(0, 10) }); setShowFbModal(true); }}>
+            <Feather name="alert-circle" size={16} color="#fff" />
+            <Text style={{ color: "#fff", fontFamily: "Inter_700Bold", fontSize: 13 }}>Add Fine</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{ flex: 1, backgroundColor: "#059669", borderRadius: 10, paddingVertical: 11, flexDirection: "row", justifyContent: "center", alignItems: "center", gap: 6 }}
+            onPress={() => { setFbMode("bonus"); setFbForm({ amount: "", reason: "", date: NOW.toISOString().slice(0, 10) }); setShowFbModal(true); }}>
+            <Feather name="award" size={16} color="#fff" />
+            <Text style={{ color: "#fff", fontFamily: "Inter_700Bold", fontSize: 13 }}>Add Bonus</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* List */}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 12, paddingBottom: 80 }}>
+          {filteredFines.length > 0 && (
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#DC2626", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>⚠️ Fines</Text>
+          )}
+          {filteredFines.map(f => (
+            <View key={`f${f.id}`} style={{ backgroundColor: colors.card, borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4, borderLeftColor: "#DC2626", flexDirection: "row", alignItems: "center" }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: colors.text }}>{empMap[f.employeeId] ?? `Emp #${f.employeeId}`}</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{f.reason || "No reason"} · {f.date}</Text>
+              </View>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#DC2626", marginLeft: 8 }}>−{PKR(parseFloat(f.amount))}</Text>
+              {!f.payrollId && (
+                <TouchableOpacity onPress={() => deleteFine(f.id)} style={{ marginLeft: 8, padding: 4 }}>
+                  <Feather name="trash-2" size={16} color="#DC2626" />
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+
+          {filteredBonuses.length > 0 && (
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#059669", marginTop: 12, marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>🏆 Bonuses</Text>
+          )}
+          {filteredBonuses.map(b => (
+            <View key={`b${b.id}`} style={{ backgroundColor: colors.card, borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: colors.border, borderLeftWidth: 4, borderLeftColor: "#059669", flexDirection: "row", alignItems: "center" }}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: colors.text }}>{empMap[b.employeeId] ?? `Emp #${b.employeeId}`}</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 2 }}>{b.reason || "No reason"} · {b.date}</Text>
+              </View>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 15, color: "#059669", marginLeft: 8 }}>+{PKR(parseFloat(b.amount))}</Text>
+              {!b.payrollId && (
+                <TouchableOpacity onPress={() => deleteBonus(b.id)} style={{ marginLeft: 8, padding: 4 }}>
+                  <Feather name="trash-2" size={16} color="#DC2626" />
+                </TouchableOpacity>
+              )}
+            </View>
+          ))}
+
+          {filteredFines.length === 0 && filteredBonuses.length === 0 && (
+            <View style={{ alignItems: "center", padding: 40 }}>
+              <Text style={{ fontSize: 40, marginBottom: 8 }}>⚠️</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: 14, textAlign: "center" }}>
+                No fines or bonuses{fbEmployee ? " for this employee" : " yet"}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    );
+  };
 
   const renderPayrollTab = () => (
     <View style={{ flex: 1 }}>
@@ -1434,12 +1535,13 @@ export default function HrmScreen() {
     );
   };
 
-  const tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: "employees",  label: "Staff",      icon: "users" },
-    { key: "attendance", label: "Attendance", icon: "calendar" },
-    { key: "payroll",    label: "Payroll",    icon: "dollar-sign" },
-    { key: "leaves",     label: "Leaves",     icon: "umbrella" },
-    { key: "report",     label: "Report",     icon: "bar-chart-2" },
+  const tabs: { key: Tab; label: string; emoji: string; tint: string; bg: string }[] = [
+    { key: "employees",  label: "Employees",  emoji: "👥",  tint: "#2563EB", bg: "#DBEAFE" },
+    { key: "attendance", label: "Attendance", emoji: "🧑‍💼", tint: "#D97706", bg: "#FEF3C7" },
+    { key: "payroll",    label: "Payroll",    emoji: "💰",  tint: "#CA8A04", bg: "#FEF9C3" },
+    { key: "fines",      label: "Fines",      emoji: "⚠️",  tint: "#DC2626", bg: "#FEE2E2" },
+    { key: "leaves",     label: "Leaves",     emoji: "🏖️", tint: "#0891B2", bg: "#CFFAFE" },
+    { key: "report",     label: "Report",     emoji: "📊",  tint: "#0369A1", bg: "#E0F2FE" },
   ];
 
   return (
@@ -1474,20 +1576,40 @@ export default function HrmScreen() {
         )}
       </View>
 
-      {/* Tabs */}
+      {/* Tabs — horizontal scrollable, colored icons on top, label below */}
       <View style={s.tabBar}>
-        {tabs.map(t => (
-          <TouchableOpacity key={t.key} style={[s.tabItem, activeTab === t.key && s.tabItemActive]} onPress={() => setActiveTab(t.key)}>
-            <Feather name={t.icon as any} size={14} color={activeTab === t.key ? colors.primary : colors.textSecondary} />
-            <Text style={[s.tabLabel, activeTab === t.key && { color: colors.primary }]}>{t.label}</Text>
-          </TouchableOpacity>
-        ))}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.tabBarContent}
+        >
+          {tabs.map(t => {
+            const isActive = activeTab === t.key;
+            return (
+              <TouchableOpacity
+                key={t.key}
+                style={s.tabItem}
+                onPress={() => setActiveTab(t.key)}
+                activeOpacity={0.7}
+              >
+                <View style={[s.tabIconWrap, { backgroundColor: t.bg, borderColor: isActive ? t.tint : "transparent" }]}>
+                  <Text style={s.tabEmoji}>{t.emoji}</Text>
+                </View>
+                <Text style={[s.tabLabel, { color: isActive ? t.tint : colors.textSecondary, fontFamily: isActive ? "Inter_700Bold" : "Inter_500Medium" }]}>
+                  {t.label}
+                </Text>
+                {isActive && <View style={[s.tabActiveBar, { backgroundColor: t.tint }]} />}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Tab content */}
       {activeTab === "employees"  && renderEmployeesTab()}
       {activeTab === "attendance" && renderAttendanceTab()}
       {activeTab === "payroll"    && renderPayrollTab()}
+      {activeTab === "fines"      && renderFinesTab()}
       {activeTab === "leaves"     && renderLeavesTab()}
       {activeTab === "report"     && renderReportTab()}
 
@@ -1867,10 +1989,13 @@ const styles = (colors: ReturnType<typeof useColors>) => StyleSheet.create({
   headerSub:     { color: "#DDD6FE", fontSize: 12 },
   backBtn:       { marginRight: 12 },
   addBtn:        { backgroundColor: "rgba(255,255,255,0.2)", borderRadius: 20, padding: 8 },
-  tabBar:        { flexDirection: "row", backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
-  tabItem:       { flex: 1, alignItems: "center", paddingVertical: 10, gap: 2 },
-  tabItemActive: { borderBottomWidth: 2, borderBottomColor: colors.primary },
-  tabLabel:      { fontSize: 11, color: colors.textSecondary },
+  tabBar:        { backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border },
+  tabBarContent: { paddingHorizontal: 8, paddingTop: 10, paddingBottom: 4, gap: 2, alignItems: "flex-end" },
+  tabItem:       { alignItems: "center", paddingHorizontal: 10, paddingTop: 4, minWidth: 72, position: "relative" },
+  tabIconWrap:   { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 2, marginBottom: 6 },
+  tabEmoji:      { fontSize: 22 },
+  tabLabel:      { fontSize: 11, marginBottom: 8 },
+  tabActiveBar:  { position: "absolute", left: 12, right: 12, bottom: 0, height: 3, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
   filterRow:     { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, paddingHorizontal: 8 },
   searchBox:     { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, gap: 6, borderWidth: 1, borderColor: colors.border },
   searchInput:   { flex: 1, fontSize: 14, color: colors.text },
