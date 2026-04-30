@@ -25,7 +25,7 @@ function formatK(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null; categoryName?: string | null };
+type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null; categoryName?: string | null; locationId?: number | null };
 type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null; locationId?: number | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string };
 type Location = { id: number; name: string; address?: string | null };
@@ -420,7 +420,8 @@ export default function POSScreen() {
 
   const activeProducts = products
     .filter(p => p.isActive !== false)
-    .filter(p => allowedProductIds === null || allowedProductIds.has(p.id));
+    .filter(p => allowedProductIds === null || allowedProductIds.has(p.id))
+    .filter(p => !selectedLocation || p.locationId === selectedLocation.id);
 
   const allowedAccounts = accounts
     .filter(a => allowedAccountIds === null || allowedAccountIds.has(a.id));
@@ -450,6 +451,13 @@ export default function POSScreen() {
       setSelectedLocation(allowedLocations[0]!);
     }
   }, [locations.length, user?.locationId, isAdmin]);
+
+  // Clear selected product when location changes and product doesn't belong there
+  React.useEffect(() => {
+    if (selectedProduct && selectedLocation && selectedProduct.locationId !== selectedLocation.id) {
+      setSelectedProduct(null);
+    }
+  }, [selectedLocation?.id]);
 
   const parsedAmount = parseFloat(amount) || 0;
   const activePrice = selectedProduct
@@ -1092,11 +1100,6 @@ export default function POSScreen() {
                   <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: selectedCustomer ? colors.text : colors.mutedForeground }} numberOfLines={1}>
                     {selectedCustomer?.name ?? "Walk-in"}
                   </Text>
-                  {selectedCustomer?.creditBalance != null && parseFloat(selectedCustomer.creditBalance) > 0 && (
-                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#92400E" }}>
-                      ₨{parseFloat(selectedCustomer.creditBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })} owing
-                    </Text>
-                  )}
                 </View>
                 <Text style={{ fontSize: 13, color: colors.mutedForeground }}>›</Text>
               </TouchableOpacity>
