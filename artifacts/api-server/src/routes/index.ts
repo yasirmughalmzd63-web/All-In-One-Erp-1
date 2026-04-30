@@ -28,6 +28,7 @@ import usdBridgeRouter from "./usd-bridge.js";
 import targetsRouter from "./targets.js";
 import cashManagementRouter from "./cash-management.js";
 import dollarStatementRouter from "./dollar-statement.js";
+import appWalletsRouter from "./app-wallets.js";
 
 const router: IRouter = Router();
 
@@ -60,5 +61,6 @@ router.use(usdBridgeRouter);
 router.use(targetsRouter);
 router.use(cashManagementRouter);
 router.use(dollarStatementRouter);
+router.use(appWalletsRouter);
 
 export default router;

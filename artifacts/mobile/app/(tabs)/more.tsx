@@ -27,6 +27,7 @@ const INVENTORY_ITEMS: MenuItem[] = [
   { label: "Inventory Ledger", icon: "package",     route: "/inventory-ledger",          color: "#059669", bg: "#ECFDF5", desc: "Opening / Received / Sold / Balance", module: "inventory" },
   { label: "App Summary",      icon: "map",         route: "/location-summary",          color: "#0891B2", bg: "#ECFEFF", desc: "Per-app sales & profit",              module: "dashboard" },
   { label: "Cash Flow",        icon: "trending-up", route: "/cash-flow",                 color: "#0369A1", bg: "#E0F2FE", desc: "Per-account credits & debits",        module: "accounts" },
+  { label: "App Wallets",      icon: "layers",      route: "/app-wallets",               color: "#7C3AED", bg: "#F3E8FF", desc: "Coins · Dollars · Credit per app",    module: "currency" },
   { label: "Dollar Wallet",    icon: "pocket",      route: "/wallets",                   color: "#0369A1", bg: "#E0F2FE", desc: "USD ledger & exchange",               module: "currency" },
   { label: "$ Statement",      icon: "bar-chart-2", route: "/dollar-statement",          color: "#F0B90B", bg: "#FFFBEB", desc: "USDT purchases · wallets · by app",   module: "currency" },
   { label: "Cust. $ Report",   icon: "users",       route: "/customer-dollar-report",    color: "#0891B2", bg: "#ECFEFF", desc: "Customer USD activity & balances",    module: "currency" },
