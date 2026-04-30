@@ -3,7 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import React, { useState, useMemo } from "react";
 import {
   Alert, FlatList, Image, Modal, Platform, ScrollView,
-  StyleSheet, Text, TouchableOpacity, View,
+  StyleSheet, Text, TextInput, TouchableOpacity, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,7 +23,7 @@ function formatK(n: number): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
-type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null };
+type Product = { id: number; name: string; unitPrice: string; wholesalePrice: string; unit: string; stock: number; isActive?: boolean; imageUrl?: string | null; categoryName?: string | null };
 type Customer = { id: number; name: string; phone?: string | null; creditBalance?: string | null };
 type Account = { id: number; name: string; type: string; balance: string; currency: string };
 type Location = { id: number; name: string; address?: string | null };
@@ -148,6 +148,146 @@ function PickerModal<T extends { id: number; name: string }>({
               </TouchableOpacity>
             )}
           />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function ProductPickerModal({ visible, products, onSelect, onClose }: {
+  visible: boolean;
+  products: Product[];
+  onSelect: (p: Product) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? products.filter(p => p.name.toLowerCase().includes(q) || (p.categoryName ?? "").toLowerCase().includes(q)) : products;
+  }, [products, search]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, Product[]>();
+    for (const p of filtered) {
+      const cat = p.categoryName?.trim() || "Uncategorized";
+      const arr = map.get(cat) ?? [];
+      arr.push(p);
+      map.set(cat, arr);
+    }
+    const sorted = Array.from(map.entries()).sort(([a], [b]) => {
+      if (a === "Uncategorized") return 1;
+      if (b === "Uncategorized") return -1;
+      return a.localeCompare(b);
+    });
+    return sorted;
+  }, [filtered]);
+
+  const CARD_W = 104;
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "88%" }}>
+          {/* Header */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 }}>
+            <View>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 19, color: colors.text }}>Select Product</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>{products.length} items · {groups.length} categories</Text>
+            </View>
+            <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Search bar */}
+          <View style={{ marginHorizontal: 16, marginBottom: 10, flexDirection: "row", alignItems: "center", backgroundColor: colors.input, borderRadius: 14, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border }}>
+            <Text style={{ fontSize: 16, marginRight: 8 }}>🔍</Text>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search products or categories…"
+              placeholderTextColor={colors.mutedForeground}
+              style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, paddingVertical: 10 }}
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch("")} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 15, color: colors.mutedForeground }}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 30 }}>
+            {groups.length === 0 ? (
+              <View style={{ alignItems: "center", paddingTop: 40 }}>
+                <Text style={{ fontSize: 36 }}>🔍</Text>
+                <Text style={{ fontFamily: "Inter_500Medium", color: colors.mutedForeground, marginTop: 8 }}>No products found</Text>
+              </View>
+            ) : groups.map(([category, items]) => (
+              <View key={category} style={{ marginBottom: 6 }}>
+                {/* Category header */}
+                <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}>
+                  <View style={{ height: 1, width: 8, backgroundColor: colors.border }} />
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 1 }}>{category}</Text>
+                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{items.length}</Text>
+                </View>
+
+                {/* Product grid */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10, flexDirection: "row" }}>
+                  {items.map(p => {
+                    const inStock = (p.stock ?? 0) > 0;
+                    const price = parseFloat(p.unitPrice);
+                    return (
+                      <TouchableOpacity
+                        key={p.id}
+                        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); onSelect(p); onClose(); }}
+                        activeOpacity={0.75}
+                        style={{
+                          width: CARD_W, borderRadius: 18, borderWidth: 2,
+                          borderColor: inStock ? colors.border : colors.danger,
+                          backgroundColor: inStock ? colors.card : colors.dangerBg,
+                          padding: 10, alignItems: "center", gap: 6,
+                          shadowColor: "#000", shadowOpacity: 0.06, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
+                          elevation: 2,
+                        }}
+                      >
+                        {/* Image / emoji icon */}
+                        {p.imageUrl ? (
+                          <Image source={{ uri: p.imageUrl }} style={{ width: 56, height: 56, borderRadius: 14 }} />
+                        ) : (
+                          <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: inStock ? colors.secondary : colors.dangerBg, alignItems: "center", justifyContent: "center" }}>
+                            <Text style={{ fontSize: 28 }}>{inStock ? "📦" : "🚫"}</Text>
+                          </View>
+                        )}
+
+                        {/* Out-of-stock banner */}
+                        {!inStock && (
+                          <View style={{ backgroundColor: colors.danger, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#FFF" }}>OUT OF STOCK</Text>
+                          </View>
+                        )}
+
+                        {/* Name */}
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.text, textAlign: "center" }} numberOfLines={2}>{p.name}</Text>
+
+                        {/* Price + stock row */}
+                        <View style={{ alignItems: "center", gap: 2 }}>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.primary }}>
+                            ₨{price >= 1000 ? `${(price / 1000).toFixed(1)}K` : price.toFixed(0)}
+                          </Text>
+                          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: inStock ? colors.success : colors.danger }}>
+                            {inStock ? `${p.stock} ${p.unit}` : "0 in stock"}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ))}
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -957,10 +1097,11 @@ export default function POSScreen() {
 
       </ScrollView>
 
-      <PickerModal<Product>
-        visible={showProductModal} title="Select Product" items={activeProducts}
-        onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }} onClose={() => setShowProductModal(false)}
-        renderSub={p => `Stock: ${p.stock} ${p.unit}  ·  Retail ${parseFloat(p.unitPrice).toFixed(2)}  ·  WS ${parseFloat(p.wholesalePrice || p.unitPrice).toFixed(2)}`}
+      <ProductPickerModal
+        visible={showProductModal}
+        products={activeProducts}
+        onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }}
+        onClose={() => setShowProductModal(false)}
       />
       <PickerModal<Customer>
         visible={showCustomerModal} title="Select Customer" items={customers}
