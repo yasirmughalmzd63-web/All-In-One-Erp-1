@@ -264,11 +264,25 @@ export default function POSScreen() {
     return { errors, warnings, canSell: errors.length === 0 };
   }, [selectedProduct, qty, parsedAmount]);
 
+  const accountBalance = selectedAccount ? parseFloat(selectedAccount.balance) : null;
+  const balanceShortfall = accountBalance !== null && parsedAmount > 0 && parsedAmount > accountBalance
+    ? parsedAmount - accountBalance
+    : 0;
+
   const cashValidations = useMemo(() => {
     const errors = [...validations.errors];
-    if (!selectedAccount) errors.push("Select an account to receive payment");
+    if (!selectedAccount) {
+      errors.push("Select an account to receive payment");
+    } else {
+      const bal = parseFloat(selectedAccount.balance);
+      if (parsedAmount > bal) {
+        errors.push(
+          `Insufficient balance in "${selectedAccount.name}" — need ₨${parsedAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}, have ₨${bal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+        );
+      }
+    }
     return { errors, canComplete: errors.length === 0 };
-  }, [validations.errors, selectedAccount]);
+  }, [validations.errors, selectedAccount, parsedAmount]);
 
   // ── Dashboard figures (location/user-filtered for non-admin) ───────────
   const dashParams = isAdmin
@@ -649,29 +663,48 @@ export default function POSScreen() {
 
           {/* Single row: AMOUNT | divider | QTY + copy */}
           <View style={{ flexDirection: "row", alignItems: "stretch" }}>
-            {/* Amount side — blue tinted */}
-            <View style={{ flex: 1.1, padding: 12, paddingRight: 10, backgroundColor: "#EFF6FF" }}>
-              <Text style={[styles.amountLabel, { color: "#3B82F6", marginBottom: 2 }]}>💵 AMOUNT</Text>
-              <Text style={[styles.amountValue, { color: "#1E40AF", fontSize: 24 }]} numberOfLines={1} adjustsFontSizeToFit>
+            {/* Amount side — blue tinted, red if exceeds balance */}
+            <View style={{ flex: 1.1, padding: 12, paddingRight: 10, backgroundColor: balanceShortfall > 0 ? "#FEF2F2" : "#EFF6FF" }}>
+              <Text style={[styles.amountLabel, { color: balanceShortfall > 0 ? "#EF4444" : "#3B82F6", marginBottom: 2 }]}>
+                {balanceShortfall > 0 ? "⚠️ AMOUNT" : "💵 AMOUNT"}
+              </Text>
+              <Text style={[styles.amountValue, { color: balanceShortfall > 0 ? "#DC2626" : "#1E40AF", fontSize: 24 }]} numberOfLines={1} adjustsFontSizeToFit>
                 {typedPart}
                 <Text style={{ color: "#93C5FD", opacity: 0.5 }}>{ghostPart}</Text>
               </Text>
+              {balanceShortfall > 0 && (
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#EF4444", marginTop: 3 }}>
+                  Short ₨{balanceShortfall.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </Text>
+              )}
             </View>
 
             {/* Vertical separator */}
             <View style={{ width: 1, backgroundColor: colors.border }} />
 
-            {/* QTY side — emerald tinted */}
-            <View style={{ flex: 1, padding: 12, paddingLeft: 10, backgroundColor: "#ECFDF5" }}>
-              <Text style={[styles.qtyLabel, { color: "#059669", marginBottom: 2 }]}>
-                📦 QTY{selectedProduct ? ` @ ${activePrice.toFixed(0)}` : ""}
+            {/* QTY side — emerald or red if exceeds stock */}
+            <View style={{ flex: 1, padding: 12, paddingLeft: 10, backgroundColor: stockWarning ? "#FEF2F2" : "#ECFDF5" }}>
+              <Text style={[styles.qtyLabel, { color: stockWarning ? "#EF4444" : "#059669", marginBottom: 2 }]}>
+                {stockWarning ? "⚠️ QTY" : "📦 QTY"}{selectedProduct ? ` @ ${activePrice.toFixed(0)}` : ""}
               </Text>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-                <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 30, lineHeight: 36 }, {
-                  color: stockWarning ? colors.danger : qty > 0 ? "#065F46" : "#6EE7B7",
-                }]}>
-                  {qty > 0 ? qty.toLocaleString() : "—"}
-                </Text>
+                <View>
+                  <Text style={[{ fontFamily: "Inter_700Bold", fontSize: 30, lineHeight: 36 }, {
+                    color: stockWarning ? "#DC2626" : qty > 0 ? "#065F46" : "#6EE7B7",
+                  }]}>
+                    {qty > 0 ? qty.toLocaleString() : "—"}
+                  </Text>
+                  {stockWarning === "exceeds-stock" && selectedProduct && (
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#EF4444" }}>
+                      Max {selectedProduct.stock} {selectedProduct.unit}
+                    </Text>
+                  )}
+                  {stockWarning === "out-of-stock" && (
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#EF4444" }}>
+                      Out of stock
+                    </Text>
+                  )}
+                </View>
                 <TouchableOpacity
                   style={[styles.copyBtn, {
                     backgroundColor: copyError ? "#FEF2F2" : copiedQty ? "#D1FAE5" : "#FFF",
