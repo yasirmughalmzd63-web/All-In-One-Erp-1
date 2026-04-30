@@ -445,50 +445,139 @@ function PickerModal<T extends { id: number; name: string }>({
   );
 }
 
-function ProductPickerModal({ visible, products, onSelect, onClose }: {
+function ProductPickerModal({ visible, products, allProducts, locations, onSelect, onClose }: {
   visible: boolean;
   products: Product[];
+  allProducts: Product[];
+  locations: Location[];
   onSelect: (p: Product) => void;
   onClose: () => void;
 }) {
   const colors = useColors();
   const [search, setSearch] = useState("");
+  const [showAllApps, setShowAllApps] = useState(false);
+
+  const source = showAllApps ? allProducts : products;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return q ? products.filter(p => p.name.toLowerCase().includes(q) || (p.categoryName ?? "").toLowerCase().includes(q)) : products;
-  }, [products, search]);
+    return q ? source.filter(p => p.name.toLowerCase().includes(q) || (p.categoryName ?? "").toLowerCase().includes(q)) : source;
+  }, [source, search]);
 
-  const groups = useMemo(() => {
-    const map = new Map<string, Product[]>();
-    for (const p of filtered) {
-      const cat = p.categoryName?.trim() || "Uncategorized";
-      const arr = map.get(cat) ?? [];
-      arr.push(p);
-      map.set(cat, arr);
+  // When showing all apps, group by location → category; otherwise by category only
+  type GroupEntry = { key: string; label: string; sublabel?: string; items: Product[]; isLocationHeader?: boolean };
+
+  const groups = useMemo((): GroupEntry[] => {
+    if (!showAllApps) {
+      const map = new Map<string, Product[]>();
+      for (const p of filtered) {
+        const cat = p.categoryName?.trim() || "Uncategorized";
+        const arr = map.get(cat) ?? [];
+        arr.push(p);
+        map.set(cat, arr);
+      }
+      return Array.from(map.entries())
+        .sort(([a], [b]) => a === "Uncategorized" ? 1 : b === "Uncategorized" ? -1 : a.localeCompare(b))
+        .map(([cat, items]) => ({ key: cat, label: cat, items }));
     }
-    const sorted = Array.from(map.entries()).sort(([a], [b]) => {
-      if (a === "Uncategorized") return 1;
-      if (b === "Uncategorized") return -1;
-      return a.localeCompare(b);
+
+    // Group by location, then by category within each location
+    const locMap = new Map<number | null, Product[]>();
+    for (const p of filtered) {
+      const lid = p.locationId ?? null;
+      const arr = locMap.get(lid) ?? [];
+      arr.push(p);
+      locMap.set(lid, arr);
+    }
+
+    const result: GroupEntry[] = [];
+    const locOrder = [...locMap.keys()].sort((a, b) => {
+      if (a === null) return 1;
+      if (b === null) return -1;
+      const la = locations.find(l => l.id === a)?.name ?? "";
+      const lb = locations.find(l => l.id === b)?.name ?? "";
+      return la.localeCompare(lb);
     });
-    return sorted;
-  }, [filtered]);
+
+    for (const lid of locOrder) {
+      const locName = lid !== null ? (locations.find(l => l.id === lid)?.name ?? `App #${lid}`) : "No App";
+      const locProducts = locMap.get(lid) ?? [];
+      const totalStock = locProducts.reduce((s, p) => s + (p.stock ?? 0), 0);
+
+      // Group by category within location
+      const catMap = new Map<string, Product[]>();
+      for (const p of locProducts) {
+        const cat = p.categoryName?.trim() || "Uncategorized";
+        const arr = catMap.get(cat) ?? [];
+        arr.push(p);
+        catMap.set(cat, arr);
+      }
+      const cats = Array.from(catMap.entries())
+        .sort(([a], [b]) => a === "Uncategorized" ? 1 : b === "Uncategorized" ? -1 : a.localeCompare(b));
+
+      for (const [cat, items] of cats) {
+        result.push({
+          key: `${lid ?? "null"}-${cat}`,
+          label: cat,
+          sublabel: `${locName}  ·  Total stock: ${totalStock} units`,
+          items,
+          isLocationHeader: cats.indexOf(cats.find(c => c[0] === cat)!) === 0,
+        });
+      }
+    }
+    return result;
+  }, [filtered, showAllApps, locations]);
 
   const CARD_W = 104;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
-        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "88%" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "90%" }}>
           {/* Header */}
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingTop: 20, paddingBottom: 12 }}>
             <View>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 19, color: colors.text }}>Select Product</Text>
-              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>{products.length} items · {groups.length} categories</Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>
+                {filtered.length} items · {showAllApps ? `${locations.length} apps` : "current app"}
+              </Text>
             </View>
             <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
               <Text style={{ color: colors.mutedForeground, fontSize: 22, fontFamily: "Inter_500Medium", lineHeight: 24 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* All Apps toggle */}
+          <View style={{ flexDirection: "row", marginHorizontal: 16, marginBottom: 8, gap: 8 }}>
+            <TouchableOpacity
+              onPress={() => setShowAllApps(false)}
+              style={{
+                flex: 1, paddingVertical: 8, borderRadius: 12, alignItems: "center", borderWidth: 1.5,
+                borderColor: !showAllApps ? colors.primary : colors.border,
+                backgroundColor: !showAllApps ? colors.primary : colors.input,
+              }}
+            >
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: !showAllApps ? "#FFF" : colors.mutedForeground }}>
+                📍 Current App
+              </Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: !showAllApps ? "rgba(255,255,255,0.7)" : colors.mutedForeground }}>
+                {products.length} products
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowAllApps(true)}
+              style={{
+                flex: 1, paddingVertical: 8, borderRadius: 12, alignItems: "center", borderWidth: 1.5,
+                borderColor: showAllApps ? colors.primary : colors.border,
+                backgroundColor: showAllApps ? colors.primary : colors.input,
+              }}
+            >
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: showAllApps ? "#FFF" : colors.mutedForeground }}>
+                🌐 All Apps
+              </Text>
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: showAllApps ? "rgba(255,255,255,0.7)" : colors.mutedForeground }}>
+                {allProducts.length} products · {locations.length} apps
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -515,19 +604,29 @@ function ProductPickerModal({ visible, products, onSelect, onClose }: {
                 <Text style={{ fontSize: 36 }}>🔍</Text>
                 <Text style={{ fontFamily: "Inter_500Medium", color: colors.mutedForeground, marginTop: 8 }}>No products found</Text>
               </View>
-            ) : groups.map(([category, items]) => (
-              <View key={category} style={{ marginBottom: 6 }}>
-                {/* Category header */}
-                <View style={{ flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 8, gap: 8 }}>
-                  <View style={{ height: 1, width: 8, backgroundColor: colors.border }} />
-                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 1 }}>{category}</Text>
-                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{items.length}</Text>
+            ) : groups.map((group) => (
+              <View key={group.key} style={{ marginBottom: 6 }}>
+                {/* Category / App header */}
+                <View style={{ paddingHorizontal: 16, paddingTop: group.sublabel ? 10 : 4, paddingBottom: 6 }}>
+                  {group.sublabel && (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                      <Text style={{ fontSize: 12 }}>📍</Text>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.primary }}>{group.sublabel.split(" · ")[0]}</Text>
+                      <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground }}>{group.sublabel.split(" · ")[1]}</Text>
+                    </View>
+                  )}
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <View style={{ height: 1, width: 8, backgroundColor: colors.border }} />
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 1 }}>{group.label}</Text>
+                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>{group.items.length}</Text>
+                  </View>
                 </View>
 
                 {/* Product grid */}
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10, flexDirection: "row" }}>
-                  {items.map(p => {
+                  {group.items.map(p => {
                     const inStock = (p.stock ?? 0) > 0;
                     const price = parseFloat(p.unitPrice);
                     return (
@@ -544,7 +643,6 @@ function ProductPickerModal({ visible, products, onSelect, onClose }: {
                           elevation: 2,
                         }}
                       >
-                        {/* Image / emoji icon */}
                         {p.imageUrl ? (
                           <Image source={{ uri: p.imageUrl }} style={{ width: 56, height: 56, borderRadius: 14 }} />
                         ) : (
@@ -553,17 +651,14 @@ function ProductPickerModal({ visible, products, onSelect, onClose }: {
                           </View>
                         )}
 
-                        {/* Out-of-stock banner */}
                         {!inStock && (
                           <View style={{ backgroundColor: colors.danger, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
                             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#FFF" }}>OUT OF STOCK</Text>
                           </View>
                         )}
 
-                        {/* Name */}
                         <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.text, textAlign: "center" }} numberOfLines={2}>{p.name}</Text>
 
-                        {/* Price + stock row */}
                         <View style={{ alignItems: "center", gap: 2 }}>
                           <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.primary }}>
                             ₨{price >= 1000 ? `${(price / 1000).toFixed(1)}K` : price.toFixed(0)}
@@ -693,9 +788,11 @@ export default function POSScreen() {
   const allowedAccountIds  = getAllowedAccountIds(user);
   const allowedLocationIds = getAllowedLocationIds(user);
 
-  const activeProducts = products
+  const allActiveProducts = products
     .filter(p => p.isActive !== false)
-    .filter(p => allowedProductIds === null || allowedProductIds.has(p.id))
+    .filter(p => allowedProductIds === null || allowedProductIds.has(p.id));
+
+  const activeProducts = allActiveProducts
     .filter(p => !selectedLocation || p.locationId === selectedLocation.id);
 
   const allowedAccounts = accounts
@@ -1687,6 +1784,8 @@ export default function POSScreen() {
       <ProductPickerModal
         visible={showProductModal}
         products={activeProducts}
+        allProducts={allActiveProducts}
+        locations={allowedLocations}
         onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }}
         onClose={() => setShowProductModal(false)}
       />
