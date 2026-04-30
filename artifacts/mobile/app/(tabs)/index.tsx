@@ -1,3 +1,4 @@
+import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useState, useMemo } from "react";
@@ -551,13 +552,9 @@ export default function POSScreen() {
   const handleCopyQty = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     try {
-      if (Platform.OS === "web" && typeof navigator !== "undefined") {
-        await navigator.clipboard.writeText(String(qty));
-      } else {
-        const Clip = await import("expo-clipboard");
-        await Clip.setStringAsync(String(qty));
-      }
+      await Clipboard.setStringAsync(String(qty));
       setCopiedQty(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       setTimeout(() => setCopiedQty(false), 2000);
     } catch {
       setCopyError(true);
