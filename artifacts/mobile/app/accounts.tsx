@@ -26,6 +26,7 @@ export default function AccountsScreen() {
   const [form, setForm] = useState(emptyForm);
   const [transfer, setTransfer] = useState({ fromId: "", toId: "", amount: "", notes: "" });
   const [transferring, setTransferring] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const { data: raw, isLoading, refetch } = useListAccounts();
   const { data: locationsRaw } = useListLocations();
@@ -37,6 +38,7 @@ export default function AccountsScreen() {
   const items = (raw ?? []) as unknown as Account[];
   const locations = (locationsRaw ?? []) as unknown as Location[];
   const total = items.reduce((sum, a) => sum + parseFloat(a.balance), 0);
+  const filteredItems = typeFilter === "all" ? items : items.filter(a => a.type === typeFilter);
 
   const getLocationName = (id?: number | null) => locations.find(l => l.id === id)?.name;
 
@@ -144,13 +146,27 @@ export default function AccountsScreen() {
         )}
       </View>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingHorizontal: 16, paddingBottom: 4 }} contentContainerStyle={{ gap: 8, paddingVertical: 8 }}>
+        {["all", ...ACCOUNT_TYPES].map(t => (
+          <TouchableOpacity
+            key={t}
+            style={[styles.chip, { backgroundColor: typeFilter === t ? colors.primary : colors.input, borderColor: typeFilter === t ? colors.primary : colors.border }]}
+            onPress={() => setTypeFilter(t)}
+          >
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: typeFilter === t ? "#FFF" : colors.text }}>
+              {t === "all" ? "All" : t.charAt(0).toUpperCase() + t.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {isLoading ? <ActivityIndicator style={{ margin: 40 }} color={colors.primary} /> : (
         <FlatList
-          data={items}
+          data={filteredItems}
           keyExtractor={i => String(i.id)}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
           contentContainerStyle={{ padding: 16, paddingBottom: 100, gap: 10 }}
-          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>No accounts</Text></View>}
+          ListEmptyComponent={<View style={{ alignItems: "center", padding: 40 }}><Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground, marginTop: 12 }}>{typeFilter === "all" ? "No accounts" : `No ${typeFilter} accounts`}</Text></View>}
           renderItem={({ item: a }) => {
             const locName = getLocationName(a.locationId);
             return (
