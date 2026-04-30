@@ -429,17 +429,41 @@ export default function POSScreen() {
     ? ""
     : `?userId=${user?.id ?? ""}${selectedLocation ? `&locationId=${selectedLocation.id}` : ""}`;
 
-  const { data: dashboardRaw } = useQuery<{
+  type DashData = {
     totalAccountsBalance?: string; totalStockValue?: string;
     creditReceivable?: string; creditPayable?: string;
-  }>({
+    todaySales?: string; todaySalesCount?: number;
+    todayPurchases?: string; todayExpenses?: string;
+  };
+
+  const { data: dashboardRaw } = useQuery<DashData>({
     queryKey: ["dashboard-pos", dashParams],
-    queryFn: () => customFetch<{
-      totalAccountsBalance?: string; totalStockValue?: string;
-      creditReceivable?: string; creditPayable?: string;
-    }>(`/api/dashboard${dashParams}`),
+    queryFn: () => customFetch<DashData>(`/api/dashboard${dashParams}`),
     refetchInterval: 30000,
   });
+
+  const sep = dashParams.includes("?") ? "&" : "?";
+  const todayParams  = `${dashParams}${sep}period=today`;
+  const yestParams   = `${dashParams}${sep}period=yesterday`;
+
+  const { data: todayDash } = useQuery<DashData>({
+    queryKey: ["dashboard-today", todayParams],
+    queryFn: () => customFetch<DashData>(`/api/dashboard${todayParams}`),
+    refetchInterval: 30000,
+  });
+  const { data: yestDash } = useQuery<DashData>({
+    queryKey: ["dashboard-yesterday", yestParams],
+    queryFn: () => customFetch<DashData>(`/api/dashboard${yestParams}`),
+    refetchInterval: 60000,
+  });
+
+  const todaySales = todayDash?.todaySales ? parseFloat(todayDash.todaySales) : null;
+  const todayCount = todayDash?.todaySalesCount ?? null;
+  const yestSales  = yestDash?.todaySales  ? parseFloat(yestDash.todaySales)  : null;
+  const yestCount  = yestDash?.todaySalesCount ?? null;
+  const salesDiff  = todaySales !== null && yestSales !== null ? todaySales - yestSales : null;
+  const salesDiffPct = yestSales && yestSales > 0 && salesDiff !== null
+    ? ((salesDiff / yestSales) * 100) : null;
 
   // BANK: admin → global accounts sum, non-admin → allowed accounts sum
   const bankBal = isAdmin
@@ -630,6 +654,66 @@ export default function POSScreen() {
           <BalanceTile label="STOCK" emoji="📦" value={stockVal} color="#D97706" accentBg="#FFF7ED" colors={colors} />
           <BalanceTile label="CREDIT" emoji="📈" value={creditIn} color="#7C3AED" accentBg="#F3E8FF" colors={colors} />
           <BalanceTile label="TOTAL" emoji="💰" value={grandTotal} color="#059669" accentBg="#ECFDF5" colors={colors} isTotal />
+        </View>
+
+        {/* ── Today / Yesterday sales strip ─────────────────────────── */}
+        <View style={{ flexDirection: "row", gap: 8, marginHorizontal: 14, marginBottom: 10 }}>
+          {/* Today */}
+          <View style={{ flex: 1, backgroundColor: "#EFF6FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#BFDBFE", padding: 10, gap: 2 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Text style={{ fontSize: 14 }}>☀️</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#1D4ED8", letterSpacing: 0.5 }}>TODAY</Text>
+              {todayCount !== null && (
+                <View style={{ marginLeft: "auto", backgroundColor: "#DBEAFE", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#1D4ED8" }}>{todayCount} sales</Text>
+                </View>
+              )}
+            </View>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#1E3A8A", marginTop: 2 }}>
+              {todaySales !== null ? `₨${todaySales >= 1000 ? `${(todaySales / 1000).toFixed(1)}K` : todaySales.toFixed(0)}` : "—"}
+            </Text>
+          </View>
+
+          {/* Yesterday */}
+          <View style={{ flex: 1, backgroundColor: "#F5F3FF", borderRadius: 14, borderWidth: 1.5, borderColor: "#DDD6FE", padding: 10, gap: 2 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+              <Text style={{ fontSize: 14 }}>🌙</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#6D28D9", letterSpacing: 0.5 }}>YESTERDAY</Text>
+              {yestCount !== null && (
+                <View style={{ marginLeft: "auto", backgroundColor: "#EDE9FE", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 1 }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: "#6D28D9" }}>{yestCount} sales</Text>
+                </View>
+              )}
+            </View>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: "#4C1D95", marginTop: 2 }}>
+              {yestSales !== null ? `₨${yestSales >= 1000 ? `${(yestSales / 1000).toFixed(1)}K` : yestSales.toFixed(0)}` : "—"}
+            </Text>
+          </View>
+
+          {/* Diff */}
+          {salesDiff !== null ? (
+            <View style={{
+              width: 72, backgroundColor: salesDiff >= 0 ? "#ECFDF5" : "#FEF2F2",
+              borderRadius: 14, borderWidth: 1.5,
+              borderColor: salesDiff >= 0 ? "#6EE7B7" : "#FECACA",
+              padding: 10, alignItems: "center", justifyContent: "center", gap: 3,
+            }}>
+              <Text style={{ fontSize: 20 }}>{salesDiff >= 0 ? "📈" : "📉"}</Text>
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: salesDiff >= 0 ? "#065F46" : "#991B1B" }}>
+                {salesDiff >= 0 ? "+" : ""}{salesDiff >= 1000 ? `${(salesDiff / 1000).toFixed(1)}K` : salesDiff.toFixed(0)}
+              </Text>
+              {salesDiffPct !== null && (
+                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: salesDiff >= 0 ? "#059669" : "#DC2626" }}>
+                  {salesDiff >= 0 ? "▲" : "▼"} {Math.abs(salesDiffPct).toFixed(1)}%
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={{ width: 72, backgroundColor: colors.secondary, borderRadius: 14, borderWidth: 1.5, borderColor: colors.border, padding: 10, alignItems: "center", justifyContent: "center", gap: 4 }}>
+              <Text style={{ fontSize: 18 }}>📊</Text>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: colors.mutedForeground, textAlign: "center" }}>vs prev</Text>
+            </View>
+          )}
         </View>
 
         {/* ── Product picker ───────────────────────────────────────────── */}
