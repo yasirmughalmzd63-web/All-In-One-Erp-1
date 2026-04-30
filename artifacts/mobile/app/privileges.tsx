@@ -167,6 +167,50 @@ export default function PrivilegesScreen() {
     }
   };
 
+  // ── Role templates ────────────────────────────────────────────────────────
+  const ROLE_TEMPLATES: { key: string; label: string; emoji: string; color: string; bg: string; border: string; modules: string[] }[] = [
+    {
+      key: "cashier",
+      label: "Cashier",
+      emoji: "💵",
+      color: "#92400E",
+      bg: "#FFF7ED",
+      border: "#FCD34D",
+      modules: [
+        "pos", "sales", "credits",
+        "pos_product", "pos_location", "pos_account", "pos_credit_customer",
+      ],
+    },
+    {
+      key: "manager",
+      label: "Manager",
+      emoji: "📊",
+      color: "#065F46",
+      bg: "#ECFDF5",
+      border: "#6EE7B7",
+      modules: [
+        "dashboard", "pos", "sales", "purchases", "expenses", "credits",
+        "inventory", "customers", "suppliers", "accounts", "locations",
+        "categories", "cash_count", "currency",
+        "pos_product", "pos_location", "pos_account", "pos_credit_customer",
+      ],
+    },
+    {
+      key: "admin",
+      label: "Admin",
+      emoji: "🛡",
+      color: "#1E3A8A",
+      bg: "#EFF6FF",
+      border: "#93C5FD",
+      modules: [...ALL_MODULES],
+    },
+  ];
+
+  const applyTemplate = (modules: string[]) => {
+    setAllAccess(false);
+    setPrivileges(new Set(modules));
+  };
+
   const handleSave = async () => {
     if (!selectedUser) return;
     setSaving(true);
@@ -299,6 +343,31 @@ export default function PrivilegesScreen() {
                 </View>
                 <Switch value={allAccess} onValueChange={toggleAll} trackColor={{ true: "#16A34A" }} />
               </TouchableOpacity>
+
+              {/* ── Role Templates ─────────────────────────────────────────── */}
+              <View style={{ marginBottom: 16 }}>
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.mutedForeground, letterSpacing: 1, marginBottom: 10 }}>
+                  QUICK ROLE TEMPLATES
+                </Text>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {ROLE_TEMPLATES.map(tpl => (
+                    <TouchableOpacity
+                      key={tpl.key}
+                      onPress={() => applyTemplate(tpl.modules)}
+                      style={{
+                        flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 12,
+                        backgroundColor: tpl.bg, borderWidth: 1.5, borderColor: tpl.border,
+                      }}
+                    >
+                      <Text style={{ fontSize: 18, marginBottom: 2 }}>{tpl.emoji}</Text>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: tpl.color }}>{tpl.label}</Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: tpl.color, opacity: 0.7, marginTop: 1 }}>
+                        {tpl.modules.filter(m => ALL_MODULES.includes(m as typeof ALL_MODULES[number])).length} modules
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
 
               {!allAccess && (
                 <>

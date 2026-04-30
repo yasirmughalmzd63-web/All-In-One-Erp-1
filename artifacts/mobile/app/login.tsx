@@ -1,5 +1,6 @@
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
@@ -18,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -61,14 +63,14 @@ export default function LoginScreen() {
 
         {error ? (
           <View style={styles.errorBox}>
-            
+            <Text style={{ fontSize: 16 }}>⚠️</Text>
             <Text style={styles.errorText}>{error}</Text>
           </View>
         ) : null}
 
         <View style={styles.inputGroup}>
           <View style={styles.inputWrapper}>
-            
+            <Text style={{ fontSize: 16, marginRight: 10 }}>👤</Text>
             <TextInput
               style={styles.input}
               placeholder="Username"
@@ -83,7 +85,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.inputWrapper}>
-            
+            <Text style={{ fontSize: 16, marginRight: 10 }}>🔒</Text>
             <TextInput
               style={styles.input}
               placeholder="Password"
@@ -96,7 +98,7 @@ export default function LoginScreen() {
               testID="password-input"
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-              
+              <Text style={{ fontSize: 16 }}>{showPassword ? "🙈" : "👁"}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -113,10 +115,46 @@ export default function LoginScreen() {
           ) : (
             <>
               <Text style={styles.loginBtnText}>Sign In</Text>
-              
+              <Text style={{ fontSize: 16 }}>→</Text>
             </>
           )}
         </TouchableOpacity>
+
+        {/* Divider */}
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        {/* Register Business */}
+        <TouchableOpacity
+          style={styles.registerBtn}
+          onPress={() => router.push("/register")}
+          activeOpacity={0.85}
+        >
+          <Text style={{ fontSize: 18 }}>🏢</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.registerBtnText}>Register New Business</Text>
+            <Text style={styles.registerBtnSub}>Set up your ERP account</Text>
+          </View>
+          <Text style={{ fontSize: 14, color: "#2563EB" }}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Role badges */}
+      <View style={styles.rolesRow}>
+        {[
+          { role: "Super Admin", emoji: "👑", color: "#FCD34D" },
+          { role: "Admin", emoji: "🛡", color: "#A5F3FC" },
+          { role: "Manager", emoji: "📊", color: "#BBF7D0" },
+          { role: "Cashier", emoji: "💵", color: "#FDE68A" },
+        ].map(r => (
+          <View key={r.role} style={[styles.roleBadge, { borderColor: "rgba(255,255,255,0.2)" }]}>
+            <Text style={{ fontSize: 12 }}>{r.emoji}</Text>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: r.color }}>{r.role}</Text>
+          </View>
+        ))}
       </View>
 
       <View style={[styles.footer, { paddingBottom: Platform.OS === "web" ? 34 : insets.bottom + 16 }]}>
@@ -136,7 +174,7 @@ const styles = StyleSheet.create({
   },
   logoArea: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: 32,
   },
   logoCircle: {
     width: 80,
@@ -219,9 +257,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 52,
   },
-  inputIcon: {
-    marginRight: 10,
-  },
   input: {
     flex: 1,
     fontSize: 15,
@@ -248,17 +283,55 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_600SemiBold",
     color: "#FFFFFF",
   },
-  hintBox: {
-    marginTop: 16,
+  divider: {
+    flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    marginVertical: 18,
   },
-  hintText: {
-    fontSize: 12,
+  dividerLine: { flex: 1, height: 1, backgroundColor: "#E2E8F0" },
+  dividerText: { fontFamily: "Inter_400Regular", fontSize: 12, color: "#94A3B8" },
+  registerBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1.5,
+    borderColor: "#BFDBFE",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    backgroundColor: "#EFF6FF",
+  },
+  registerBtnText: {
+    fontFamily: "Inter_700Bold",
+    fontSize: 14,
+    color: "#1E3A8A",
+  },
+  registerBtnSub: {
     fontFamily: "Inter_400Regular",
-    color: "#94A3B8",
+    fontSize: 11,
+    color: "#3B82F6",
+    marginTop: 1,
+  },
+  rolesRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 18,
+    flexWrap: "wrap",
+    justifyContent: "center",
+  },
+  roleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   footer: {
-    marginTop: 32,
+    marginTop: 20,
     alignItems: "center",
   },
   footerText: {

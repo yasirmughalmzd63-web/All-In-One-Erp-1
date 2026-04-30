@@ -37,6 +37,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       role: user.role,
       locationId: user.locationId,
       isActive: user.isActive,
+      privileges: user.privileges ? JSON.parse(user.privileges) : null,
       createdAt: user.createdAt.toISOString(),
     },
   });

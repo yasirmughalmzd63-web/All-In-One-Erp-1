@@ -37,6 +37,7 @@ const REPORTS_ITEMS: MenuItem[] = [
   { label: "Cash Count",       icon: "archive",       route: "/cash-count",       color: "#7C3AED", bg: "#F3E8FF", desc: "Balance sheet & reconcile",            module: "cash_count" },
   { label: "Reconciliation",  icon: "check-circle",  route: "/reconciliation",   color: "#059669", bg: "#ECFDF5", desc: "Daily reconcile · Dollar · Exchange",   module: "reconciliation" },
   { label: "Privileges",   icon: "shield",      route: "/privileges",   color: "#059669", bg: "#ECFDF5", desc: "User access control",           module: "users", adminOnly: true },
+  { label: "Registrations", icon: "user-plus",  route: "/registrations", color: "#D97706", bg: "#FFF7ED", desc: "Approve business accounts",     module: "users", adminOnly: true },
 ];
 
 const OTHER_ITEMS: MenuItem[] = [
@@ -56,7 +57,7 @@ export default function MoreScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
   const topPad = Platform.OS === "web" ? 20 : insets.top;
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const canSee = (item: MenuItem) => {
     if (item.adminOnly && !isAdmin) return false;

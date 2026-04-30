@@ -21,6 +21,7 @@ import cashCountsRouter from "./cash-counts";
 import dollarWalletRouter from "./dollar-wallet";
 import reportsRouter from "./reports.js";
 import uploadRouter from "./upload.js";
+import registrationsRouter from "./registrations.js";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use(cashCountsRouter);
 router.use(dollarWalletRouter);
 router.use(reportsRouter);
 router.use(uploadRouter);
+router.use(registrationsRouter);
 
 export default router;
