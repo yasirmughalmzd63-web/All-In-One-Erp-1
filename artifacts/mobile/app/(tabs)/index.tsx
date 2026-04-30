@@ -76,6 +76,7 @@ function AccountPickerModal({ visible, accounts, onSelect, onClose }: {
     mobile: "Mobile Wallet",
     other: "Other",
   };
+
   const grouped: Record<string, Account[]> = {};
   for (const a of accounts) {
     const key = normalizeAcctType(a.type);
@@ -84,70 +85,100 @@ function AccountPickerModal({ visible, accounts, onSelect, onClose }: {
   }
   const sections = ORDER.filter(k => grouped[k]?.length);
 
+  const [activeTab, setActiveTab] = useState<string>(sections[0] ?? "");
+
+  // Reset tab when visible/accounts change
+  React.useEffect(() => {
+    if (visible && sections.length > 0) setActiveTab(sections[0]!);
+  }, [visible, accounts.length]);
+
+  const activeAccts = grouped[activeTab] ?? [];
+  const { bg: tabBg, border: tabBorder, text: tabText } = acctColor(activeTab);
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
-        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "85%" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "80%" }}>
+
           {/* Header */}
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 18, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 12 }}>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Select Account</Text>
             <TouchableOpacity style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
               <Text style={{ color: colors.mutedForeground, fontSize: 20, lineHeight: 22 }}>×</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 28, paddingTop: 8 }}>
+
+          {/* Type tab bar — single horizontal line */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexDirection: "row", gap: 8, paddingHorizontal: 14, paddingBottom: 12 }}
+          >
             {sections.map(typeKey => {
               const { bg, border, text } = acctColor(typeKey);
+              const isActive = typeKey === activeTab;
               return (
-                <View key={typeKey} style={{ marginBottom: 16 }}>
-                  {/* Section header */}
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 8, paddingHorizontal: 4 }}>
-                    <View style={{ width: 24, height: 24, borderRadius: 7, backgroundColor: bg, borderWidth: 1, borderColor: border, alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontSize: 12 }}>{acctEmoji(typeKey)}</Text>
-                    </View>
-                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: text, letterSpacing: 0.9 }}>
-                      {TYPE_LABEL[typeKey] ?? typeKey.toUpperCase()}
+                <TouchableOpacity
+                  key={typeKey}
+                  onPress={() => setActiveTab(typeKey)}
+                  activeOpacity={0.75}
+                  style={{
+                    flexDirection: "row", alignItems: "center", gap: 5,
+                    paddingHorizontal: 12, paddingVertical: 8,
+                    borderRadius: 20, borderWidth: isActive ? 2 : 1.5,
+                    backgroundColor: isActive ? bg : colors.card,
+                    borderColor: isActive ? border : colors.border,
+                  }}
+                >
+                  <Text style={{ fontSize: 14 }}>{acctEmoji(typeKey)}</Text>
+                  <Text style={{ fontFamily: isActive ? "Inter_700Bold" : "Inter_500Medium", fontSize: 12, color: isActive ? text : colors.mutedForeground }}>
+                    {TYPE_LABEL[typeKey]}
+                  </Text>
+                  <View style={{ backgroundColor: isActive ? border : colors.border, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: isActive ? "#fff" : colors.mutedForeground }}>
+                      {grouped[typeKey]?.length ?? 0}
                     </Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: border, opacity: 0.4 }} />
                   </View>
-                  {/* Grid of account cards */}
-                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                    {grouped[typeKey].map(a => (
-                      <TouchableOpacity
-                        key={a.id}
-                        style={{
-                          width: "30.5%",
-                          backgroundColor: bg,
-                          borderRadius: 16,
-                          borderWidth: 1.5,
-                          borderColor: border,
-                          alignItems: "center",
-                          paddingVertical: 12,
-                          paddingHorizontal: 6,
-                          gap: 6,
-                        }}
-                        onPress={() => { onSelect(a); onClose(); }}
-                        activeOpacity={0.75}
-                      >
-                        {/* Big type icon */}
-                        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "#fff", borderWidth: 1.5, borderColor: border, alignItems: "center", justifyContent: "center" }}>
-                          <Text style={{ fontSize: 26 }}>{acctEmoji(typeKey)}</Text>
-                        </View>
-                        {/* Account name */}
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: text, textAlign: "center" }} numberOfLines={1}>
-                          {a.name}
-                        </Text>
-                        {/* Balance */}
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: text, textAlign: "center" }} numberOfLines={1}>
-                          ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </ScrollView>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 14, marginBottom: 12 }} />
+
+          {/* Accounts grid for selected type */}
+          <ScrollView contentContainerStyle={{ flexDirection: "row", flexWrap: "wrap", gap: 10, paddingHorizontal: 14, paddingBottom: 28 }}>
+            {activeAccts.map(a => (
+              <TouchableOpacity
+                key={a.id}
+                style={{
+                  width: "30%",
+                  backgroundColor: tabBg,
+                  borderRadius: 16,
+                  borderWidth: 2,
+                  borderColor: tabBorder,
+                  alignItems: "center",
+                  paddingVertical: 14,
+                  paddingHorizontal: 6,
+                  gap: 7,
+                }}
+                onPress={() => { onSelect(a); onClose(); }}
+                activeOpacity={0.75}
+              >
+                <View style={{ width: 50, height: 50, borderRadius: 15, backgroundColor: "#fff", borderWidth: 2, borderColor: tabBorder, alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: 26 }}>{acctEmoji(activeTab)}</Text>
+                </View>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: tabText, textAlign: "center" }} numberOfLines={1}>
+                  {a.name}
+                </Text>
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: tabText, textAlign: "center" }} numberOfLines={1}>
+                  ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+
         </View>
       </View>
     </Modal>
