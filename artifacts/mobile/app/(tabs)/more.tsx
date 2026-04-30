@@ -12,7 +12,7 @@ import { useColors } from "@/hooks/useColors";
 type MenuItem = {
   label: string; icon: string; route: string;
   color: string; bg: string; desc: string;
-  module: AppModule; adminOnly?: boolean;
+  module: AppModule; adminOnly?: boolean; superAdminOnly?: boolean;
 };
 
 const MANAGEMENT_ITEMS: MenuItem[] = [
@@ -38,6 +38,7 @@ const REPORTS_ITEMS: MenuItem[] = [
   { label: "Reconciliation",  icon: "check-circle",  route: "/reconciliation",   color: "#059669", bg: "#ECFDF5", desc: "Daily reconcile · Dollar · Exchange",   module: "reconciliation" },
   { label: "Privileges",   icon: "shield",      route: "/privileges",   color: "#059669", bg: "#ECFDF5", desc: "User access control",           module: "users", adminOnly: true },
   { label: "Registrations", icon: "user-plus",  route: "/registrations", color: "#D97706", bg: "#FFF7ED", desc: "Approve business accounts",     module: "users", adminOnly: true },
+  { label: "Businesses",    icon: "briefcase",  route: "/businesses",    color: "#7C3AED", bg: "#F3E8FF", desc: "Manage all businesses & modules", module: "users", superAdminOnly: true },
 ];
 
 const OTHER_ITEMS: MenuItem[] = [
@@ -59,7 +60,10 @@ export default function MoreScreen() {
   const topPad = Platform.OS === "web" ? 20 : insets.top;
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
+  const isSuperAdmin = user?.role === "super_admin";
+
   const canSee = (item: MenuItem) => {
+    if (item.superAdminOnly && !isSuperAdmin) return false;
     if (item.adminOnly && !isAdmin) return false;
     return hasPrivilege(user, item.module);
   };

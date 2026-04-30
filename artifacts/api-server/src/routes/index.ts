@@ -22,6 +22,7 @@ import dollarWalletRouter from "./dollar-wallet";
 import reportsRouter from "./reports.js";
 import uploadRouter from "./upload.js";
 import registrationsRouter from "./registrations.js";
+import businessesRouter from "./businesses.js";
 
 const router: IRouter = Router();
 
@@ -48,5 +49,6 @@ router.use(dollarWalletRouter);
 router.use(reportsRouter);
 router.use(uploadRouter);
 router.use(registrationsRouter);
+router.use(businessesRouter);
 
 export default router;
