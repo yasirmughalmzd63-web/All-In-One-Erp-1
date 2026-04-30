@@ -206,11 +206,27 @@ export default function TargetsScreen() {
       const r = await fetch(getApiUrl(`/api/targets/${t.id}/check`), { method: "POST", headers });
       const data = await r.json();
       fetchAll();
-      const pct = Math.min(100, Math.round((parseFloat(data.achievedAmount) / parseFloat(t.targetAmount)) * 100));
-      Alert.alert(
-        data.achieved ? "🎉 Target Achieved!" : "Progress Updated",
-        `Sales so far: ${PKR(parseFloat(data.achievedAmount))}\nTarget: ${PKR(parseFloat(t.targetAmount))}\nProgress: ${pct}%\nStatus: ${data.status}`,
-      );
+      const achieved = parseFloat(data.achievedAmount ?? t.achievedAmount);
+      const pct = Math.min(100, Math.round((achieved / parseFloat(t.targetAmount)) * 100));
+
+      if (data.autoBonus) {
+        // Commission was auto-applied — show a rich celebration alert
+        const empName = empMap[data.autoBonus.employeeId] ?? "the employee";
+        Alert.alert(
+          "🎉 Target Achieved!",
+          `Sales: ${PKR(achieved)}\nTarget: ${PKR(parseFloat(t.targetAmount))}\nProgress: ${pct}%\n\n✅ Bonus of ${PKR(parseFloat(data.autoBonus.amount))} automatically added to ${empName}'s HRM record!`,
+        );
+      } else if (data.achieved || data.status === "done") {
+        Alert.alert(
+          "🎉 Target Achieved!",
+          `Sales: ${PKR(achieved)}\nTarget: ${PKR(parseFloat(t.targetAmount))}\nProgress: ${pct}%\nStatus: ${data.status}`,
+        );
+      } else {
+        Alert.alert(
+          "Progress Updated",
+          `Sales so far: ${PKR(achieved)}\nTarget: ${PKR(parseFloat(t.targetAmount))}\nProgress: ${pct}%\nStatus: ${data.status}`,
+        );
+      }
     } catch (_) { Alert.alert("Error", "Could not check progress"); }
     setChecking(null);
   };
@@ -366,7 +382,9 @@ export default function TargetsScreen() {
             {isDone && (
               <View style={[s.actionBtn, { backgroundColor: "#7C3AED" + "15", borderColor: "#7C3AED" + "40" }]}>
                 <Feather name="check-circle" size={13} color="#7C3AED" />
-                <Text style={[s.actionBtnTxt, { color: "#7C3AED" }]}>Commission Applied</Text>
+                <Text style={[s.actionBtnTxt, { color: "#7C3AED" }]}>
+                  {t.bonusId ? "Bonus Auto-Added ✓" : "Commission Applied"}
+                </Text>
               </View>
             )}
 

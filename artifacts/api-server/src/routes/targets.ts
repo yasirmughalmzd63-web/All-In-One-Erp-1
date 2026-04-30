@@ -94,6 +94,12 @@ router.post("/targets/:id/check", requireAuth, async (req, res): Promise<void> =
   const target = await db.select().from(targetsTable).where(eq(targetsTable.id, id)).then(r => r[0]);
   if (!target) { res.status(404).json({ error: "Not found" }); return; }
 
+  // Skip if already finalised
+  if (target.status === "done" || target.status === "missed") {
+    res.json({ ...target, achieved: target.status === "done", autoBonus: null });
+    return;
+  }
+
   const conditions = [
     sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') >= ${target.startDate}::date`,
     sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') <= ${target.endDate}::date`,
@@ -109,20 +115,52 @@ router.post("/targets/:id/check", requireAuth, async (req, res): Promise<void> =
 
   const achievedAmount = parseFloat(agg?.total ?? "0");
   const achieved       = achievedAmount >= parseFloat(target.targetAmount);
+  const isPast         = target.endDate < today();
+  const newStatus      = achieved ? "achieved" : isPast ? "missed" : "active";
 
-  let newStatus = target.status;
-  if (target.status === "active" || target.status === "achieved") {
-    const isPast = target.endDate < today();
-    newStatus = achieved ? "achieved" : isPast ? "missed" : "active";
+  // ── Auto-apply commission when target is achieved for the first time ──────
+  // Conditions: just became achieved, has an employee, commission > 0
+  const justAchieved = achieved && target.status !== "achieved";
+  const commissionValue = parseFloat(target.commissionValue);
+  const canAutoBonus = justAchieved && target.employeeId && commissionValue > 0;
+
+  let autoBonus: { id: number; amount: string; employeeId: number } | null = null;
+
+  if (canAutoBonus) {
+    const commissionAmount = target.commissionType === "percentage"
+      ? (achievedAmount * commissionValue) / 100
+      : commissionValue;
+
+    const [bonus] = await db.insert(employeeBonusesTable).values({
+      employeeId: target.employeeId!,
+      amount: commissionAmount.toFixed(2),
+      reason: `Target bonus: ${target.title} (${target.startDate} – ${target.endDate})`,
+      date: today(),
+      locationId: target.locationId ?? null,
+    }).returning();
+
+    autoBonus = { id: bonus!.id, amount: bonus!.amount, employeeId: bonus!.employeeId };
+
+    // Mark as done immediately (commission was auto-applied)
+    const [updated] = await db
+      .update(targetsTable)
+      .set({ achievedAmount: achievedAmount.toFixed(2), status: "done", bonusId: bonus!.id })
+      .where(eq(targetsTable.id, id))
+      .returning();
+
+    await logAudit(req.userId, "update", "target", id, `Auto-bonus applied: ${target.title}`);
+    res.json({ ...updated, achieved: true, autoBonus });
+    return;
   }
 
+  // Regular update (no auto-bonus)
   const [updated] = await db
     .update(targetsTable)
     .set({ achievedAmount: achievedAmount.toFixed(2), status: newStatus })
     .where(eq(targetsTable.id, id))
     .returning();
 
-  res.json({ ...updated, achievedAmount: achievedAmount.toFixed(2), achieved });
+  res.json({ ...updated, achievedAmount: achievedAmount.toFixed(2), achieved, autoBonus: null });
 });
 
 /* ═══ APPLY COMMISSION ════════════════════════════════════════════════════ */
