@@ -19,6 +19,12 @@ type Business = {
   package: string; adminUsername: string; status: string; createdAt: string;
   adminUser: { id: number; username: string; isActive: boolean; privileges: string | null } | null;
   modules: string[] | null;
+  // Payment / subscription fields
+  paymentMethod: string | null;
+  paymentStatus: string | null;
+  subscriptionEndDate: string | null;
+  monthlyFee: string | null;
+  notes: string | null;
 };
 
 // ── Module metadata ──────────────────────────────────────────────────────────
@@ -62,6 +68,22 @@ const PACKAGE_DEFAULTS: Record<string, string[]> = {
 const BUSINESS_TYPES = ["Retail", "Wholesale", "Services", "Manufacturing", "Import/Export", "Other"];
 const PACKAGES = ["free", "basic", "professional", "enterprise"] as const;
 
+const PAYMENT_METHODS = ["cash", "easypaisa", "jazzcash", "bank_transfer", "stripe", "none"] as const;
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cash: "💵 Cash", easypaisa: "🟢 EasyPaisa", jazzcash: "🔴 JazzCash",
+  bank_transfer: "🏦 Bank Transfer", stripe: "💳 Stripe", none: "⛔ Not Set",
+};
+const PAYMENT_STATUSES = ["trial", "active", "overdue", "cancelled"] as const;
+const PAYMENT_STATUS_META: Record<string, { emoji: string; color: string; bg: string; border: string }> = {
+  trial:     { emoji: "🆕", color: "#0891B2", bg: "#ECFEFF",  border: "#67E8F9" },
+  active:    { emoji: "✅", color: "#065F46", bg: "#ECFDF5",  border: "#6EE7B7" },
+  overdue:   { emoji: "⚠️", color: "#92400E", bg: "#FFF7ED",  border: "#FCD34D" },
+  cancelled: { emoji: "❌", color: "#991B1B", bg: "#FEF2F2",  border: "#FCA5A5" },
+};
+const PKG_DEFAULT_FEE: Record<string, string> = {
+  free: "0", basic: "999", professional: "2499", enterprise: "4999",
+};
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function BusinessesScreen() {
   const insets = useSafeAreaInsets();
@@ -79,6 +101,14 @@ export default function BusinessesScreen() {
   const [editModules, setEditModules] = useState<Set<string>>(new Set());
   const [allAccess, setAllAccess] = useState(false);
   const [savingModules, setSavingModules] = useState(false);
+
+  // Payment editor state
+  const [editingPayment, setEditingPayment] = useState<Business | null>(null);
+  const [payEdit, setPayEdit] = useState({ method: "cash", status: "trial", endDate: "", fee: "", notes: "" });
+  const [savingPayment, setSavingPayment] = useState(false);
+
+  // Package change
+  const [changingPkg, setChangingPkg] = useState<Business | null>(null);
 
   // Create business state
   const [showCreate, setShowCreate] = useState(false);
@@ -150,6 +180,70 @@ export default function BusinessesScreen() {
     } finally { setSavingModules(false); }
   };
 
+  // ── Payment editor ──────────────────────────────────────────────────────────
+  const openPaymentEditor = (biz: Business) => {
+    setEditingPayment(biz);
+    setPayEdit({
+      method: biz.paymentMethod ?? "none",
+      status: biz.paymentStatus ?? "trial",
+      endDate: biz.subscriptionEndDate ?? "",
+      fee: biz.monthlyFee ?? PKG_DEFAULT_FEE[biz.package] ?? "0",
+      notes: biz.notes ?? "",
+    });
+  };
+
+  const savePayment = async () => {
+    if (!editingPayment) return;
+    setSavingPayment(true);
+    try {
+      await customFetch(`/api/businesses/${editingPayment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paymentMethod: payEdit.method,
+          paymentStatus: payEdit.status,
+          subscriptionEndDate: payEdit.endDate.trim() || null,
+          monthlyFee: payEdit.fee.trim() || null,
+          notes: payEdit.notes.trim() || null,
+        }),
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      setEditingPayment(null);
+      await load();
+    } catch (e: unknown) {
+      Alert.alert("Error", e instanceof Error ? e.message : "Failed to save payment info");
+    } finally { setSavingPayment(false); }
+  };
+
+  // ── Package change ──────────────────────────────────────────────────────────
+  const changePackage = async (biz: Business, newPkg: string) => {
+    if (newPkg === biz.package) { setChangingPkg(null); return; }
+    Alert.alert(
+      "Change Package",
+      `Change "${biz.businessName}" from ${PKG_LABEL[biz.package]} → ${PKG_LABEL[newPkg]}?\n\nThis will auto-update the monthly fee to ₨${PKG_DEFAULT_FEE[newPkg]}/mo.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Confirm",
+          onPress: async () => {
+            try {
+              await customFetch(`/api/businesses/${biz.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ package: newPkg }),
+              });
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              setChangingPkg(null);
+              await load();
+            } catch (e: unknown) {
+              Alert.alert("Error", e instanceof Error ? e.message : "Failed to change package");
+            }
+          },
+        },
+      ],
+    );
+  };
+
   // ── Toggle active ──────────────────────────────────────────────────────────
   const toggleActive = async (biz: Business) => {
     const newState = !(biz.adminUser?.isActive ?? false);
@@ -217,12 +311,17 @@ export default function BusinessesScreen() {
   };
 
   // ── Computed ───────────────────────────────────────────────────────────────
-  const filtered = businesses.filter(b =>
-    !search ||
-    b.businessName.toLowerCase().includes(search.toLowerCase()) ||
-    b.ownerName.toLowerCase().includes(search.toLowerCase()) ||
-    b.adminUsername.toLowerCase().includes(search.toLowerCase()),
-  );
+  const [statusFilter, setStatusFilter] = useState<"approved" | "rejected" | "all">("approved");
+
+  const filtered = businesses.filter(b => {
+    if (statusFilter !== "all" && b.status !== statusFilter) return false;
+    if (!search) return true;
+    return (
+      b.businessName.toLowerCase().includes(search.toLowerCase()) ||
+      b.ownerName.toLowerCase().includes(search.toLowerCase()) ||
+      b.adminUsername.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   const totalFree = businesses.filter(b => !PKG_IS_PAID[b.package]).length;
   const totalPaid = businesses.filter(b => PKG_IS_PAID[b.package]).length;
@@ -279,6 +378,26 @@ export default function BusinessesScreen() {
           />
         </View>
       </LinearGradient>
+
+      {/* ── STATUS FILTER ────────────────────────────────────────────────── */}
+      <View style={{ flexDirection: "row", paddingHorizontal: 14, paddingTop: 10, paddingBottom: 8, gap: 8, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        {([
+          { key: "approved", label: "✅ Approved" },
+          { key: "rejected", label: "❌ Rejected" },
+          { key: "all",      label: "All" },
+        ] as const).map(f => (
+          <TouchableOpacity
+            key={f.key}
+            onPress={() => setStatusFilter(f.key)}
+            style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: statusFilter === f.key ? "#7C3AED" : colors.border, backgroundColor: statusFilter === f.key ? "#7C3AED" : colors.input }}
+          >
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: statusFilter === f.key ? "#FFF" : colors.mutedForeground }}>{f.label}</Text>
+          </TouchableOpacity>
+        ))}
+        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, alignSelf: "center", marginLeft: "auto" }}>
+          {filtered.length} shown
+        </Text>
+      </View>
 
       {/* ── LIST ─────────────────────────────────────────────────────────── */}
       {loading ? (
@@ -389,21 +508,62 @@ export default function BusinessesScreen() {
                   </View>
                 )}
 
+                {/* Payment / Subscription info row */}
+                {(() => {
+                  const ps = biz.paymentStatus ?? "trial";
+                  const psMeta = PAYMENT_STATUS_META[ps] ?? PAYMENT_STATUS_META.trial!;
+                  const fee = biz.monthlyFee ? `₨${parseFloat(biz.monthlyFee).toLocaleString()}/mo` : null;
+                  return (
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 }}>
+                      <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1, backgroundColor: psMeta.bg, borderColor: psMeta.border }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: psMeta.color }}>
+                          {psMeta.emoji} {ps.toUpperCase()}
+                        </Text>
+                      </View>
+                      {biz.paymentMethod && biz.paymentMethod !== "none" && (
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground }}>
+                          {PAYMENT_METHOD_LABEL[biz.paymentMethod] ?? biz.paymentMethod}
+                        </Text>
+                      )}
+                      {fee && (
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: colors.text, marginLeft: "auto" }}>{fee}</Text>
+                      )}
+                    </View>
+                  );
+                })()}
+                {biz.subscriptionEndDate && (
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginBottom: 10 }}>
+                    📅 Renews: {biz.subscriptionEndDate}
+                  </Text>
+                )}
+
                 {/* Actions */}
-                <View style={{ flexDirection: "row", gap: 8 }}>
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 8 }}>
                   <TouchableOpacity
                     style={[styles.actionBtn, { flex: 2, backgroundColor: "#EDE9FE", borderColor: "#C4B5FD" }]}
                     onPress={() => openModuleEditor(biz)}
                   >
-                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#4C1D95" }}>🧩 Select Modules</Text>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#4C1D95" }}>🧩 Modules</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, { flex: 2, backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" }]}
+                    onPress={() => setChangingPkg(biz)}
+                  >
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#1E40AF" }}>📦 Package</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.actionBtn, { flex: 1, backgroundColor: "#FEF2F2", borderColor: "#FCA5A5" }]}
                     onPress={() => handleDelete(biz)}
                   >
-                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#991B1B" }}>🗑 Delete</Text>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#991B1B" }}>🗑</Text>
                   </TouchableOpacity>
                 </View>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: "#ECFDF5", borderColor: "#6EE7B7" }]}
+                  onPress={() => openPaymentEditor(biz)}
+                >
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: "#065F46" }}>💳 Manage Payment & Subscription</Text>
+                </TouchableOpacity>
               </View>
             );
           })}
@@ -535,6 +695,174 @@ export default function BusinessesScreen() {
                     : <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: "#FFF" }}>
                         Save · {allAccess ? "All" : editModules.size} modules enabled
                       </Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── PACKAGE CHANGE MODAL ─────────────────────────────────────────── */}
+      <Modal visible={!!changingPkg} animationType="fade" transparent onRequestClose={() => setChangingPkg(null)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", padding: 24 }}>
+          <View style={{ backgroundColor: colors.background, borderRadius: 20, padding: 20, width: "100%" }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text, marginBottom: 4 }}>Change Package</Text>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground, marginBottom: 16 }}>
+              {changingPkg?.businessName} — current: {PKG_LABEL[changingPkg?.package ?? ""]}
+            </Text>
+            <View style={{ gap: 10 }}>
+              {PACKAGES.map(pkg => {
+                const isCurrent = pkg === changingPkg?.package;
+                return (
+                  <TouchableOpacity
+                    key={pkg}
+                    onPress={() => changingPkg && changePackage(changingPkg, pkg)}
+                    style={{
+                      flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 14, borderWidth: 2,
+                      borderColor: isCurrent ? "#7C3AED" : colors.border,
+                      backgroundColor: isCurrent ? "#EDE9FE" : colors.card,
+                    }}
+                  >
+                    <Text style={{ fontSize: 22, marginRight: 12 }}>{PKG_EMOJI[pkg]}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: isCurrent ? "#4C1D95" : colors.text }}>
+                        {PKG_LABEL[pkg]} {isCurrent ? "✓ Current" : ""}
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>
+                        {PKG_PRICE[pkg]} · {PKG_DEFAULT_FEE[pkg] === "0" ? "Free" : `₨${parseInt(PKG_DEFAULT_FEE[pkg] ?? "0").toLocaleString()}/mo`}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              onPress={() => setChangingPkg(null)}
+              style={{ marginTop: 16, padding: 12, alignItems: "center", borderRadius: 12, backgroundColor: colors.input, borderWidth: 1, borderColor: colors.border }}
+            >
+              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.mutedForeground }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── PAYMENT EDITOR MODAL ─────────────────────────────────────────── */}
+      <Modal visible={!!editingPayment} animationType="slide" transparent onRequestClose={() => setEditingPayment(null)}>
+        <View style={{ flex: 1, backgroundColor: colors.overlay, justifyContent: "flex-end" }}>
+          <View style={{ backgroundColor: colors.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: "90%" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+              <View>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>💳 Payment & Subscription</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>
+                  {editingPayment?.businessName} · @{editingPayment?.adminUsername}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setEditingPayment(null)}>
+                <Text style={{ fontSize: 20, color: colors.mutedForeground }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ padding: 20 }} showsVerticalScrollIndicator={false}>
+              {/* Subscription Status */}
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+                Subscription Status
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 20 }}>
+                {PAYMENT_STATUSES.map(s => {
+                  const meta = PAYMENT_STATUS_META[s]!;
+                  const sel = payEdit.status === s;
+                  return (
+                    <TouchableOpacity
+                      key={s}
+                      onPress={() => setPayEdit(p => ({ ...p, status: s }))}
+                      style={{ flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 12, borderWidth: 2,
+                        borderColor: sel ? meta.color : colors.border, backgroundColor: sel ? meta.bg : colors.input }}
+                    >
+                      <Text style={{ fontSize: 16 }}>{meta.emoji}</Text>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 10, color: sel ? meta.color : colors.mutedForeground, marginTop: 3, textTransform: "capitalize" }}>{s}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Payment Method */}
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>
+                Payment Method
+              </Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
+                {PAYMENT_METHODS.map(m => {
+                  const sel = payEdit.method === m;
+                  return (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => setPayEdit(p => ({ ...p, method: m }))}
+                      style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, borderWidth: 1.5,
+                        borderColor: sel ? "#7C3AED" : colors.border, backgroundColor: sel ? "#EDE9FE" : colors.input }}
+                    >
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: sel ? "#4C1D95" : colors.mutedForeground }}>
+                        {PAYMENT_METHOD_LABEL[m] ?? m}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Monthly Fee */}
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                Monthly Fee (₨)
+              </Text>
+              <TextInput
+                value={payEdit.fee}
+                onChangeText={v => setPayEdit(p => ({ ...p, fee: v }))}
+                placeholder="e.g. 2499"
+                keyboardType="numeric"
+                placeholderTextColor={colors.mutedForeground}
+                style={{ backgroundColor: colors.input, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, marginBottom: 16 }}
+              />
+
+              {/* Subscription End Date */}
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                Subscription Renewal Date (YYYY-MM-DD)
+              </Text>
+              <TextInput
+                value={payEdit.endDate}
+                onChangeText={v => setPayEdit(p => ({ ...p, endDate: v }))}
+                placeholder="e.g. 2025-05-30"
+                placeholderTextColor={colors.mutedForeground}
+                style={{ backgroundColor: colors.input, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10, fontFamily: "Inter_400Regular", fontSize: 14, color: colors.text, marginBottom: 16 }}
+              />
+
+              {/* Notes */}
+              <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: colors.mutedForeground, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+                Notes (internal)
+              </Text>
+              <TextInput
+                value={payEdit.notes}
+                onChangeText={v => setPayEdit(p => ({ ...p, notes: v }))}
+                placeholder="Optional notes about this account..."
+                placeholderTextColor={colors.mutedForeground}
+                multiline
+                style={{ backgroundColor: colors.input, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 10, fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text, height: 70, textAlignVertical: "top", marginBottom: 30 }}
+              />
+            </ScrollView>
+
+            {/* Save button */}
+            <View style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: colors.background, borderTopWidth: 1, borderTopColor: colors.border }}>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TouchableOpacity
+                  onPress={() => setEditingPayment(null)}
+                  style={[styles.actionBtn, { flex: 1, backgroundColor: colors.input, borderColor: colors.border }]}
+                >
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.mutedForeground }}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={savePayment}
+                  disabled={savingPayment}
+                  style={[styles.actionBtn, { flex: 2, backgroundColor: "#059669", borderColor: "#059669" }]}
+                >
+                  {savingPayment
+                    ? <ActivityIndicator size="small" color="#FFF" />
+                    : <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: "#FFF" }}>💾 Save Payment Info</Text>}
                 </TouchableOpacity>
               </View>
             </View>
