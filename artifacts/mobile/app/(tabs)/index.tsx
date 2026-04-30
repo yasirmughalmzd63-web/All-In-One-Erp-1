@@ -1053,47 +1053,41 @@ export default function POSScreen() {
           </ScrollView>
         </View>
 
-        {/* ── Customer + Location + Account pickers ───────────────────── */}
-        <View style={[styles.optionsCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {/* Customer — only shown if credit sale is allowed */}
+        {/* ── Customer + Account — same single row ─────────────────────── */}
+        <View style={[styles.optionsCard, { backgroundColor: colors.card, borderColor: colors.border, flexDirection: "row" }]}>
+
+          {/* Customer half */}
           {canCreditSale && (
-            <TouchableOpacity
-              style={[styles.optionRow, { borderBottomColor: colors.border, alignItems: "flex-start", paddingVertical: selectedCustomer?.creditBalance ? 11 : 13 }]}
-              onPress={() => setShowCustomerModal(true)}
-            >
-              <View style={[styles.optionIcon, { backgroundColor: selectedCustomer ? "#FEF3C7" : colors.secondary, marginTop: 2 }]}>
-                <Text style={{ fontSize: 16 }}>{selectedCustomer ? "👤" : "👥"}</Text>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontFamily: "Inter_500Medium", fontSize: 11, color: colors.mutedForeground, letterSpacing: 0.4 }}>CUSTOMER</Text>
-                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: selectedCustomer ? colors.text : colors.mutedForeground, marginTop: 1 }}>
-                  {selectedCustomer?.name ?? "Walk-in"}
-                </Text>
-                {selectedCustomer?.creditBalance !== undefined && selectedCustomer.creditBalance !== null && (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 3 }}>
-                    <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.mutedForeground }}>Previous credit:</Text>
-                    <View style={{
-                      backgroundColor: parseFloat(selectedCustomer.creditBalance) > 0 ? "#FEF3C7" : "#ECFDF5",
-                      paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
-                    }}>
-                      <Text style={{
-                        fontFamily: "Inter_700Bold", fontSize: 10,
-                        color: parseFloat(selectedCustomer.creditBalance) > 0 ? "#92400E" : "#065F46",
-                      }}>
-                        ₨{parseFloat(selectedCustomer.creditBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        {parseFloat(selectedCustomer.creditBalance) > 0 ? " ⚠️ owing" : " ✓ clear"}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              </View>
-              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 18, color: colors.mutedForeground }}>›</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 9 }}
+                onPress={() => setShowCustomerModal(true)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.optionIcon, { backgroundColor: selectedCustomer ? "#FEF3C7" : colors.secondary }]}>
+                  <Text style={{ fontSize: 13 }}>{selectedCustomer ? "👤" : "👥"}</Text>
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: colors.mutedForeground, letterSpacing: 0.6 }}>CUSTOMER</Text>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: selectedCustomer ? colors.text : colors.mutedForeground }} numberOfLines={1}>
+                    {selectedCustomer?.name ?? "Walk-in"}
+                  </Text>
+                  {selectedCustomer?.creditBalance != null && parseFloat(selectedCustomer.creditBalance) > 0 && (
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 8, color: "#92400E" }}>
+                      ₨{parseFloat(selectedCustomer.creditBalance).toLocaleString(undefined, { maximumFractionDigits: 0 })} owing
+                    </Text>
+                  )}
+                </View>
+                <Text style={{ fontSize: 13, color: colors.mutedForeground }}>›</Text>
+              </TouchableOpacity>
+              {/* Vertical divider */}
+              <View style={{ width: 1, backgroundColor: colors.border }} />
+            </>
           )}
 
-          {/* Account — single line */}
+          {/* Account half */}
           <TouchableOpacity
-            style={[styles.optionRow, { borderBottomColor: colors.border, borderBottomWidth: 0, alignItems: "center" }]}
+            style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 7, paddingHorizontal: 10, paddingVertical: 9 }}
             onPress={() => {
               if (!canSelectAccount) {
                 Alert.alert("Access Denied", "You don't have permission to change the payment account.");
@@ -1101,6 +1095,7 @@ export default function POSScreen() {
               }
               setShowAccountModal(true);
             }}
+            activeOpacity={0.7}
           >
             {(() => {
               const ac = selectedAccount ? acctColor(selectedAccount.type) : null;
@@ -1113,47 +1108,37 @@ export default function POSScreen() {
                 </View>
               );
             })()}
-            {/* label */}
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: colors.mutedForeground, letterSpacing: 0.4, width: 54 }}>ACCOUNT</Text>
-            {/* name + type badge */}
-            {selectedAccount ? (
-              <>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text, flex: 1 }} numberOfLines={1}>{selectedAccount.name}</Text>
-                {(() => {
-                  const ac = acctColor(selectedAccount.type);
-                  return (
-                    <View style={{ backgroundColor: ac.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: ac.border }}>
-                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: ac.text }}>
-                        {selectedAccount.type.charAt(0).toUpperCase() + selectedAccount.type.slice(1)}
-                      </Text>
-                    </View>
-                  );
-                })()}
-                {/* balance */}
-                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.mutedForeground }}>
-                  ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: colors.mutedForeground, letterSpacing: 0.6 }}>ACCOUNT</Text>
+              {selectedAccount ? (
+                <>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: colors.text }} numberOfLines={1}>{selectedAccount.name}</Text>
+                  <Text style={{ fontFamily: "Inter_500Medium", fontSize: 8, color: colors.mutedForeground }}>
+                    ₨{parseFloat(selectedAccount.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </Text>
+                </>
+              ) : (
+                <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: canSelectAccount ? colors.danger : colors.mutedForeground }}>
+                  {canSelectAccount ? "Tap to select" : "Locked"}
                 </Text>
-                {/* default badge */}
-                {selectedAccount.id !== defaults.accountId ? (
-                  <TouchableOpacity
-                    onPress={e => { e.stopPropagation?.(); saveDefault("accountId", selectedAccount.id); }}
-                    style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#FDE68A" }}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#92400E" }}>★</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: "#BBF7D0" }}>
-                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#166534" }}>★</Text>
-                  </View>
-                )}
-              </>
-            ) : (
-              <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: canSelectAccount ? colors.danger : colors.mutedForeground, flex: 1 }}>
-                {canSelectAccount ? "Tap to select" : "Locked by admin"}
-              </Text>
+              )}
+            </View>
+            {selectedAccount && (
+              selectedAccount.id !== defaults.accountId ? (
+                <TouchableOpacity
+                  onPress={e => { e.stopPropagation?.(); saveDefault("accountId", selectedAccount.id); }}
+                  style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, borderWidth: 1, borderColor: "#FDE68A" }}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 8, color: "#92400E" }}>★</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ backgroundColor: "#DCFCE7", paddingHorizontal: 5, paddingVertical: 2, borderRadius: 5, borderWidth: 1, borderColor: "#BBF7D0" }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 8, color: "#166534" }}>★</Text>
+                </View>
+              )
             )}
-            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 16, color: colors.mutedForeground, marginLeft: 2 }}>›</Text>
+            <Text style={{ fontSize: 13, color: colors.mutedForeground }}>›</Text>
           </TouchableOpacity>
         </View>
 
