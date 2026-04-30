@@ -44,6 +44,10 @@ type TotalsBreakdown = {
   creditReceivable: string;
   creditPayable: string;
   other: string;
+  // USD wallet inventory valued at the most recent SALE rate
+  dollarInventoryUsd?: string;
+  dollarInventoryPkr?: string;
+  dollarSaleRate?: string;
   total: string;
 };
 type DashboardData = {
@@ -394,6 +398,16 @@ export default function DashboardScreen() {
               <View style={[breakdownStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <BreakdownRow label="Cash" icon="dollar-sign" color={colors.success} value={fmtPKRk(dash.totalsBreakdown?.cash)} />
                 <BreakdownRow label="Stock" icon="package" color={colors.purchase} value={fmtPKRk(dash.totalsBreakdown?.stock)} />
+                {/* USD Inventory — valued at SALE PRICE (most recent received rate) */}
+                {parseFloat(dash.totalsBreakdown?.dollarInventoryUsd ?? "0") > 0 && (
+                  <BreakdownRow
+                    label="USD Inventory"
+                    icon="dollar-sign"
+                    color={colors.sale}
+                    value={fmtPKRk(dash.totalsBreakdown?.dollarInventoryPkr)}
+                    sub={`${fmtUSD(dash.totalsBreakdown?.dollarInventoryUsd)} @ sale ₨${parseFloat(dash.totalsBreakdown?.dollarSaleRate ?? "0").toFixed(0)}`}
+                  />
+                )}
                 <BreakdownRow
                   label="Credit (Net)"
                   icon="repeat"

@@ -14,6 +14,7 @@ import {
   accountsTable,
   stockTransfersTable,
   dollarWalletTable,
+  walletsTable,
   locationsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
@@ -105,6 +106,7 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     productsWithLoc, accounts, recentSales,
     periodPurchaseIds, periodStockTransfers, periodDollarReceived,
     locations,
+    usdWallets, lastReceivedRateRow,
   ] = await Promise.all([
     db.select({ total: salesTable.total }).from(salesTable).where(salesPeriodFilter),
     db.select({ total: purchasesTable.total }).from(purchasesTable)
@@ -162,7 +164,28 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
       .where(and(eq(dollarWalletTable.entryType, "received"), periodFilter(dollarWalletTable.createdAt))),
     // All locations for per-location naming
     db.select().from(locationsTable).where(eq(locationsTable.isActive, true)),
+    // ALL USD wallets (currency = USD) — to value USD inventory at sale price
+    db.select({ id: walletsTable.id, name: walletsTable.name, balance: walletsTable.balance, currency: walletsTable.currency })
+      .from(walletsTable)
+      .where(and(eq(walletsTable.isActive, true), eq(walletsTable.currency, "USD"))),
+    // Most recent "received" entry — its rate is the current SALE rate of USD
+    db.select({ rate: dollarWalletTable.rate, date: dollarWalletTable.date, createdAt: dollarWalletTable.createdAt })
+      .from(dollarWalletTable)
+      .where(eq(dollarWalletTable.entryType, "received"))
+      .orderBy(desc(dollarWalletTable.createdAt))
+      .limit(1),
   ]);
+
+  // ── USD inventory valued at SALE PRICE ──────────────────────────────────
+  // Sale price = most recent "received" rate (the rate at which we last sold
+  // USD to a customer). Falls back to 0 when there has never been a sale.
+  const currentDollarSaleRate = lastReceivedRateRow.length > 0
+    ? parseFloat(lastReceivedRateRow[0]!.rate)
+    : 0;
+  const dollarWalletBalanceUsd = usdWallets.reduce(
+    (sum, w) => sum + parseFloat(w.balance ?? "0"), 0,
+  );
+  const dollarWalletValuePkr = dollarWalletBalanceUsd * currentDollarSaleRate;
 
   // Received stock qty: sum of all purchase_items.qty for purchases in this period
   const purchaseIds = periodPurchaseIds.map(p => p.id);
@@ -232,6 +255,9 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
   const creditNet = creditReceivable - creditPayable;
   const grandTotal = cashTotal + otherTotal + totalStockValue + creditNet;
 
+  // USD wallet inventory value (at sale price) is part of total wealth
+  const grandTotalWithUsd = grandTotal + dollarWalletValuePkr;
+
   const totalsBreakdown = {
     cash: cashTotal.toFixed(8),
     stock: totalStockValue.toFixed(8),
@@ -239,7 +265,11 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     creditReceivable: creditReceivable.toFixed(8),
     creditPayable: creditPayable.toFixed(8),
     other: otherTotal.toFixed(8),
-    total: grandTotal.toFixed(8),
+    // USD inventory valued at the most recent SALE rate (not cost rate)
+    dollarInventoryUsd: dollarWalletBalanceUsd.toFixed(8),
+    dollarInventoryPkr: dollarWalletValuePkr.toFixed(8),
+    dollarSaleRate: currentDollarSaleRate.toFixed(4),
+    total: grandTotalWithUsd.toFixed(8),
   };
 
   res.json({

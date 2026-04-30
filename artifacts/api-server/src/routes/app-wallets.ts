@@ -101,6 +101,17 @@ router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<voi
     .orderBy(desc(dollarWalletTable.createdAt))
     .limit(100);
 
+  // Current SALE rate of USD = most recent "received" entry rate (across all
+  // products — USD sale rate is global, not per-product).
+  const lastReceived = await db.select({ rate: dollarWalletTable.rate })
+    .from(dollarWalletTable)
+    .where(eq(dollarWalletTable.entryType, "received"))
+    .orderBy(desc(dollarWalletTable.createdAt))
+    .limit(1);
+  const currentDollarSaleRate = lastReceived.length > 0
+    ? parseFloat(lastReceived[0]!.rate)
+    : 0;
+
   const credits = await db.select().from(appCoinCreditsTable)
     .where(eq(appCoinCreditsTable.productId, productId))
     .orderBy(desc(appCoinCreditsTable.createdAt))
@@ -127,6 +138,7 @@ router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<voi
     topups: topups.map(t => ({ ...t, createdAt: t.createdAt.toISOString() })),
     credits: credits.map(c => ({ ...c, createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString() })),
     sales: sales.map(s => ({ ...s, createdAt: s.createdAt.toISOString() })),
+    currentDollarSaleRate: currentDollarSaleRate.toFixed(4),
   });
 });
 

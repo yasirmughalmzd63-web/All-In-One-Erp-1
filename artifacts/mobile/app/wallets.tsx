@@ -334,8 +334,15 @@ export default function WalletsScreen() {
     return sum + (et?.sign ?? 1) * parseFloat(e.amountUsd);
   }, 0);
 
-  const lastRate = entries.length > 0 ? parseFloat(entries[0]!.rate) : 0;
-  const totalPkr = totalUsd * lastRate;
+  // SALE rate = most recent "received" entry rate (the rate at which we
+  // last sold USD to a customer). This is the price USD is worth right now.
+  // Falls back to the latest entry of any type if no received exists yet.
+  const lastReceived = entries.find(e => e.entryType === "received");
+  const saleRate = lastReceived
+    ? parseFloat(lastReceived.rate)
+    : (entries.length > 0 ? parseFloat(entries[0]!.rate) : 0);
+  const lastRate = saleRate;
+  const totalPkr = totalUsd * saleRate;
 
   const totalInBase = form.amountUsd && form.rate
     ? (parseFloat(form.amountUsd || "0") * parseFloat(form.rate || "0")).toFixed(2)
@@ -445,9 +452,14 @@ export default function WalletsScreen() {
             </Text>
           </View>
           <View style={[styles.balCard, { backgroundColor: "rgba(255,255,255,0.18)" }]}>
-            <Text style={styles.balLabel}>IN PKR ({lastRate > 0 ? `@${lastRate.toFixed(0)}` : "set rate"})</Text>
+            <Text style={styles.balLabel}>
+              SALE VALUE {saleRate > 0 ? `@₨${saleRate.toFixed(0)}` : "(no sale rate)"}
+            </Text>
             <Text style={styles.balValue}>
               ₨{totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </Text>
+            <Text style={{ fontFamily: "Inter_400Regular", fontSize: 9, color: "rgba(255,255,255,0.7)", marginTop: 2 }}>
+              {lastReceived ? "based on last sold rate" : "no USD sales yet"}
             </Text>
           </View>
         </View>

@@ -48,6 +48,7 @@ type AppDetail = {
   topups: TopupEntry[];
   credits: CoinCredit[];
   sales: SaleRow[];
+  currentDollarSaleRate?: string;
 };
 
 type CreditPayment = { id: number; creditId: number; amountPkr: string; method: string; notes: string | null; date: string; createdAt: string };
@@ -297,6 +298,14 @@ export default function AppWalletsScreen() {
     const walletPct = totalUsd > 0 ? (walletUsd / totalUsd) * 100 : 0;
     const directPct = 100 - walletPct;
 
+    // ── SALE PRICE valuation ─────────────────────────────────────────────
+    // Convert USD invested to PKR at the current SALE rate (not cost rate),
+    // so the user sees what their dollar inventory would fetch right now.
+    const saleRate = parseFloat(detail.currentDollarSaleRate ?? "0");
+    const totalPkrAtSale = totalUsd * saleRate;
+    const valueDiff = totalPkrAtSale - totalPkr;
+    const valuePct = totalPkr > 0 ? (valueDiff / totalPkr) * 100 : 0;
+
     return (
       <>
         {/* ── Dollar Flow Summary Card ── */}
@@ -307,7 +316,7 @@ export default function AppWalletsScreen() {
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: 0.5 }}>Total USD Invested</Text>
               <Text style={{ fontFamily: "Inter_700Bold", fontSize: 26, color: "#FFF" }}>${totalUsd.toFixed(2)}</Text>
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: "rgba(255,255,255,0.65)" }}>
-                ₨{totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {topups.length} topup{topups.length !== 1 ? "s" : ""}
+                Cost ₨{totalPkr.toLocaleString(undefined, { maximumFractionDigits: 0 })} · {topups.length} topup{topups.length !== 1 ? "s" : ""}
               </Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
@@ -316,6 +325,35 @@ export default function AppWalletsScreen() {
               <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>per USD</Text>
             </View>
           </View>
+
+          {/* SALE VALUE strip — what this USD inventory is worth right now */}
+          {totalUsd > 0 && (
+            <View style={{
+              flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+              backgroundColor: "rgba(74,222,128,0.12)", borderRadius: 10, padding: 10, marginBottom: 12,
+              borderWidth: 1, borderColor: "rgba(74,222,128,0.30)",
+            }}>
+              <View>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.65)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  Sale Value {saleRate > 0 ? `@₨${saleRate.toFixed(0)}` : "(no sale rate)"}
+                </Text>
+                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#4ADE80" }}>
+                  ₨{totalPkrAtSale.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </Text>
+              </View>
+              {saleRate > 0 && (
+                <View style={{ alignItems: "flex-end" }}>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>
+                    {valueDiff >= 0 ? "Profit if sold" : "Loss if sold"}
+                  </Text>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: valueDiff >= 0 ? "#4ADE80" : "#F87171" }}>
+                    {valueDiff >= 0 ? "+" : ""}₨{Math.abs(valueDiff).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {" "}({valuePct >= 0 ? "+" : ""}{valuePct.toFixed(1)}%)
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Wallet vs Direct split bar */}
           {topups.length > 0 && (
