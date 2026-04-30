@@ -1023,7 +1023,7 @@ export default function POSScreen() {
               >
                 <Text style={{ fontSize: 13 }}>{copyError ? "⚠️" : copiedQty ? "✅" : "📋"}</Text>
                 <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: copyError ? "#B91C1C" : copiedQty ? "#065F46" : "#3730A3" }}>
-                  {copyError ? "Err" : copiedQty ? "✓" : "Copy"}
+                  {copyError ? "Error" : copiedQty ? "Copied!" : "Copy"}
                 </Text>
               </TouchableOpacity>
             </View>
