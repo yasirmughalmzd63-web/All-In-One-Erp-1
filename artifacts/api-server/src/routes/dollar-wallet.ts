@@ -257,6 +257,65 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
   });
 });
 
+// GET /api/dollar-wallet/wallets/:id/transactions — per-wallet history + summary
+router.get("/dollar-wallet/wallets/:id/transactions", requireAuth, async (req, res): Promise<void> => {
+  const walletId = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  if (isNaN(walletId)) { res.status(400).json({ error: "Invalid wallet id" }); return; }
+
+  const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
+  if (!wallet) { res.status(404).json({ error: "Wallet not found" }); return; }
+
+  const txs = await db.select().from(dollarWalletTable)
+    .where(eq(dollarWalletTable.walletId, walletId))
+    .orderBy(desc(dollarWalletTable.createdAt));
+
+  const IN_TYPES = new Set(["purchase"]);
+  const OUT_TYPES = new Set(["topup"]);
+
+  let totalIn = 0;
+  let totalOut = 0;
+  let totalInPkr = 0;
+  let totalOutPkr = 0;
+  const monthMap: Record<string, { in: number; out: number; inPkr: number; outPkr: number; count: number }> = {};
+
+  for (const t of txs) {
+    const amt = parseFloat(t.amountUsd);
+    const pkr = parseFloat(t.totalPkr);
+    const monthKey = t.date.slice(0, 7);
+    if (!monthMap[monthKey]) monthMap[monthKey] = { in: 0, out: 0, inPkr: 0, outPkr: 0, count: 0 };
+    monthMap[monthKey]!.count += 1;
+    if (IN_TYPES.has(t.entryType)) {
+      totalIn += amt;
+      totalInPkr += pkr;
+      monthMap[monthKey]!.in += amt;
+      monthMap[monthKey]!.inPkr += pkr;
+    } else if (OUT_TYPES.has(t.entryType)) {
+      totalOut += amt;
+      totalOutPkr += pkr;
+      monthMap[monthKey]!.out += amt;
+      monthMap[monthKey]!.outPkr += pkr;
+    }
+  }
+
+  const monthly = Object.entries(monthMap)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([month, v]) => ({ month, ...v }));
+
+  res.json({
+    wallet: { ...wallet, createdAt: wallet.createdAt.toISOString() },
+    transactions: txs.map(t => ({ ...t, createdAt: t.createdAt.toISOString() })),
+    summary: {
+      totalIn: fmt(totalIn),
+      totalOut: fmt(totalOut),
+      totalInPkr: fmt(totalInPkr),
+      totalOutPkr: fmt(totalOutPkr),
+      netUsd: fmt(totalIn - totalOut),
+      txCount: txs.length,
+    },
+    monthly,
+  });
+});
+
 router.delete("/dollar-wallet/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [existing] = await db.select().from(dollarWalletTable).where(eq(dollarWalletTable.id, id));
