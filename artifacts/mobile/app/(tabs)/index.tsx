@@ -185,6 +185,139 @@ function AccountPickerModal({ visible, accounts, onSelect, onClose }: {
   );
 }
 
+function CustomerPickerModal({ visible, customers, locations, onSelect, onClose }: {
+  visible: boolean;
+  customers: Customer[];
+  locations: Location[];
+  onSelect: (c: Customer | null) => void;
+  onClose: () => void;
+}) {
+  const colors = useColors();
+  const [activeTab, setActiveTab] = useState<number | "all">("all");
+  const [search, setSearch] = useState("");
+
+  React.useEffect(() => {
+    if (visible) { setActiveTab("all"); setSearch(""); }
+  }, [visible]);
+
+  const tabs: { key: number | "all"; label: string }[] = [
+    { key: "all", label: "All" },
+    ...locations.map(l => ({ key: l.id, label: l.name })),
+  ];
+
+  const filtered = useMemo(() => {
+    const byTab = activeTab === "all"
+      ? customers
+      : customers.filter(c => c.locationId === activeTab);
+    const q = search.trim().toLowerCase();
+    return q ? byTab.filter(c => c.name.toLowerCase().includes(q) || (c.phone ?? "").includes(q)) : byTab;
+  }, [customers, activeTab, search]);
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
+        <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "82%" }}>
+
+          {/* Header */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 18, paddingTop: 18, paddingBottom: 10 }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Select Customer</Text>
+            <TouchableOpacity style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 20, lineHeight: 22 }}>×</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Location (App) tab bar */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ flexDirection: "row", gap: 7, paddingHorizontal: 14, paddingBottom: 10 }}
+          >
+            {tabs.map(tab => {
+              const isActive = tab.key === activeTab;
+              const count = tab.key === "all"
+                ? customers.length
+                : customers.filter(c => c.locationId === tab.key).length;
+              return (
+                <TouchableOpacity
+                  key={String(tab.key)}
+                  onPress={() => setActiveTab(tab.key)}
+                  activeOpacity={0.75}
+                  style={{
+                    flexDirection: "row", alignItems: "center", gap: 5,
+                    paddingHorizontal: 12, paddingVertical: 7,
+                    borderRadius: 20, borderWidth: isActive ? 2 : 1.5,
+                    backgroundColor: isActive ? "#EFF6FF" : colors.card,
+                    borderColor: isActive ? "#3B82F6" : colors.border,
+                  }}
+                >
+                  <Text style={{ fontSize: 12 }}>{tab.key === "all" ? "🏪" : "📍"}</Text>
+                  <Text style={{ fontFamily: isActive ? "Inter_700Bold" : "Inter_500Medium", fontSize: 12, color: isActive ? "#1E40AF" : colors.mutedForeground }}>
+                    {tab.label}
+                  </Text>
+                  <View style={{ backgroundColor: isActive ? "#3B82F6" : colors.border, borderRadius: 10, paddingHorizontal: 5, paddingVertical: 1 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#fff" }}>{count}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+
+          {/* Search */}
+          <View style={{ marginHorizontal: 14, marginBottom: 8, flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: colors.input, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 }}>
+            <Text style={{ fontSize: 14 }}>🔍</Text>
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search name or phone…"
+              placeholderTextColor={colors.mutedForeground}
+              style={{ flex: 1, fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text }}
+            />
+          </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: colors.border, marginHorizontal: 14, marginBottom: 4 }} />
+
+          {/* Walk-in row */}
+          <TouchableOpacity
+            onPress={() => { onSelect(null); onClose(); }}
+            style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}
+          >
+            <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: colors.secondary, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ fontSize: 18 }}>👥</Text>
+            </View>
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.mutedForeground }}>Walk-in (no customer)</Text>
+          </TouchableOpacity>
+
+          {/* Customer list */}
+          <FlatList
+            data={filtered}
+            keyExtractor={c => String(c.id)}
+            renderItem={({ item: c }) => (
+              <TouchableOpacity
+                style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                onPress={() => { onSelect(c); onClose(); }}
+                activeOpacity={0.75}
+              >
+                <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: "#EFF6FF", borderWidth: 1.5, borderColor: "#93C5FD", alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: 18 }}>👤</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 13, color: colors.text }}>{c.name}</Text>
+                  {c.phone ? <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 1 }}>{c.phone}</Text> : null}
+                </View>
+                <Text style={{ fontSize: 16, color: colors.mutedForeground }}>›</Text>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground, textAlign: "center", paddingVertical: 24 }}>No customers found</Text>
+            }
+          />
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function PickerModal<T extends { id: number; name: string }>({
   visible, title, items, onSelect, onClose, renderSub,
 }: { visible: boolean; title: string; items: T[]; onSelect: (item: T | null) => void; onClose: () => void; renderSub?: (item: T) => string }) {
@@ -1320,10 +1453,9 @@ export default function POSScreen() {
         onSelect={p => { setSelectedProduct(p); setRateMode("normal"); }}
         onClose={() => setShowProductModal(false)}
       />
-      <PickerModal<Customer>
-        visible={showCustomerModal} title="Select Customer" items={activeCustomers}
+      <CustomerPickerModal
+        visible={showCustomerModal} customers={customers} locations={allowedLocations}
         onSelect={setSelectedCustomer} onClose={() => setShowCustomerModal(false)}
-        renderSub={c => c.phone ?? ""}
       />
       <AccountPickerModal
         visible={showAccountModal} accounts={allowedAccounts}
