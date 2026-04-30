@@ -13,6 +13,7 @@ export const employeesTable = pgTable("employees", {
   baseSalary: text("base_salary").notNull().default("0.00"),
   joinDate: text("join_date"),
   status: text("status").notNull().default("active"),
+  paymentMethod: text("payment_method"),
   locationId: integer("location_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),

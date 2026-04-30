@@ -19,9 +19,10 @@ type EmpStatus = "active" | "inactive";
 interface Employee {
   id: number; name: string; phone?: string; email?: string;
   position?: string; department?: string; baseSalary: string;
-  joinDate?: string; status: EmpStatus; locationId?: number;
-  createdAt: string;
+  joinDate?: string; status: EmpStatus; paymentMethod?: string;
+  locationId?: number; createdAt: string;
 }
+interface Location { id: number; name: string; }
 interface Attendance {
   id: number; employeeId: number; date: string;
   status: AttendanceStatus; checkIn?: string; checkOut?: string;
@@ -59,6 +60,10 @@ const PKR = (n: number) =>
   "₨" + n.toLocaleString("en-PK", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 const NOW = new Date();
+const DEPARTMENTS = ["Sales","Operations","Finance","HR","IT","Management","Marketing","Customer Service","Logistics","Production","Admin"];
+const POSITIONS = ["Director","Manager","Senior Manager","Supervisor","Team Lead","Senior Executive","Executive","Officer","Coordinator","Assistant","Intern"];
+const PAYMENT_METHODS = ["Cash","Bank Transfer","Cheque","Online/Mobile"];
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const ALL_MONTHS = MONTHS.map((m, i) => ({ label: m, value: i + 1 }));
 const ATT_STATUS: AttendanceStatus[] = ["present","absent","late","half_day","holiday"];
@@ -87,7 +92,8 @@ export default function HrmScreen() {
   const [empFilter, setEmpFilter] = useState<"all" | "active" | "inactive">("active");
   const [showEmpModal, setShowEmpModal] = useState(false);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
-  const [empForm, setEmpForm] = useState({ name: "", phone: "", email: "", position: "", department: "", baseSalary: "", joinDate: "", status: "active" as EmpStatus });
+  const [empForm, setEmpForm] = useState({ name: "", phone: "", email: "", position: "", department: "", baseSalary: "", joinDate: "", status: "active" as EmpStatus, paymentMethod: "", locationId: null as number | null });
+  const [locations, setLocations] = useState<Location[]>([]);
 
   // — Attendance
   const [attendance, setAttendance] = useState<Attendance[]>([]);
@@ -188,7 +194,11 @@ export default function HrmScreen() {
     } catch (_) {}
   }, [token]);
 
-  useEffect(() => { fetchEmployees(); fetchPendingAchievements(); }, [fetchEmployees, fetchPendingAchievements]);
+  useEffect(() => {
+    fetchEmployees();
+    fetchPendingAchievements();
+    fetch(getApiUrl("/api/locations"), { headers }).then(r => r.ok ? r.json() : []).then(setLocations).catch(() => {});
+  }, [fetchEmployees, fetchPendingAchievements]);
   useEffect(() => { if (activeTab === "attendance") fetchAttendance(); }, [activeTab, fetchAttendance]);
   useEffect(() => { if (activeTab === "payroll") { fetchPayroll(); fetchFinesAndBonuses(); } }, [activeTab, fetchPayroll, fetchFinesAndBonuses]);
   useEffect(() => { if (activeTab === "report") fetchReport(); }, [activeTab, fetchReport]);
@@ -197,10 +207,10 @@ export default function HrmScreen() {
   const openEmpModal = (emp?: Employee) => {
     if (emp) {
       setEditingEmp(emp);
-      setEmpForm({ name: emp.name, phone: emp.phone ?? "", email: emp.email ?? "", position: emp.position ?? "", department: emp.department ?? "", baseSalary: emp.baseSalary, joinDate: emp.joinDate ?? "", status: emp.status });
+      setEmpForm({ name: emp.name, phone: emp.phone ?? "", email: emp.email ?? "", position: emp.position ?? "", department: emp.department ?? "", baseSalary: emp.baseSalary, joinDate: emp.joinDate ?? "", status: emp.status, paymentMethod: emp.paymentMethod ?? "", locationId: emp.locationId ?? null });
     } else {
       setEditingEmp(null);
-      setEmpForm({ name: "", phone: "", email: "", position: "", department: "", baseSalary: "", joinDate: "", status: "active" });
+      setEmpForm({ name: "", phone: "", email: "", position: "", department: "", baseSalary: "", joinDate: "", status: "active", paymentMethod: "", locationId: null });
     }
     setShowEmpModal(true);
   };
@@ -834,7 +844,25 @@ export default function HrmScreen() {
                           </View>
                         )}
                       </View>
-                      {emp.position ? <Text style={s.cardSub}>{emp.department ? `${emp.position} · ${emp.department}` : emp.position}</Text> : null}
+                      {(emp.position || emp.department) ? (
+                        <Text style={s.cardSub}>
+                          {[emp.position, emp.department].filter(Boolean).join(" · ")}
+                        </Text>
+                      ) : null}
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 3 }}>
+                        {emp.paymentMethod ? (
+                          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#EFF6FF", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, gap: 3 }}>
+                            <Feather name={emp.paymentMethod === "Cash" ? "dollar-sign" : emp.paymentMethod === "Bank Transfer" ? "credit-card" : emp.paymentMethod === "Cheque" ? "file-text" : "smartphone"} size={9} color="#2563EB" />
+                            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "#2563EB" }}>{emp.paymentMethod}</Text>
+                          </View>
+                        ) : null}
+                        {emp.locationId ? (
+                          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#F0FDF4", borderRadius: 6, paddingHorizontal: 5, paddingVertical: 2, gap: 3 }}>
+                            <Feather name="map-pin" size={9} color="#059669" />
+                            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 9, color: "#059669" }}>{locations.find(l => l.id === emp.locationId)?.name ?? `Loc #${emp.locationId}`}</Text>
+                          </View>
+                        ) : null}
+                      </View>
                     </View>
                     <View style={[s.badge, { backgroundColor: emp.status === "active" ? "#DCFCE7" : "#F3F4F6" }]}>
                       <Text style={[s.badgeTxt, { color: emp.status === "active" ? "#059669" : "#6B7280" }]}>{emp.status}</Text>
@@ -1234,28 +1262,116 @@ export default function HrmScreen() {
       {/* ─── Add/Edit Employee Modal ─── */}
       <Modal visible={showEmpModal} animationType="slide" transparent onRequestClose={() => setShowEmpModal(false)}>
         <View style={s.overlay}>
-          <View style={s.sheet}>
+          <View style={[s.sheet, { maxHeight: "90%" }]}>
             <Text style={s.sheetTitle}>{editingEmp ? "Edit Employee" : "Add Employee"}</Text>
-            <ScrollView style={{ maxHeight: 480 }}>
-              {[
-                { key: "name",       label: "Full Name *",    keyboard: "default"  as const },
-                { key: "position",   label: "Position",        keyboard: "default"  as const },
-                { key: "department", label: "Department",      keyboard: "default"  as const },
-                { key: "phone",      label: "Phone",           keyboard: "phone-pad" as const },
-                { key: "email",      label: "Email",           keyboard: "email-address" as const },
-                { key: "baseSalary", label: "Base Salary (₨)", keyboard: "numeric"  as const },
-                { key: "joinDate",   label: "Join Date (YYYY-MM-DD)", keyboard: "default" as const },
-              ].map(f => (
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+              {/* Text fields */}
+              {([
+                { key: "name",       label: "Full Name *",         keyboard: "default"       as const },
+                { key: "phone",      label: "Phone",                keyboard: "phone-pad"     as const },
+                { key: "email",      label: "Email",                keyboard: "email-address" as const },
+                { key: "baseSalary", label: "Base Salary (₨)",      keyboard: "numeric"       as const },
+                { key: "joinDate",   label: "Join Date (YYYY-MM-DD)", keyboard: "default"     as const },
+              ] as { key: string; label: string; keyboard: "default" | "phone-pad" | "email-address" | "numeric" }[]).map(f => (
                 <View key={f.key} style={s.fieldRow}>
                   <Text style={s.fieldLabel}>{f.label}</Text>
                   <TextInput style={s.fieldInput}
-                    value={(empForm as any)[f.key]}
+                    value={(empForm as Record<string, string>)[f.key]}
                     onChangeText={v => setEmpForm(p => ({ ...p, [f.key]: v }))}
                     keyboardType={f.keyboard}
                     placeholderTextColor={colors.textSecondary}
                     placeholder={f.label} />
                 </View>
               ))}
+
+              {/* Department chips */}
+              <View style={s.fieldRow}>
+                <Text style={s.fieldLabel}>Department</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: "row", gap: 6, paddingBottom: 4 }}>
+                    {DEPARTMENTS.map(d => {
+                      const sel = empForm.department === d;
+                      return (
+                        <TouchableOpacity key={d}
+                          style={[s.pill, sel && s.pillActive]}
+                          onPress={() => setEmpForm(p => ({ ...p, department: sel ? "" : d }))}>
+                          <Text style={[s.pillTxt, sel && s.pillTxtActive]}>{d}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Position chips */}
+              <View style={s.fieldRow}>
+                <Text style={s.fieldLabel}>Position</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: "row", gap: 6, paddingBottom: 4 }}>
+                    {POSITIONS.map(p => {
+                      const sel = empForm.position === p;
+                      return (
+                        <TouchableOpacity key={p}
+                          style={[s.pill, sel && s.pillActive]}
+                          onPress={() => setEmpForm(prev => ({ ...prev, position: sel ? "" : p }))}>
+                          <Text style={[s.pillTxt, sel && s.pillTxtActive]}>{p}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
+              {/* Payment Method chips */}
+              <View style={s.fieldRow}>
+                <Text style={s.fieldLabel}>Payment Method</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                  {PAYMENT_METHODS.map(pm => {
+                    const sel = empForm.paymentMethod === pm;
+                    const icon = pm === "Cash" ? "dollar-sign" : pm === "Bank Transfer" ? "credit-card" : pm === "Cheque" ? "file-text" : "smartphone";
+                    return (
+                      <TouchableOpacity key={pm}
+                        style={[s.pill, sel && { backgroundColor: colors.primary, borderColor: colors.primary }, { flexDirection: "row", alignItems: "center", gap: 4 }]}
+                        onPress={() => setEmpForm(prev => ({ ...prev, paymentMethod: sel ? "" : pm }))}>
+                        <Feather name={icon as any} size={12} color={sel ? "#fff" : colors.textSecondary} />
+                        <Text style={[s.pillTxt, sel && s.pillTxtActive]}>{pm}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Location chips (admin only, if locations exist) */}
+              {isAdmin && locations.length > 0 && (
+                <View style={s.fieldRow}>
+                  <Text style={s.fieldLabel}>Location</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ flexDirection: "row", gap: 6, paddingBottom: 4 }}>
+                      {/* "App-wide" option */}
+                      <TouchableOpacity
+                        style={[s.pill, empForm.locationId === null && s.pillActive, { flexDirection: "row", alignItems: "center", gap: 4 }]}
+                        onPress={() => setEmpForm(p => ({ ...p, locationId: null }))}>
+                        <Feather name="globe" size={12} color={empForm.locationId === null ? "#fff" : colors.textSecondary} />
+                        <Text style={[s.pillTxt, empForm.locationId === null && s.pillTxtActive]}>App-wide</Text>
+                      </TouchableOpacity>
+                      {locations.map(loc => {
+                        const sel = empForm.locationId === loc.id;
+                        return (
+                          <TouchableOpacity key={loc.id}
+                            style={[s.pill, sel && s.pillActive, { flexDirection: "row", alignItems: "center", gap: 4 }]}
+                            onPress={() => setEmpForm(p => ({ ...p, locationId: sel ? null : loc.id }))}>
+                            <Feather name="map-pin" size={12} color={sel ? "#fff" : colors.textSecondary} />
+                            <Text style={[s.pillTxt, sel && s.pillTxtActive]}>{loc.name}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+
+              {/* Status */}
               <View style={s.fieldRow}>
                 <Text style={s.fieldLabel}>Status</Text>
                 <View style={s.segRow}>
@@ -1266,6 +1382,7 @@ export default function HrmScreen() {
                   ))}
                 </View>
               </View>
+
             </ScrollView>
             <View style={s.sheetActions}>
               <TouchableOpacity style={s.cancelBtn} onPress={() => setShowEmpModal(false)}><Text style={s.cancelTxt}>Cancel</Text></TouchableOpacity>

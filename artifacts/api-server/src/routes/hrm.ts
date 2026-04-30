@@ -20,10 +20,10 @@ router.get("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.post("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
-  const { name, phone, email, address, position, department, baseSalary, joinDate, locationId } = req.body as {
+  const { name, phone, email, address, position, department, baseSalary, joinDate, locationId, paymentMethod } = req.body as {
     name?: string; phone?: string; email?: string; address?: string;
     position?: string; department?: string; baseSalary?: string;
-    joinDate?: string; locationId?: number;
+    joinDate?: string; locationId?: number; paymentMethod?: string;
   };
   if (!name) { res.status(400).json({ error: "name required" }); return; }
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? null);
@@ -31,6 +31,7 @@ router.post("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
     name, phone: phone ?? null, email: email ?? null, address: address ?? null,
     position: position ?? null, department: department ?? null,
     baseSalary: baseSalary ?? "0.00", joinDate: joinDate ?? null,
+    paymentMethod: paymentMethod ?? null,
     locationId: effectiveLocationId,
   }).returning();
   await logAudit(req.userId, "create", "employee", row!.id, name);
@@ -40,7 +41,7 @@ router.post("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
 router.patch("/hrm/employees/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
   const updates: Record<string, unknown> = {};
-  const fields = ["name", "phone", "email", "address", "position", "department", "baseSalary", "joinDate", "status", "locationId"];
+  const fields = ["name", "phone", "email", "address", "position", "department", "baseSalary", "joinDate", "status", "locationId", "paymentMethod"];
   for (const f of fields) if (req.body[f] !== undefined) updates[f === "baseSalary" ? "baseSalary" : f] = req.body[f];
   if (req.body.baseSalary !== undefined) updates.baseSalary = String(req.body.baseSalary);
   const [row] = await db.update(employeesTable).set(updates).where(eq(employeesTable.id, id)).returning();
