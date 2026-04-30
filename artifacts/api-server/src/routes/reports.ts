@@ -809,4 +809,168 @@ router.get("/reports/customer-dollar-report", requireAuth, async (req, res): Pro
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CASH FLOW V2 — user-daily sales orders + transfers + company IN/OUT flow
+// GET /api/reports/cash-flow-v2?startDate&endDate&userId
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/reports/cash-flow-v2", requireAuth, async (req, res): Promise<void> => {
+  const scope = readScope(req as never);
+  if ("error" in scope) { res.status(scope.error.status).json(scope.error.body); return; }
+  const { start, end } = parseDateRange(req as never);
+  const filterUserId = typeof req.query.userId === "string" && req.query.userId ? parseInt(req.query.userId) : null;
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  const dayOf = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  // ── users map ─────────────────────────────────────────────────────────────
+  const allUsers = await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable);
+  const userMap = new Map(allUsers.map(u => [u.id, u.name ?? `User #${u.id}`]));
+
+  // ── SALES (orders) ───────────────────────────────────────────────────────
+  const saleConds: ReturnType<typeof eq>[] = [gte(salesTable.createdAt, start), lte(salesTable.createdAt, end)];
+  if (scope.locationId) saleConds.push(eq(salesTable.locationId, scope.locationId) as ReturnType<typeof eq>);
+  if (filterUserId)     saleConds.push(eq(salesTable.userId, filterUserId) as ReturnType<typeof eq>);
+
+  const rawSales = await db.select({
+    id: salesTable.id,
+    userId: salesTable.userId,
+    total: salesTable.total,
+    amountPaid: salesTable.amountPaid,
+    paymentMethod: salesTable.paymentMethod,
+    status: salesTable.status,
+    createdAt: salesTable.createdAt,
+    customerName: customersTable.name,
+    locationName: locationsTable.name,
+  })
+  .from(salesTable)
+  .leftJoin(customersTable, eq(salesTable.customerId, customersTable.id))
+  .leftJoin(locationsTable, eq(salesTable.locationId, locationsTable.id))
+  .where(and(...saleConds))
+  .orderBy(desc(salesTable.createdAt));
+
+  // Group: date → userId → [sales]
+  const ordersMap = new Map<string, Map<number, typeof rawSales>>();
+  for (const sale of rawSales) {
+    const day = dayOf(sale.createdAt);
+    if (!ordersMap.has(day)) ordersMap.set(day, new Map());
+    const dayMap = ordersMap.get(day)!;
+    const uid = sale.userId ?? 0;
+    if (!dayMap.has(uid)) dayMap.set(uid, []);
+    dayMap.get(uid)!.push(sale);
+  }
+
+  const ordersByDay = Array.from(ordersMap.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, userMap2]) => {
+      const byUser = Array.from(userMap2.entries()).map(([uid, sales]) => ({
+        userId: uid,
+        userName: userMap.get(uid) ?? `User #${uid}`,
+        orders: sales.length,
+        amount: sales.reduce((s, x) => s + parseFloat(x.amountPaid ?? "0"), 0),
+        sales: sales.map(s => ({
+          id: s.id,
+          time: s.createdAt.toISOString(),
+          customerName: s.customerName ?? "Walk-in",
+          total: parseFloat(s.total ?? "0"),
+          amountPaid: parseFloat(s.amountPaid ?? "0"),
+          paymentMethod: s.paymentMethod ?? "cash",
+          status: s.status ?? "completed",
+          locationName: s.locationName ?? null,
+        })),
+      })).sort((a, b) => b.amount - a.amount);
+      return {
+        date,
+        totalAmount: byUser.reduce((s, u) => s + u.amount, 0),
+        totalOrders: byUser.reduce((s, u) => s + u.orders, 0),
+        byUser,
+      };
+    });
+
+  // ── TRANSFERS (audit log) ────────────────────────────────────────────────
+  const transferConds = [
+    sql`lower(${auditLogsTable.action}) = 'transfer'`,
+    eq(auditLogsTable.entityType, "account"),
+    gte(auditLogsTable.createdAt, start),
+    lte(auditLogsTable.createdAt, end),
+  ];
+  if (filterUserId) transferConds.push(eq(auditLogsTable.userId, filterUserId));
+
+  const rawTransfers = await db.select().from(auditLogsTable)
+    .where(and(...transferConds))
+    .orderBy(desc(auditLogsTable.createdAt));
+
+  // parse "Transfer {amount} from account #{fromId} to #{toId}: notes"
+  const amtRe = /Transfer\s+([\d.]+)/i;
+  const transfers = rawTransfers.map(t => {
+    const amtMatch = amtRe.exec(t.details ?? "");
+    const amount = amtMatch ? parseFloat(amtMatch[1]!) : 0;
+    return {
+      id: t.id,
+      createdAt: t.createdAt.toISOString(),
+      details: t.details ?? "",
+      amount,
+      userId: t.userId,
+      userName: userMap.get(t.userId ?? -1) ?? `User #${t.userId}`,
+      day: dayOf(t.createdAt),
+    };
+  });
+
+  // ── PURCHASES cash out ────────────────────────────────────────────────────
+  const pursConds: ReturnType<typeof eq>[] = [gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end)];
+  if (scope.locationId) pursConds.push(eq(purchasesTable.locationId, scope.locationId) as ReturnType<typeof eq>);
+  const rawPurchases = await db.select({
+    amountPaid: purchasesTable.amountPaid,
+    createdAt: purchasesTable.createdAt,
+  }).from(purchasesTable).where(and(...pursConds));
+
+  // ── EXPENSES cash out ─────────────────────────────────────────────────────
+  const startDay = localDayString(start);
+  const endDay   = localDayString(end);
+  const expConds: ReturnType<typeof eq>[] = [gte(expensesTable.date, startDay), lte(expensesTable.date, endDay)];
+  if (scope.locationId) expConds.push(eq(expensesTable.locationId, scope.locationId) as ReturnType<typeof eq>);
+  const rawExpenses = await db.select({ amount: expensesTable.amount, date: expensesTable.date }).from(expensesTable).where(and(...expConds));
+
+  // ── FLOW: daily IN vs OUT ─────────────────────────────────────────────────
+  const flowMap = new Map<string, { salesIn: number; purchasesOut: number; expensesOut: number; transfersOut: number }>();
+  const ensureDay = (d: string) => {
+    if (!flowMap.has(d)) flowMap.set(d, { salesIn: 0, purchasesOut: 0, expensesOut: 0, transfersOut: 0 });
+    return flowMap.get(d)!;
+  };
+  for (const s of rawSales)   ensureDay(dayOf(s.createdAt)).salesIn       += parseFloat(s.amountPaid ?? "0");
+  for (const p of rawPurchases) ensureDay(dayOf(p.createdAt)).purchasesOut += parseFloat(p.amountPaid ?? "0");
+  for (const e of rawExpenses)  ensureDay(e.date).expensesOut              += parseFloat(e.amount ?? "0");
+  for (const t of transfers)    ensureDay(t.day).transfersOut              += t.amount;
+
+  const flowByDay = Array.from(flowMap.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, f]) => ({
+      date,
+      salesIn:       f.salesIn,
+      purchasesOut:  f.purchasesOut,
+      expensesOut:   f.expensesOut,
+      transfersOut:  f.transfersOut,
+      totalIn:       f.salesIn,
+      totalOut:      f.purchasesOut + f.expensesOut + f.transfersOut,
+      net:           f.salesIn - (f.purchasesOut + f.expensesOut + f.transfersOut),
+    }));
+
+  const flowTotals = flowByDay.reduce((acc, d) => ({
+    totalIn:  acc.totalIn  + d.totalIn,
+    totalOut: acc.totalOut + d.totalOut,
+    net:      acc.net      + d.net,
+  }), { totalIn: 0, totalOut: 0, net: 0 });
+
+  // ── all users (for filter dropdown) ───────────────────────────────────────
+  const userList = allUsers.map(u => ({ id: u.id, name: u.name ?? `User #${u.id}` }));
+
+  res.json({
+    period: { start: start.toISOString(), end: end.toISOString() },
+    users: userList,
+    orders: ordersByDay,
+    transfers,
+    flow: { byDay: flowByDay, totals: flowTotals },
+  });
+});
+
 export default router;
