@@ -7,6 +7,7 @@ import {
   dollarWalletTable, customersTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { tenantWhere } from "../lib/tenant.js";
 
 const router = Router();
 const EXCHANGE_RATE = 285;
@@ -42,17 +43,24 @@ function localDayString(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-router.get("/reports/daily-snapshot", requireAuth, async (_req, res): Promise<void> => {
+router.get("/reports/daily-snapshot", requireAuth, async (req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0]!;
 
+  const tAcc = tenantWhere(req, accountsTable.businessId);
+  const tProd = tenantWhere(req, productsTable.businessId);
+  const tCred = tenantWhere(req, creditsTable.businessId);
+  const tSales = tenantWhere(req, salesTable.businessId);
+  const tUsers = tenantWhere(req, usersTable.businessId);
+
   // ── Locations ─────────────────────────────────────────────────────────────
-  const locations = await db.select().from(locationsTable).where(eq(locationsTable.isActive, true));
+  const tLoc = tenantWhere(req, locationsTable.businessId);
+  const locations = await db.select().from(locationsTable).where(and(eq(locationsTable.isActive, true), tLoc));
 
   // Bank per location
   const bankByLoc = await db.select({
     locationId: accountsTable.locationId,
     total: sql<string>`coalesce(sum(cast(${accountsTable.balance} as numeric)), 0)`,
-  }).from(accountsTable).where(eq(accountsTable.isActive, true)).groupBy(accountsTable.locationId);
+  }).from(accountsTable).where(and(eq(accountsTable.isActive, true), tAcc)).groupBy(accountsTable.locationId);
 
   // Stock per location
   const stockByLoc = await db.select({
@@ -60,12 +68,12 @@ router.get("/reports/daily-snapshot", requireAuth, async (_req, res): Promise<vo
     total: sql<string>`coalesce(sum(cast(${productsTable.costPrice} as numeric) * ${productsTable.stock}), 0)`,
     units: sql<string>`coalesce(sum(${productsTable.stock}), 0)`,
     products: sql<string>`count(*)`,
-  }).from(productsTable).where(eq(productsTable.isActive, true)).groupBy(productsTable.locationId);
+  }).from(productsTable).where(and(eq(productsTable.isActive, true), tProd)).groupBy(productsTable.locationId);
 
   // Credits – total receivable remaining (no location on credits, shown at totals level)
   const [creditRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${creditsTable.remainingAmount} as numeric)), 0)`,
-  }).from(creditsTable).where(eq(creditsTable.type, "receivable"));
+  }).from(creditsTable).where(and(eq(creditsTable.type, "receivable"), tCred));
 
   // Unlinked (no location) bank + stock
   const bankMap = new Map(bankByLoc.map(r => [r.locationId ?? -1, parseFloat(r.total)]));
@@ -95,7 +103,7 @@ router.get("/reports/daily-snapshot", requireAuth, async (_req, res): Promise<vo
   const unlinkedStock = stockMap.get(-1) ?? { value: 0, units: 0, products: 0 };
 
   // ── Users ─────────────────────────────────────────────────────────────────
-  const users = await db.select().from(usersTable).where(eq(usersTable.isActive, true));
+  const users = await db.select().from(usersTable).where(and(eq(usersTable.isActive, true), tUsers));
 
   // Sales per user (today) — amountPaid = cash collected, credit = total - amountPaid
   const salesToday = await db.select({
@@ -104,7 +112,7 @@ router.get("/reports/daily-snapshot", requireAuth, async (_req, res): Promise<vo
     cash:   sql<string>`coalesce(sum(cast(${salesTable.amountPaid} as numeric)), 0)`,
     credit: sql<string>`coalesce(sum(greatest(cast(${salesTable.total} as numeric) - cast(${salesTable.amountPaid} as numeric), 0)), 0)`,
     count:  sql<string>`count(*)`,
-  }).from(salesTable).where(sql`date(${salesTable.createdAt}) = ${today}`).groupBy(salesTable.userId);
+  }).from(salesTable).where(and(sql`date(${salesTable.createdAt}) = ${today}`, tSales)).groupBy(salesTable.userId);
 
   // Sales all-time per user
   const salesAll = await db.select({
@@ -113,7 +121,7 @@ router.get("/reports/daily-snapshot", requireAuth, async (_req, res): Promise<vo
     cash:   sql<string>`coalesce(sum(cast(${salesTable.amountPaid} as numeric)), 0)`,
     credit: sql<string>`coalesce(sum(greatest(cast(${salesTable.total} as numeric) - cast(${salesTable.amountPaid} as numeric), 0)), 0)`,
     count:  sql<string>`count(*)`,
-  }).from(salesTable).groupBy(salesTable.userId);
+  }).from(salesTable).where(tSales).groupBy(salesTable.userId);
 
   const todayMap  = new Map(salesToday.map(r => [r.userId, r]));
   const allMap    = new Map(salesAll.map(r => [r.userId, r]));
@@ -180,7 +188,7 @@ router.get("/reports/profit-loss", requireAuth, async (req, res): Promise<void> 
   const { start, end, allTime } = parseDateRange(req as never);
 
   // Sales total + count
-  const salesConds = [gte(salesTable.createdAt, start), lte(salesTable.createdAt, end)];
+  const salesConds = [gte(salesTable.createdAt, start), lte(salesTable.createdAt, end), tenantWhere(req, salesTable.businessId)];
   if (scope.locationId) salesConds.push(eq(salesTable.locationId, scope.locationId));
   const [salesRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${salesTable.total} as numeric)), 0)`,
@@ -199,7 +207,7 @@ router.get("/reports/profit-loss", requireAuth, async (req, res): Promise<void> 
     .where(and(...salesConds));
 
   // Purchases (informational)
-  const purchaseConds = [gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end)];
+  const purchaseConds = [gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end), tenantWhere(req, purchasesTable.businessId)];
   if (scope.locationId) purchaseConds.push(eq(purchasesTable.locationId, scope.locationId));
   const [purRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${purchasesTable.total} as numeric)), 0)`,
@@ -209,18 +217,18 @@ router.get("/reports/profit-loss", requireAuth, async (req, res): Promise<void> 
   // Expenses by date (uses expenses.date YYYY-MM-DD)
   const startDay = localDayString(start);
   const endDay   = localDayString(end);
-  const expenseConds = allTime ? [] : [gte(expensesTable.date, startDay), lte(expensesTable.date, endDay)];
+  const expenseConds = allTime ? [tenantWhere(req, expensesTable.businessId)] : [gte(expensesTable.date, startDay), lte(expensesTable.date, endDay), tenantWhere(req, expensesTable.businessId)];
   const [expRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${expensesTable.amount} as numeric)), 0)`,
     count: sql<string>`count(*)`,
-  }).from(expensesTable).where(expenseConds.length ? and(...expenseConds) : sql`true`);
+  }).from(expensesTable).where(and(...expenseConds));
 
   // Per-category expense breakdown
   const expByCategory = await db.select({
     categoryId: expensesTable.categoryId,
     title: expensesTable.title,
     total: sql<string>`coalesce(sum(cast(${expensesTable.amount} as numeric)), 0)`,
-  }).from(expensesTable).where(expenseConds.length ? and(...expenseConds) : sql`true`).groupBy(expensesTable.categoryId, expensesTable.title);
+  }).from(expensesTable).where(and(...expenseConds)).groupBy(expensesTable.categoryId, expensesTable.title);
 
   const sales    = parseFloat(salesRow?.total ?? "0");
   const cogs     = parseFloat(cogsRows[0]?.cogs ?? "0");
@@ -265,7 +273,7 @@ router.get("/reports/balance-sheet", requireAuth, async (req, res): Promise<void
   if ("error" in scope) { res.status(scope.error.status).json(scope.error.body); return; }
 
   // Accounts — buckets by type
-  const accConds = [eq(accountsTable.isActive, true)];
+  const accConds = [eq(accountsTable.isActive, true), tenantWhere(req, accountsTable.businessId)];
   if (scope.locationId) accConds.push(eq(accountsTable.locationId, scope.locationId));
   const accounts = await db.select().from(accountsTable).where(and(...accConds));
   const cash = accounts.filter(a => (a.type ?? "cash") === "cash").reduce((s, a) => s + parseFloat(a.balance), 0);
@@ -274,7 +282,7 @@ router.get("/reports/balance-sheet", requireAuth, async (req, res): Promise<void
   const otherAcc = accounts.filter(a => !["cash", "bank", "mobile_wallet"].includes(a.type ?? "cash")).reduce((s, a) => s + parseFloat(a.balance), 0);
 
   // Inventory at cost
-  const prodConds = [eq(productsTable.isActive, true)];
+  const prodConds = [eq(productsTable.isActive, true), tenantWhere(req, productsTable.businessId)];
   if (scope.locationId) prodConds.push(eq(productsTable.locationId, scope.locationId));
   const [invRow] = await db.select({
     value: sql<string>`coalesce(sum(${productsTable.stock} * cast(${productsTable.costPrice} as numeric)), 0)`,
@@ -283,8 +291,8 @@ router.get("/reports/balance-sheet", requireAuth, async (req, res): Promise<void
   }).from(productsTable).where(and(...prodConds));
 
   // Receivables / Payables — scope by userId for non-admin (credits.userId = creator)
-  const recConds = [eq(creditsTable.type, "receivable")];
-  const payConds = [eq(creditsTable.type, "payable")];
+  const recConds = [eq(creditsTable.type, "receivable"), tenantWhere(req, creditsTable.businessId)];
+  const payConds = [eq(creditsTable.type, "payable"), tenantWhere(req, creditsTable.businessId)];
   if (!scope.isAdmin && scope.userId) {
     recConds.push(eq(creditsTable.userId, scope.userId));
     payConds.push(eq(creditsTable.userId, scope.userId));
@@ -346,7 +354,7 @@ router.get("/reports/product-profit", requireAuth, async (req, res): Promise<voi
   if ("error" in scope) { res.status(scope.error.status).json(scope.error.body); return; }
   const { start, end } = parseDateRange(req as never);
 
-  const prodConds = [eq(productsTable.isActive, true)];
+  const prodConds = [eq(productsTable.isActive, true), tenantWhere(req, productsTable.businessId)];
   if (scope.locationId) prodConds.push(eq(productsTable.locationId, scope.locationId));
   const products = await db.select({
     id: productsTable.id, name: productsTable.name,
@@ -357,7 +365,7 @@ router.get("/reports/product-profit", requireAuth, async (req, res): Promise<voi
 
   if (productIds.length === 0) { res.json({ rows: [], totals: emptyProductTotals(), scope, startDate: start.toISOString(), endDate: end.toISOString() }); return; }
 
-  const locations = await db.select({ id: locationsTable.id, name: locationsTable.name }).from(locationsTable);
+  const locations = await db.select({ id: locationsTable.id, name: locationsTable.name }).from(locationsTable).where(tenantWhere(req, locationsTable.businessId));
   const locName = new Map(locations.map(l => [l.id, l.name]));
 
   const inSales = await db.select({
@@ -450,20 +458,25 @@ router.get("/reports/location-summary", requireAuth, async (req, res): Promise<v
   const { start, end } = parseDateRange(req as never);
 
   const locWhere = scope.locationId ? eq(locationsTable.id, scope.locationId) : sql`true`;
-  const locations = await db.select().from(locationsTable).where(and(eq(locationsTable.isActive, true), locWhere));
+  const locations = await db.select().from(locationsTable).where(and(eq(locationsTable.isActive, true), locWhere, tenantWhere(req, locationsTable.businessId)));
+
+  const tSales = tenantWhere(req, salesTable.businessId);
+  const tPurs = tenantWhere(req, purchasesTable.businessId);
+  const tProd = tenantWhere(req, productsTable.businessId);
+  const tAcc = tenantWhere(req, accountsTable.businessId);
 
   // Aggregations per location
   const salesByLoc = await db.select({
     locationId: salesTable.locationId,
     total: sql<string>`coalesce(sum(cast(${salesTable.total} as numeric)), 0)`,
     count: sql<string>`count(*)`,
-  }).from(salesTable).where(and(gte(salesTable.createdAt, start), lte(salesTable.createdAt, end))).groupBy(salesTable.locationId);
+  }).from(salesTable).where(and(gte(salesTable.createdAt, start), lte(salesTable.createdAt, end), tSales)).groupBy(salesTable.locationId);
 
   const purByLoc = await db.select({
     locationId: purchasesTable.locationId,
     total: sql<string>`coalesce(sum(cast(${purchasesTable.total} as numeric)), 0)`,
     count: sql<string>`count(*)`,
-  }).from(purchasesTable).where(and(gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end))).groupBy(purchasesTable.locationId);
+  }).from(purchasesTable).where(and(gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end), tPurs)).groupBy(purchasesTable.locationId);
 
   // COGS per location
   const cogsByLoc = await db.select({
@@ -472,18 +485,18 @@ router.get("/reports/location-summary", requireAuth, async (req, res): Promise<v
   }).from(saleItemsTable)
     .innerJoin(salesTable, eq(saleItemsTable.saleId, salesTable.id))
     .innerJoin(productsTable, eq(saleItemsTable.productId, productsTable.id))
-    .where(and(gte(salesTable.createdAt, start), lte(salesTable.createdAt, end))).groupBy(salesTable.locationId);
+    .where(and(gte(salesTable.createdAt, start), lte(salesTable.createdAt, end), tSales)).groupBy(salesTable.locationId);
 
   const stockByLoc = await db.select({
     locationId: productsTable.locationId,
     value: sql<string>`coalesce(sum(${productsTable.stock} * cast(${productsTable.costPrice} as numeric)), 0)`,
     units: sql<string>`coalesce(sum(${productsTable.stock}), 0)`,
-  }).from(productsTable).where(eq(productsTable.isActive, true)).groupBy(productsTable.locationId);
+  }).from(productsTable).where(and(eq(productsTable.isActive, true), tProd)).groupBy(productsTable.locationId);
 
   const cashByLoc = await db.select({
     locationId: accountsTable.locationId,
     total: sql<string>`coalesce(sum(cast(${accountsTable.balance} as numeric)), 0)`,
-  }).from(accountsTable).where(eq(accountsTable.isActive, true)).groupBy(accountsTable.locationId);
+  }).from(accountsTable).where(and(eq(accountsTable.isActive, true), tAcc)).groupBy(accountsTable.locationId);
 
   const sMap = new Map(salesByLoc.map(r => [r.locationId ?? -1, { total: parseFloat(r.total), count: parseInt(r.count) }]));
   const pMap = new Map(purByLoc.map(r => [r.locationId ?? -1, { total: parseFloat(r.total), count: parseInt(r.count) }]));
@@ -539,7 +552,7 @@ router.get("/reports/cash-flow", requireAuth, async (req, res): Promise<void> =>
   const { start, end } = parseDateRange(req as never);
   const queryAccId = typeof req.query.accountId === "string" ? parseInt(req.query.accountId) : null;
 
-  const accConds = [eq(accountsTable.isActive, true)];
+  const accConds = [eq(accountsTable.isActive, true), tenantWhere(req, accountsTable.businessId)];
   if (scope.locationId) accConds.push(eq(accountsTable.locationId, scope.locationId));
   if (queryAccId)       accConds.push(eq(accountsTable.id, queryAccId));
   const accounts = await db.select().from(accountsTable).where(and(...accConds));
@@ -552,14 +565,14 @@ router.get("/reports/cash-flow", requireAuth, async (req, res): Promise<void> =>
     accountId: salesTable.accountId,
     total: sql<string>`coalesce(sum(cast(${salesTable.amountPaid} as numeric)), 0)`,
     count: sql<string>`count(*)`,
-  }).from(salesTable).where(and(inArray(salesTable.accountId, accountIds), gte(salesTable.createdAt, start), lte(salesTable.createdAt, end))).groupBy(salesTable.accountId);
+  }).from(salesTable).where(and(inArray(salesTable.accountId, accountIds), gte(salesTable.createdAt, start), lte(salesTable.createdAt, end), tenantWhere(req, salesTable.businessId))).groupBy(salesTable.accountId);
 
   // Purchases cash OUT
   const pursOut = await db.select({
     accountId: purchasesTable.accountId,
     total: sql<string>`coalesce(sum(cast(${purchasesTable.amountPaid} as numeric)), 0)`,
     count: sql<string>`count(*)`,
-  }).from(purchasesTable).where(and(inArray(purchasesTable.accountId, accountIds), gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end))).groupBy(purchasesTable.accountId);
+  }).from(purchasesTable).where(and(inArray(purchasesTable.accountId, accountIds), gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end), tenantWhere(req, purchasesTable.businessId))).groupBy(purchasesTable.accountId);
 
   // Expenses cash OUT (date col is text YYYY-MM-DD)
   const startDay = localDayString(start);
@@ -568,7 +581,7 @@ router.get("/reports/cash-flow", requireAuth, async (req, res): Promise<void> =>
     accountId: expensesTable.accountId,
     total: sql<string>`coalesce(sum(cast(${expensesTable.amount} as numeric)), 0)`,
     count: sql<string>`count(*)`,
-  }).from(expensesTable).where(and(inArray(expensesTable.accountId, accountIds), gte(expensesTable.date, startDay), lte(expensesTable.date, endDay))).groupBy(expensesTable.accountId);
+  }).from(expensesTable).where(and(inArray(expensesTable.accountId, accountIds), gte(expensesTable.date, startDay), lte(expensesTable.date, endDay), tenantWhere(req, expensesTable.businessId))).groupBy(expensesTable.accountId);
 
   const sMap = new Map(salesIn.map(r => [r.accountId ?? -1, { total: parseFloat(r.total), count: parseInt(r.count) }]));
   const pMap = new Map(pursOut.map(r => [r.accountId ?? -1, { total: parseFloat(r.total), count: parseInt(r.count) }]));
@@ -621,7 +634,7 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
   const scope = readScope(req as never);
   if ("error" in scope) { res.status(scope.error.status).json(scope.error.body); return; }
 
-  const prodConds = [eq(productsTable.isActive, true)];
+  const prodConds = [eq(productsTable.isActive, true), tenantWhere(req, productsTable.businessId)];
   if (scope.locationId) prodConds.push(eq(productsTable.locationId, scope.locationId));
 
   // Negative stock products
@@ -635,7 +648,7 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
   }).from(productsTable).where(and(...prodConds, eq(productsTable.stock, 0)));
 
   // Sales with credit (amountPaid < total)
-  const salesConds = [sql`cast(${salesTable.amountPaid} as numeric) < cast(${salesTable.total} as numeric)`];
+  const salesConds = [sql`cast(${salesTable.amountPaid} as numeric) < cast(${salesTable.total} as numeric)`, tenantWhere(req, salesTable.businessId)];
   if (scope.locationId) salesConds.push(eq(salesTable.locationId, scope.locationId));
   const unpaidSales = await db.select({
     id: salesTable.id, invoiceNo: salesTable.invoiceNo,
@@ -644,8 +657,8 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
   }).from(salesTable).where(and(...salesConds)).orderBy(desc(salesTable.createdAt)).limit(50);
 
   // Outstanding receivables/payables — scoped by userId for non-admin
-  const recConds = [eq(creditsTable.type, "receivable")];
-  const payConds = [eq(creditsTable.type, "payable")];
+  const recConds = [eq(creditsTable.type, "receivable"), tenantWhere(req, creditsTable.businessId)];
+  const payConds = [eq(creditsTable.type, "payable"), tenantWhere(req, creditsTable.businessId)];
   if (!scope.isAdmin && scope.userId) {
     recConds.push(eq(creditsTable.userId, scope.userId));
     payConds.push(eq(creditsTable.userId, scope.userId));
@@ -661,7 +674,7 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
   }).from(creditsTable).where(and(...payConds));
 
   // Recent destructive audit log entries — scoped by userId for non-admin
-  const delConds = [sql`lower(${auditLogsTable.action}) like '%delete%'`];
+  const delConds = [sql`lower(${auditLogsTable.action}) like '%delete%'`, tenantWhere(req, auditLogsTable.businessId)];
   if (!scope.isAdmin && scope.userId) {
     delConds.push(eq(auditLogsTable.userId, scope.userId));
   }
@@ -701,7 +714,7 @@ router.get("/reports/customer-dollar-report", requireAuth, async (req, res): Pro
   // All customers
   const customers = await db.select({ id: customersTable.id, name: customersTable.name, phone: customersTable.phone })
     .from(customersTable)
-    .where(eq(customersTable.isActive, true));
+    .where(tenantWhere(req, customersTable.businessId));
 
   if (customers.length === 0) {
     res.json({ customers: [], totals: { periodUsdIn: "0", periodUsdOut: "0", periodNet: "0", lifetimeUsdIn: "0", lifetimeUsdOut: "0", lifetimeNet: "0" }, startDate: start.toISOString(), endDate: end.toISOString(), allTime });
@@ -711,7 +724,7 @@ router.get("/reports/customer-dollar-report", requireAuth, async (req, res): Pro
   const customerIds = customers.map(c => c.id);
 
   // Period aggregation per customer
-  const periodConds = [eq(dollarWalletTable.partyType, "customer"), inArray(dollarWalletTable.partyId, customerIds)];
+  const periodConds = [eq(dollarWalletTable.partyType, "customer"), inArray(dollarWalletTable.partyId, customerIds), tenantWhere(req, dollarWalletTable.businessId)];
   if (!allTime) {
     periodConds.push(gte(dollarWalletTable.date, localDayString(start)));
     periodConds.push(lte(dollarWalletTable.date, localDayString(end)));
@@ -824,11 +837,11 @@ router.get("/reports/cash-flow-v2", requireAuth, async (req, res): Promise<void>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
   // ── users map ─────────────────────────────────────────────────────────────
-  const allUsers = await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable);
+  const allUsers = await db.select({ id: usersTable.id, name: usersTable.name }).from(usersTable).where(tenantWhere(req, usersTable.businessId));
   const userMap = new Map(allUsers.map(u => [u.id, u.name ?? `User #${u.id}`]));
 
   // ── SALES (orders) ───────────────────────────────────────────────────────
-  const saleConds: ReturnType<typeof eq>[] = [gte(salesTable.createdAt, start), lte(salesTable.createdAt, end)];
+  const saleConds: ReturnType<typeof eq>[] = [gte(salesTable.createdAt, start), lte(salesTable.createdAt, end), tenantWhere(req, salesTable.businessId) as ReturnType<typeof eq>];
   if (scope.locationId) saleConds.push(eq(salesTable.locationId, scope.locationId) as ReturnType<typeof eq>);
   if (filterUserId)     saleConds.push(eq(salesTable.userId, filterUserId) as ReturnType<typeof eq>);
 
@@ -893,6 +906,7 @@ router.get("/reports/cash-flow-v2", requireAuth, async (req, res): Promise<void>
     eq(auditLogsTable.entityType, "account"),
     gte(auditLogsTable.createdAt, start),
     lte(auditLogsTable.createdAt, end),
+    tenantWhere(req, auditLogsTable.businessId),
   ];
   if (filterUserId) transferConds.push(eq(auditLogsTable.userId, filterUserId));
 
@@ -917,7 +931,7 @@ router.get("/reports/cash-flow-v2", requireAuth, async (req, res): Promise<void>
   });
 
   // ── PURCHASES cash out ────────────────────────────────────────────────────
-  const pursConds: ReturnType<typeof eq>[] = [gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end)];
+  const pursConds: ReturnType<typeof eq>[] = [gte(purchasesTable.createdAt, start), lte(purchasesTable.createdAt, end), tenantWhere(req, purchasesTable.businessId) as ReturnType<typeof eq>];
   if (scope.locationId) pursConds.push(eq(purchasesTable.locationId, scope.locationId) as ReturnType<typeof eq>);
   const rawPurchases = await db.select({
     amountPaid: purchasesTable.amountPaid,
@@ -927,8 +941,7 @@ router.get("/reports/cash-flow-v2", requireAuth, async (req, res): Promise<void>
   // ── EXPENSES cash out ─────────────────────────────────────────────────────
   const startDay = localDayString(start);
   const endDay   = localDayString(end);
-  const expConds: ReturnType<typeof eq>[] = [gte(expensesTable.date, startDay), lte(expensesTable.date, endDay)];
-  if (scope.locationId) expConds.push(eq(expensesTable.locationId, scope.locationId) as ReturnType<typeof eq>);
+  const expConds: ReturnType<typeof eq>[] = [gte(expensesTable.date, startDay), lte(expensesTable.date, endDay), tenantWhere(req, expensesTable.businessId) as ReturnType<typeof eq>];
   const rawExpenses = await db.select({ amount: expensesTable.amount, date: expensesTable.date }).from(expensesTable).where(and(...expConds));
 
   // ── FLOW: daily IN vs OUT ─────────────────────────────────────────────────

@@ -158,6 +158,7 @@ router.post("/businesses", requireAuth, requireSuperAdmin, async (req, res): Pro
     role: "admin",
     privileges: JSON.stringify(privileges),
     isActive: true,
+    businessId: reg!.id,
   }).returning();
 
   await logAudit(req.userId, "create", "business", reg!.id, `Super admin created business: ${businessName} → @${adminUsername}`);

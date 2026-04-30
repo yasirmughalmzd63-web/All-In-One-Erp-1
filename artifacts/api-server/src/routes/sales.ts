@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, desc } from "drizzle-orm";
+import { and, eq, desc, inArray } from "drizzle-orm";
 import { db, salesTable, saleItemsTable, productsTable, customersTable, locationsTable, accountsTable, usersTable, creditsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
@@ -71,26 +71,28 @@ router.get("/sales", requireAuth, async (req, res): Promise<void> => {
   res.json(result);
 });
 
-router.get("/sales/user-report", requireAuth, async (_req, res): Promise<void> => {
+router.get("/sales/user-report", requireAuth, async (req, res): Promise<void> => {
   const users = await db.select({ id: usersTable.id, name: usersTable.name, username: usersTable.username, role: usersTable.role })
-    .from(usersTable);
+    .from(usersTable).where(tenantWhere(req, usersTable.businessId));
   const sales = await db.select({
     userId: salesTable.userId,
     total: salesTable.total,
     amountPaid: salesTable.amountPaid,
     paymentMethod: salesTable.paymentMethod,
     status: salesTable.status,
-  }).from(salesTable);
-  const saleItems = await db.select({
+    saleId: salesTable.id,
+  }).from(salesTable).where(tenantWhere(req, salesTable.businessId));
+  const saleIds = sales.map(s => s.saleId);
+  const saleItems = saleIds.length === 0 ? [] : await db.select({
     saleId: saleItemsTable.saleId,
     qty: saleItemsTable.qty,
     total: saleItemsTable.total,
-  }).from(saleItemsTable);
+  }).from(saleItemsTable).where(inArray(saleItemsTable.saleId, saleIds));
   const credits = await db.select({
     userId: creditsTable.userId,
     remainingAmount: creditsTable.remainingAmount,
     status: creditsTable.status,
-  }).from(creditsTable);
+  }).from(creditsTable).where(tenantWhere(req, creditsTable.businessId));
 
   const saleItemMap: Record<number, { qty: number; total: number }> = {};
   saleItems.forEach(si => {
@@ -121,6 +123,7 @@ router.get("/sales/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [sale] = await db.select().from(salesTable).where(eq(salesTable.id, id));
   if (!sale) { res.status(404).json({ error: "Sale not found" }); return; }
+  if (!ownsRow(req, sale.businessId)) { res.status(404).json({ error: "Sale not found" }); return; }
   const items = await db.select({
     productId: saleItemsTable.productId,
     productName: productsTable.name,
@@ -181,21 +184,27 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
     ? req.userLocationId
     : (locationId ?? null);
 
-  // Validate account belongs to user's location for non-admin
-  if (!isAdmin(req) && req.userLocationId != null && accountId) {
-    const [account] = await db.select({ locationId: accountsTable.locationId }).from(accountsTable).where(eq(accountsTable.id, accountId));
-    if (account && account.locationId != null && account.locationId !== req.userLocationId) {
+  // Validate account belongs to user's tenant + location
+  if (accountId) {
+    const [account] = await db.select({ locationId: accountsTable.locationId, businessId: accountsTable.businessId }).from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (!account) { res.status(422).json({ error: "Selected account not found." }); return; }
+    if (!ownsRow(req, account.businessId)) { res.status(403).json({ error: "Account belongs to another business" }); return; }
+    if (!isAdmin(req) && req.userLocationId != null && account.locationId != null && account.locationId !== req.userLocationId) {
       res.status(403).json({ error: "You can only use accounts assigned to your location." });
       return;
     }
   }
 
-  // Rules 3, 4, 5: Stock validation for every item + location check
+  // Rules 3, 4, 5: Stock validation for every item + tenant + location check
   for (const item of items) {
-    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock, locationId: productsTable.locationId })
+    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock, locationId: productsTable.locationId, businessId: productsTable.businessId })
       .from(productsTable).where(eq(productsTable.id, item.productId));
     if (!product) {
       res.status(422).json({ error: `Product not found (id ${item.productId}).` });
+      return;
+    }
+    if (!ownsRow(req, product.businessId)) {
+      res.status(403).json({ error: `Product belongs to another business.` });
       return;
     }
     // Non-admin: product must belong to user's location

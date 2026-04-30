@@ -12,6 +12,7 @@ export const attendanceTable = pgTable("attendance", {
   notes: text("notes"),
   markedBy: integer("marked_by"),
   locationId: integer("location_id"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

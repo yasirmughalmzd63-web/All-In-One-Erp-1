@@ -1,29 +1,30 @@
 import { Router } from "express";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import {
   db, cashCountsTable, productsTable, accountsTable, creditsTable
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
-router.get("/cash-counts/snapshot", requireAuth, async (_req, res): Promise<void> => {
+router.get("/cash-counts/snapshot", requireAuth, async (req, res): Promise<void> => {
   const [stockRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${productsTable.costPrice} as numeric) * ${productsTable.stock}), 0)`,
-  }).from(productsTable);
+  }).from(productsTable).where(tenantWhere(req, productsTable.businessId));
 
   const [bankRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${accountsTable.balance} as numeric)), 0)`,
-  }).from(accountsTable);
+  }).from(accountsTable).where(tenantWhere(req, accountsTable.businessId));
 
   const [creditReceivableRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${creditsTable.remainingAmount} as numeric)), 0)`,
-  }).from(creditsTable).where(eq(creditsTable.type, "receivable"));
+  }).from(creditsTable).where(and(eq(creditsTable.type, "receivable"), tenantWhere(req, creditsTable.businessId)));
 
   const [creditsReceivedRow] = await db.select({
     total: sql<string>`coalesce(sum(cast(${creditsTable.paidAmount} as numeric)), 0)`,
-  }).from(creditsTable).where(eq(creditsTable.type, "receivable"));
+  }).from(creditsTable).where(and(eq(creditsTable.type, "receivable"), tenantWhere(req, creditsTable.businessId)));
 
   const stockValue      = parseFloat(stockRow?.total ?? "0");
   const bankBalance     = parseFloat(bankRow?.total ?? "0");
@@ -44,8 +45,11 @@ router.get("/cash-counts/snapshot", requireAuth, async (_req, res): Promise<void
   });
 });
 
-router.get("/cash-counts", requireAuth, async (_req, res): Promise<void> => {
-  const rows = await db.select().from(cashCountsTable).orderBy(desc(cashCountsTable.date), desc(cashCountsTable.createdAt)).limit(200);
+router.get("/cash-counts", requireAuth, async (req, res): Promise<void> => {
+  const rows = await db.select().from(cashCountsTable)
+    .where(tenantWhere(req, cashCountsTable.businessId))
+    .orderBy(desc(cashCountsTable.date), desc(cashCountsTable.createdAt))
+    .limit(200);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 
@@ -89,7 +93,8 @@ router.post("/cash-counts", requireAuth, async (req, res): Promise<void> => {
     status,
     reason:  reason  ?? null,
     notes:   notes   ?? null,
-    userId:  req.userId,
+    userId:  req.userId!,
+    businessId: tenantStamp(req),
   }).returning();
 
   await logAudit(req.userId, "create", "audit", row!.id, `Audit ${date}: ${diffType} diff=${difference}${reason ? ` reason="${reason}"` : ""}`);
@@ -99,6 +104,9 @@ router.post("/cash-counts", requireAuth, async (req, res): Promise<void> => {
 router.patch("/cash-counts/:id/resolve", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const { reason } = req.body as { reason?: string };
+  const [existing] = await db.select({ businessId: cashCountsTable.businessId }).from(cashCountsTable).where(eq(cashCountsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const [row] = await db.update(cashCountsTable)
     .set({ status: "resolved", reason: reason ?? null })
     .where(eq(cashCountsTable.id, id))
@@ -110,8 +118,9 @@ router.patch("/cash-counts/:id/resolve", requireAuth, async (req, res): Promise<
 
 router.delete("/cash-counts/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const [existing] = await db.select({ id: cashCountsTable.id }).from(cashCountsTable).where(eq(cashCountsTable.id, id));
+  const [existing] = await db.select({ id: cashCountsTable.id, businessId: cashCountsTable.businessId }).from(cashCountsTable).where(eq(cashCountsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.delete(cashCountsTable).where(eq(cashCountsTable.id, id));
   await logAudit(req.userId, "delete", "audit", id);
   res.sendStatus(204);

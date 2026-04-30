@@ -29,6 +29,7 @@ export const usdPurchasesTable = pgTable("usd_purchases", {
   date: text("date").notNull(),
   userId: integer("user_id"),
   locationId: integer("location_id"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

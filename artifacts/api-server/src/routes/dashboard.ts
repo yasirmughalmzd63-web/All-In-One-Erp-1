@@ -78,6 +78,7 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
   const tWallets   = tenantWhere(req, walletsTable.businessId);
   const tDollar    = tenantWhere(req, dollarWalletTable.businessId);
   const tTransfers = tenantWhere(req, stockTransfersTable.businessId);
+  const tLocations = tenantWhere(req, locationsTable.businessId);
 
   // Build sales filter: period + optional userId + optional locationId + tenant
   const salesPeriodFilter = and(
@@ -184,8 +185,8 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     db.select({ amountUsd: dollarWalletTable.amountUsd, totalPkr: dollarWalletTable.totalPkr, rate: dollarWalletTable.rate })
       .from(dollarWalletTable)
       .where(and(eq(dollarWalletTable.entryType, "received"), periodFilter(dollarWalletTable.createdAt), tDollar)),
-    // All locations for per-location naming
-    db.select().from(locationsTable).where(eq(locationsTable.isActive, true)),
+    // All locations for per-location naming (tenant-scoped)
+    db.select().from(locationsTable).where(and(eq(locationsTable.isActive, true), tLocations)),
     // ALL USD wallets (currency = USD) — to value USD inventory at sale price
     db.select({ id: walletsTable.id, name: walletsTable.name, balance: walletsTable.balance, currency: walletsTable.currency })
       .from(walletsTable)
@@ -397,10 +398,12 @@ router.get("/inventory/ledger", requireAuth, async (req, res): Promise<void> => 
     end   = endStr   ? new Date(`${endStr}T23:59:59.999`)   : todayEnd;
   }
 
-  // Products in scope
-  const productConds = [eq(productsTable.isActive, true)];
+  // Products in scope (+ tenant)
+  const tenantProducts = tenantWhere(req, productsTable.businessId);
+  const productConds: Parameters<typeof and>[number][] = [eq(productsTable.isActive, true)];
   if (filterLocationId) productConds.push(eq(productsTable.locationId, filterLocationId));
   if (queryProdId)      productConds.push(eq(productsTable.id, queryProdId));
+  if (tenantProducts)   productConds.push(tenantProducts);
 
   const products = await db.select({
     id: productsTable.id,
@@ -413,9 +416,10 @@ router.get("/inventory/ledger", requireAuth, async (req, res): Promise<void> => 
   }).from(productsTable).where(and(...productConds));
   const productIds = products.map(p => p.id);
 
-  // Locations (for naming)
+  // Locations (for naming) — tenant-scoped
   const locations = await db.select({ id: locationsTable.id, name: locationsTable.name })
-    .from(locationsTable);
+    .from(locationsTable)
+    .where(tenantWhere(req, locationsTable.businessId));
   const locNameById = new Map(locations.map(l => [l.id, l.name]));
 
   // Aggregations: in-range and after-end-date

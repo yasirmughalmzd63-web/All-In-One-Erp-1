@@ -4,6 +4,7 @@ import { db, dollarWalletTable, accountsTable, productsTable, walletsTable, supp
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { requireAdmin } from "../lib/permissions.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -16,11 +17,13 @@ router.get("/dollar-wallet", requireAuth, async (req, res): Promise<void> => {
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 500;
   const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? offsetRaw : 0;
 
-  const baseQuery = db.select().from(dollarWalletTable);
-  const filtered = entryType
-    ? baseQuery.where(eq(dollarWalletTable.entryType, entryType))
-    : baseQuery;
-  const rows = await filtered
+  const tenant = tenantWhere(req, dollarWalletTable.businessId);
+  const where = and(
+    entryType ? eq(dollarWalletTable.entryType, entryType) : undefined,
+    tenant,
+  );
+  const rows = await db.select().from(dollarWalletTable)
+    .where(where)
     .orderBy(desc(dollarWalletTable.createdAt))
     .limit(limit)
     .offset(offset);
@@ -32,8 +35,9 @@ router.get("/dollar-wallet", requireAuth, async (req, res): Promise<void> => {
   })));
 });
 
-router.get("/dollar-wallet/balance", requireAuth, async (_req, res): Promise<void> => {
-  const rows = await db.select().from(dollarWalletTable);
+router.get("/dollar-wallet/balance", requireAuth, async (req, res): Promise<void> => {
+  const tenant = tenantWhere(req, dollarWalletTable.businessId);
+  const rows = await db.select().from(dollarWalletTable).where(tenant);
   const SIGN: Record<string, 1 | -1> = {
     received: 1, partial: 1, recovery: 1, purchase: 1,
     product: -1, topup: -1,
@@ -68,12 +72,14 @@ router.post("/dollar-wallet", requireAuth, async (req, res): Promise<void> => {
     notes: notes ?? null,
     date,
     userId: String(req.userId),
+    businessId: tenantStamp(req),
   }).returning();
   await logAudit(req.userId, "create", "dollar_wallet", row!.id, `${entryType} ${amountUsd} USD @ ${rate}`);
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
 
-router.get("/dollar-wallet/wallets", requireAuth, async (_req, res): Promise<void> => {
+router.get("/dollar-wallet/wallets", requireAuth, async (req, res): Promise<void> => {
+  const tenant = tenantWhere(req, walletsTable.businessId);
   const defaults = [
     { name: "Wise USD", type: "online" },
     { name: "PayPal USD", type: "online" },
@@ -82,15 +88,18 @@ router.get("/dollar-wallet/wallets", requireAuth, async (_req, res): Promise<voi
     { name: "Bank USD", type: "bank" },
   ];
   await db.transaction(async tx => {
-    const existing = await tx.select().from(walletsTable).where(eq(walletsTable.currency, "USD"));
+    const existing = await tx.select().from(walletsTable)
+      .where(and(eq(walletsTable.currency, "USD"), tenant));
     const missing = defaults
       .filter(d => !existing.some(w => w.name.toLowerCase() === d.name.toLowerCase()))
-      .map(d => ({ ...d, balance: "0.00000000", currency: "USD" }));
+      .map(d => ({ ...d, balance: "0.00000000", currency: "USD", businessId: tenantStamp(req) }));
     if (missing.length > 0) {
       await tx.insert(walletsTable).values(missing);
     }
   });
-  const all = await db.select().from(walletsTable).where(eq(walletsTable.currency, "USD")).orderBy(walletsTable.id);
+  const all = await db.select().from(walletsTable)
+    .where(and(eq(walletsTable.currency, "USD"), tenant))
+    .orderBy(walletsTable.id);
   res.json(all);
 });
 
@@ -118,6 +127,7 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 
   const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
   if (!account) { res.status(404).json({ error: "Account not found." }); return; }
+  if (!ownsRow(req, account.businessId)) { res.status(403).json({ error: "Account belongs to another business" }); return; }
   if (!account.isActive) {
     res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for USD purchases.` });
     return;
@@ -132,15 +142,18 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
 
   const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId), eq(walletsTable.currency, "USD")));
   if (!wallet) { res.status(404).json({ error: "Dollar wallet not found." }); return; }
+  if (!ownsRow(req, wallet.businessId)) { res.status(403).json({ error: "Wallet belongs to another business" }); return; }
 
   let partyName = "";
   if (partyType === "supplier") {
     const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, partyId));
     if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+    if (!ownsRow(req, s.businessId)) { res.status(403).json({ error: "Supplier belongs to another business" }); return; }
     partyName = s.name;
   } else {
     const [c] = await db.select().from(customersTable).where(eq(customersTable.id, partyId));
     if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
+    if (!ownsRow(req, c.businessId)) { res.status(403).json({ error: "Customer belongs to another business" }); return; }
     partyName = c.name;
   }
 
@@ -166,6 +179,7 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
       userId: String(req.userId),
       paymentProofUrl: paymentProofUrl ?? null,
       paymentProofKey: paymentProofKey ?? null,
+      businessId: tenantStamp(req),
     }).returning();
     return r!;
   });
@@ -188,6 +202,7 @@ router.post("/dollar-wallet/:id/verify-proof", requireAuth, async (req, res): Pr
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [existing] = await db.select().from(dollarWalletTable).where(eq(dollarWalletTable.id, id));
   if (!existing) { res.status(404).json({ error: "Entry not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Entry belongs to another business" }); return; }
   if (!existing.paymentProofUrl) { res.status(422).json({ error: "No payment proof attached to this entry" }); return; }
 
   const [updated] = await db.update(dollarWalletTable)
@@ -208,6 +223,9 @@ router.post("/dollar-wallet/:id/unverify-proof", requireAuth, async (req, res): 
   const idParam = req.params.id;
   const id = parseInt(typeof idParam === "string" ? idParam : "", 10);
   if (!Number.isFinite(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [pre] = await db.select({ businessId: dollarWalletTable.businessId }).from(dollarWalletTable).where(eq(dollarWalletTable.id, id));
+  if (!pre) { res.status(404).json({ error: "Entry not found" }); return; }
+  if (!ownsRow(req, pre.businessId)) { res.status(403).json({ error: "Entry belongs to another business" }); return; }
   const [updated] = await db.update(dollarWalletTable)
     .set({ proofVerifiedAt: null, proofVerifiedBy: null })
     .where(eq(dollarWalletTable.id, id))
@@ -249,6 +267,7 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
   if (useWallet) {
     const [w] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId!), eq(walletsTable.currency, "USD")));
     if (!w) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
+    if (!ownsRow(req, w.businessId)) { res.status(403).json({ error: "Wallet belongs to another business" }); return; }
     wallet = w;
   }
 
@@ -280,15 +299,18 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
 
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) { res.status(404).json({ error: "Coin product not found" }); return; }
+  if (!ownsRow(req, product.businessId)) { res.status(403).json({ error: "Product belongs to another business" }); return; }
 
   let partyName = "";
   if (partyType === "supplier") {
     const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, partyId));
     if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+    if (!ownsRow(req, s.businessId)) { res.status(403).json({ error: "Supplier belongs to another business" }); return; }
     partyName = s.name;
   } else {
     const [c] = await db.select().from(customersTable).where(eq(customersTable.id, partyId));
     if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
+    if (!ownsRow(req, c.businessId)) { res.status(403).json({ error: "Customer belongs to another business" }); return; }
     partyName = c.name;
   }
 
@@ -340,6 +362,7 @@ router.post("/dollar-wallet/topup", requireAuth, async (req, res): Promise<void>
         notes: noteText,
         date,
         userId: String(req.userId),
+        businessId: tenantStamp(req),
       }).returning();
       return r!;
     });
@@ -411,10 +434,12 @@ router.post("/dollar-wallet/topup/split", requireAuth, async (req, res): Promise
   if (partyType === "supplier") {
     const [s] = await db.select().from(suppliersTable).where(eq(suppliersTable.id, partyId));
     if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+    if (!ownsRow(req, s.businessId)) { res.status(403).json({ error: "Supplier belongs to another business" }); return; }
     partyName = s.name;
   } else {
     const [c] = await db.select().from(customersTable).where(eq(customersTable.id, partyId));
     if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
+    if (!ownsRow(req, c.businessId)) { res.status(403).json({ error: "Customer belongs to another business" }); return; }
     partyName = c.name;
   }
 
@@ -423,6 +448,7 @@ router.post("/dollar-wallet/topup/split", requireAuth, async (req, res): Promise
   if (useWallet) {
     const [w] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId!), eq(walletsTable.currency, "USD")));
     if (!w) { res.status(404).json({ error: "Dollar wallet not found" }); return; }
+    if (!ownsRow(req, w.businessId)) { res.status(403).json({ error: "Wallet belongs to another business" }); return; }
     if (parseFloat(w.balance) < totalUsd) {
       res.status(400).json({ error: `Insufficient balance in ${w.name} — have $${parseFloat(w.balance).toFixed(2)}, need $${totalUsd.toFixed(2)} across ${splits.length} splits` });
       return;
@@ -430,9 +456,10 @@ router.post("/dollar-wallet/topup/split", requireAuth, async (req, res): Promise
     wallet = w;
   }
 
-  // Pre-load all products
+  // Pre-load all products (scoped to current business)
   const productIds = [...new Set(splits.map(s => s.productId))];
-  const products = await db.select().from(productsTable).where(inArray(productsTable.id, productIds));
+  const products = await db.select().from(productsTable)
+    .where(and(inArray(productsTable.id, productIds), tenantWhere(req, productsTable.businessId)));
   const productMap = new Map(products.map(p => [p.id, p]));
 
   for (const s of splits) {
@@ -499,6 +526,7 @@ router.post("/dollar-wallet/topup/split", requireAuth, async (req, res): Promise
           notes: noteText,
           date,
           userId: String(req.userId),
+          businessId: tenantStamp(req),
         }).returning();
 
         results.push({ productId: s.productId, productName: product.name, qty, newStock, ledgerId: row!.id });
@@ -547,10 +575,12 @@ router.post("/dollar-wallet/wallets/transfer", requireAuth, async (req, res): Pr
 
   const [fromWallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, fromWalletId), eq(walletsTable.currency, "USD")));
   if (!fromWallet) { res.status(404).json({ error: "Source wallet not found." }); return; }
+  if (!ownsRow(req, fromWallet.businessId)) { res.status(403).json({ error: "Source wallet belongs to another business" }); return; }
   if (!fromWallet.isActive) { res.status(422).json({ error: `Source wallet "${fromWallet.name}" is inactive.` }); return; }
 
   const [toWallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, toWalletId), eq(walletsTable.currency, "USD")));
   if (!toWallet) { res.status(404).json({ error: "Destination wallet not found." }); return; }
+  if (!ownsRow(req, toWallet.businessId)) { res.status(403).json({ error: "Destination wallet belongs to another business" }); return; }
   if (!toWallet.isActive) { res.status(422).json({ error: `Destination wallet "${toWallet.name}" is inactive.` }); return; }
 
   const fromBal = parseFloat(fromWallet.balance);
@@ -590,6 +620,7 @@ router.post("/dollar-wallet/wallets/transfer", requireAuth, async (req, res): Pr
       notes: notes ?? null,
       date,
       userId: String(req.userId),
+      businessId: tenantStamp(req),
     }).returning();
 
     // Log transfer_in
@@ -604,6 +635,7 @@ router.post("/dollar-wallet/wallets/transfer", requireAuth, async (req, res): Pr
       notes: notes ?? null,
       date,
       userId: String(req.userId),
+      businessId: tenantStamp(req),
     }).returning();
 
     return { outRow: outRow!, inRow: inRow! };
@@ -628,6 +660,7 @@ router.get("/dollar-wallet/wallets/:id/verify", requireAuth, async (req, res): P
 
   const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
   if (!wallet) { res.status(404).json({ error: "Wallet not found." }); return; }
+  if (!ownsRow(req, wallet.businessId)) { res.status(404).json({ error: "Wallet not found." }); return; }
 
   const txs = await db.select().from(dollarWalletTable).where(eq(dollarWalletTable.walletId, walletId));
 
@@ -673,6 +706,7 @@ router.get("/dollar-wallet/wallets/:id/transactions", requireAuth, async (req, r
 
   const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
   if (!wallet) { res.status(404).json({ error: "Wallet not found" }); return; }
+  if (!ownsRow(req, wallet.businessId)) { res.status(404).json({ error: "Wallet not found" }); return; }
 
   const txs = await db.select().from(dollarWalletTable)
     .where(eq(dollarWalletTable.walletId, walletId))
@@ -738,6 +772,7 @@ router.get("/dollar-wallet/wallets/:id/summary", requireAuth, async (req, res): 
 
   const [wallet] = await db.select().from(walletsTable).where(eq(walletsTable.id, walletId));
   if (!wallet) { res.status(404).json({ error: "Wallet not found" }); return; }
+  if (!ownsRow(req, wallet.businessId)) { res.status(404).json({ error: "Wallet not found" }); return; }
 
   const txs = await db.select().from(dollarWalletTable)
     .where(eq(dollarWalletTable.walletId, walletId))
@@ -822,6 +857,7 @@ router.delete("/dollar-wallet/:id", requireAuth, async (req, res): Promise<void>
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [existing] = await db.select().from(dollarWalletTable).where(eq(dollarWalletTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(404).json({ error: "Not found" }); return; }
   await db.delete(dollarWalletTable).where(eq(dollarWalletTable.id, id));
   await logAudit(req.userId, "delete", "dollar_wallet", id);
   res.sendStatus(204);

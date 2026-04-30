@@ -141,6 +141,17 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
+### Apr 30, 2026 — Self-host deployment package + multi-tenant scoping completion
+- Finished multi-tenant scoping pass: `dollar-wallet.ts` (all account/wallet/supplier/customer/product/dwEntry lookups now use `ownsRow`), `cash-management.ts /accounts` (added `tenantWhere`), `dashboard.ts` (both locations queries scoped).
+- **Critical bug fix:** `...tenantStamp(req)` was silently dropping `businessId` from inserts because `tenantStamp` returns `number|null`, not an object. Replaced 9 spread-call sites in `dollar-wallet.ts` and `app-wallets.ts` with `businessId: tenantStamp(req)`.
+- Built deploy bundle at `deploy-package/`:
+  - `api-server/dist/index.mjs` (2.5 MB, single-file ESM bundle, no `node_modules` needed)
+  - `api-server/schema.sql` (518 lines, schema only — no data; via `drizzle-kit export`)
+  - `api-server/.env.example`, `package.json`, `README.md` (Hostinger Node.js setup)
+  - `coins-sale-source.tar.gz` (1.6 MB, full monorepo source for re-building APK)
+  - `MOBILE_APP_README.md` + `eas.json` (EAS Build instructions for Android APK)
+  - Top-level `README.md` covering both pieces.
+
 ### Apr 30, 2026 — Payment screenshot verification + dollar-wallet query optimization
 - Added `payment_proof_url`, `payment_proof_key`, `proof_verified_at`, `proof_verified_by` columns to `dollar_wallet` for attaching bank/Jazz Cash/EasyPaisa transfer screenshots to USD purchases.
 - Added DB indexes `(entry_type, created_at)` and `(wallet_id, created_at)` on `dollar_wallet` for fast list/filter queries.

@@ -20,6 +20,7 @@ export const cashCountsTable = pgTable("cash_counts", {
   reason: text("reason"),
   notes: text("notes"),
   userId: integer("user_id").notNull(),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

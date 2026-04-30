@@ -1,12 +1,13 @@
 import { Router } from "express";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   db, usdPurchasesTable, dollarWalletTable, productsTable,
-  accountsTable, creditsTable, customersTable,
+  accountsTable, creditsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 const fmt8 = (n: number) => n.toFixed(8);
@@ -14,7 +15,9 @@ const fmt2 = (n: number) => n.toFixed(2);
 
 /* ── GET /usd-bridge ── list all USD purchases */
 router.get("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
-  let rows = await db.select().from(usdPurchasesTable).orderBy(desc(usdPurchasesTable.createdAt));
+  let rows = await db.select().from(usdPurchasesTable)
+    .where(tenantWhere(req, usdPurchasesTable.businessId))
+    .orderBy(desc(usdPurchasesTable.createdAt));
   if (!isAdmin(req) && req.userLocationId != null)
     rows = rows.filter(r => r.locationId === req.userLocationId);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
@@ -25,11 +28,8 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
   const {
     customerId, customerName,
     dollarAmount, dollarRate,
-    // Coins
     coinsPkr, coinsProductId, coinsQty,
-    // Cash
     cashPkr, cashAccountId,
-    // Credit
     creditPkr,
     notes, date, locationId,
   } = req.body as {
@@ -84,6 +84,8 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null
     ? req.userLocationId : (locationId ?? null);
 
+  const businessId = tenantStamp(req);
+
   /* Pre-flight checks outside the transaction so we can return clean errors */
   if (coinsVal > 0 && coinsProductId) {
     const qty = parseFloat(coinsQty ?? "0");
@@ -91,10 +93,14 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
       res.status(422).json({ error: "Coin quantity must be greater than zero." });
       return;
     }
-    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock })
+    const [product] = await db.select({ id: productsTable.id, name: productsTable.name, stock: productsTable.stock, businessId: productsTable.businessId })
       .from(productsTable).where(eq(productsTable.id, coinsProductId));
     if (!product) {
       res.status(422).json({ error: "Selected coin product does not exist." });
+      return;
+    }
+    if (!ownsRow(req, product.businessId)) {
+      res.status(403).json({ error: "Forbidden product" });
       return;
     }
     if ((product.stock ?? 0) < qty) {
@@ -109,6 +115,10 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
     const [acct] = await db.select().from(accountsTable).where(eq(accountsTable.id, cashAccountId));
     if (!acct) {
       res.status(422).json({ error: "Selected cash account does not exist." });
+      return;
+    }
+    if (!ownsRow(req, acct.businessId)) {
+      res.status(403).json({ error: "Forbidden account" });
       return;
     }
     if (!acct.isActive) {
@@ -144,6 +154,7 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
       notes: notes ?? null,
       date,
       userId: String(req.userId),
+      businessId,
     });
 
     /* 2 ── Coins: deduct product stock */
@@ -165,12 +176,11 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
       await tx.update(accountsTable).set({ balance: fmt8(newBal) }).where(eq(accountsTable.id, cashAccountId));
     }
 
-    /* 4 ── Credit: create payable (business owes customer) */
+    /* 4 ── Credit: create payable (business owes customer) — tenant-scoped */
     if (creditVal > 0) {
       const partyId = customerId ?? 0;
-      // Look for existing open payable credit for this customer
       const existing = await tx.select().from(creditsTable)
-        .where(eq(creditsTable.partyId, partyId));
+        .where(and(eq(creditsTable.partyId, partyId), tenantWhere(req, creditsTable.businessId)));
       const openPayable = existing.find(c => c.type === "payable" && c.partyType === "customer" && c.status !== "paid");
 
       if (openPayable) {
@@ -193,6 +203,7 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
           status: "pending",
           notes: `USD purchase from ${customerName} on ${date}`,
           userId: req.userId,
+          businessId,
         }).returning();
         creditId = cr!.id;
       }
@@ -218,6 +229,7 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
       date,
       userId: req.userId,
       locationId: effectiveLocationId,
+      businessId,
     }).returning();
 
     await logAudit(req.userId, "create", "usd_purchase", row!.id, `Bought $${dollarAmount} from ${customerName}`);
@@ -229,13 +241,16 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
 router.delete("/usd-bridge/:id", requireAuth, async (req, res): Promise<void> => {
   if (!isAdmin(req)) { res.status(403).json({ error: "Admin only" }); return; }
   const id = parseInt(req.params.id!, 10);
+  const [existing] = await db.select({ businessId: usdPurchasesTable.businessId }).from(usdPurchasesTable).where(eq(usdPurchasesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.delete(usdPurchasesTable).where(eq(usdPurchasesTable.id, id));
   res.sendStatus(204);
 });
 
 /* ── GET /usd-bridge/summary ── totals */
 router.get("/usd-bridge/summary", requireAuth, async (req, res): Promise<void> => {
-  let rows = await db.select().from(usdPurchasesTable);
+  let rows = await db.select().from(usdPurchasesTable).where(tenantWhere(req, usdPurchasesTable.businessId));
   if (!isAdmin(req) && req.userLocationId != null)
     rows = rows.filter(r => r.locationId === req.userLocationId);
 

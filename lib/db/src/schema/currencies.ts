@@ -13,6 +13,7 @@ export const currencyTransactionsTable = pgTable("currency_transactions", {
   userId: integer("user_id").notNull(),
   notes: text("notes"),
   date: text("date").notNull(),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

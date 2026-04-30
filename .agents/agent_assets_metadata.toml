@@ -1,8 +1,31 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "xvSBFrfa1N0hPn9oJ7Njm"
 uri = "file://artifacts/mobile/assets/images/icon.png"
 type = "image"
 title = "generated_image"
+
+[[outputs]]
+id = "Y2UbfJYDUaFjMIMF_c7Lu"
+uri = "file://deploy-package/README.md"
+type = "text"
+title = "Deployment Package — Start Here"
+
+[[outputs]]
+id = "ch_Fllf0PZdV7HAO7Zp_V"
+uri = "file://deploy-package/api-server/README.md"
+type = "text"
+title = "API Server — Hostinger Setup Guide"
+
+[[outputs]]
+id = "ZW9C7pj9Er3hQGmQI7jQq"
+uri = "file://deploy-package/MOBILE_APP_README.md"
+type = "text"
+title = "Mobile App — Build the APK"
+
+[[outputs]]
+id = "kf1e45OvDz1vgBrDVfHB0"
+uri = "file://deploy-package/coins-sale-source.tar.gz"
+type = "unspecified"
+title = "Mobile Source Code (full monorepo)"

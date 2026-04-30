@@ -6,6 +6,7 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
+import { tenantWhere, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -30,6 +31,9 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
   /* ── Fetch account info ── */
   const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
   if (!account) { res.status(404).json({ error: "Account not found" }); return; }
+
+  /* tenant ownership check */
+  if (!ownsRow(req, account.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
 
   /* non-admin can only see accounts in their location */
   if (!isAdmin(req) && req.userLocationId != null && account.locationId != null
@@ -56,6 +60,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
   }).from(salesTable).where(
     and(
       eq(salesTable.accountId, accountId),
+      tenantWhere(req, salesTable.businessId),
       ...dateFilters(salesTable.createdAt),
     )
   );
@@ -70,6 +75,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
   }).from(purchasesTable).where(
     and(
       eq(purchasesTable.accountId, accountId),
+      tenantWhere(req, purchasesTable.businessId),
       ...dateFilters(purchasesTable.createdAt),
     )
   );
@@ -84,6 +90,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
   }).from(expensesTable).where(
     and(
       eq(expensesTable.accountId, accountId),
+      tenantWhere(req, expensesTable.businessId),
       ...dateFilters(expensesTable.createdAt),
     )
   );
@@ -98,6 +105,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
   }).from(creditPaymentsTable).where(
     and(
       eq(creditPaymentsTable.accountId, accountId),
+      tenantWhere(req, creditPaymentsTable.businessId),
       ...dateFilters(creditPaymentsTable.createdAt),
     )
   );
@@ -195,10 +203,11 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
 
 /* ── GET /cash-management/accounts ────────────────────────────────────── */
 router.get("/cash-management/accounts", requireAuth, async (req, res): Promise<void> => {
+  const tenant = tenantWhere(req, accountsTable.businessId);
   const rows = isAdmin(req) || req.userLocationId == null
-    ? await db.select().from(accountsTable).where(eq(accountsTable.isActive, true))
+    ? await db.select().from(accountsTable).where(and(eq(accountsTable.isActive, true), tenant))
     : await db.select().from(accountsTable).where(
-        and(eq(accountsTable.isActive, true), eq(accountsTable.locationId, req.userLocationId))
+        and(eq(accountsTable.isActive, true), eq(accountsTable.locationId, req.userLocationId), tenant)
       );
   res.json(rows.map(r => ({
     id: r.id,

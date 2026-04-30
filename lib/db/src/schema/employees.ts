@@ -15,6 +15,7 @@ export const employeesTable = pgTable("employees", {
   status: text("status").notNull().default("active"),
   paymentMethod: text("payment_method"),
   locationId: integer("location_id"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

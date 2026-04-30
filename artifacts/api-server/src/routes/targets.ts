@@ -4,6 +4,7 @@ import { db, targetsTable, employeeBonusesTable, salesTable } from "@workspace/d
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdminOrManager } from "../lib/permissions.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -15,7 +16,7 @@ function today(): string {
 // Returns count of "achieved" but NOT-yet-verified targets per employee.
 // Admin sees these as "ready to verify" badges in HRM.
 router.get("/targets/pending-achievements", requireAuth, async (req, res): Promise<void> => {
-  const rows = await db.select().from(targetsTable).where(eq(targetsTable.status, "achieved"));
+  const rows = await db.select().from(targetsTable).where(and(eq(targetsTable.status, "achieved"), tenantWhere(req, targetsTable.businessId)));
   const byEmp: Record<number, number> = {};
   for (const r of rows) {
     if (r.employeeId && !r.verifiedAt) byEmp[r.employeeId] = (byEmp[r.employeeId] ?? 0) + 1;
@@ -37,6 +38,7 @@ router.get("/targets/my-progress", requireAuth, async (req, res): Promise<void> 
       eq(targetsTable.scope, "user"),
       eq(targetsTable.userId, userId),
       eq(targetsTable.status, "active"),
+      tenantWhere(req, targetsTable.businessId),
     ));
 
   const inWindow = myTargets
@@ -93,7 +95,9 @@ router.get("/targets/my-progress", requireAuth, async (req, res): Promise<void> 
 /* ═══ LIST ════════════════════════════════════════════════════════════════ */
 router.get("/targets", requireAuth, async (req, res): Promise<void> => {
   const { type, scope, status, employeeId } = req.query as Record<string, string>;
-  let rows = await db.select().from(targetsTable).orderBy(targetsTable.createdAt);
+  let rows = await db.select().from(targetsTable)
+    .where(tenantWhere(req, targetsTable.businessId))
+    .orderBy(targetsTable.createdAt);
   if (type)       rows = rows.filter(r => r.type === type);
   if (scope)      rows = rows.filter(r => r.scope === scope);
   if (status)     rows = rows.filter(r => r.status === status);
@@ -138,6 +142,7 @@ router.post("/targets", requireAuth, async (req, res): Promise<void> => {
     locationId: locationId ?? null,
     notes: notes ?? null,
     isChallenge: isChallenge === true,
+    businessId: tenantStamp(req),
   }).returning();
 
   await logAudit(req.userId, "create", "target", row!.id, title!);
@@ -155,6 +160,9 @@ router.patch("/targets/:id", requireAuth, async (req, res): Promise<void> => {
   if (updates["type"] && !ALLOWED_TYPES.has(updates["type"] as string)) {
     res.status(400).json({ error: "type must be one of: daily, weekly, monthly" }); return;
   }
+  const [existing] = await db.select({ businessId: targetsTable.businessId }).from(targetsTable).where(eq(targetsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const [row] = await db.update(targetsTable).set(updates).where(eq(targetsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
   res.json(row);
@@ -163,9 +171,11 @@ router.patch("/targets/:id", requireAuth, async (req, res): Promise<void> => {
 /* ═══ DELETE ══════════════════════════════════════════════════════════════ */
 router.delete("/targets/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
-  const [row] = await db.delete(targetsTable).where(eq(targetsTable.id, id)).returning();
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
-  await logAudit(req.userId, "delete", "target", id, row.title);
+  const [existing] = await db.select({ businessId: targetsTable.businessId, title: targetsTable.title }).from(targetsTable).where(eq(targetsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
+  await db.delete(targetsTable).where(eq(targetsTable.id, id));
+  await logAudit(req.userId, "delete", "target", id, existing.title);
   res.sendStatus(204);
 });
 
@@ -197,6 +207,8 @@ router.post("/targets/:id/check", requireAuth, async (req, res): Promise<void> =
   ];
   if (target.scope === "user" && target.userId) conditions.push(eq(salesTable.userId, target.userId));
   if (target.locationId) conditions.push(eq(salesTable.locationId, target.locationId));
+  const tWhere = tenantWhere(req, salesTable.businessId);
+  if (tWhere) conditions.push(tWhere);
 
   const [agg] = await db
     .select({ total: sql<string>`COALESCE(SUM(CAST(${salesTable.total} AS NUMERIC)), 0)` })

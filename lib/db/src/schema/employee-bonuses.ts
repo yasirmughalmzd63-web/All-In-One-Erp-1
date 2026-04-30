@@ -10,6 +10,7 @@ export const employeeBonusesTable = pgTable("employee_bonuses", {
   date: text("date").notNull(),
   payrollId: integer("payroll_id"),
   locationId: integer("location_id"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

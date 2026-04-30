@@ -5,6 +5,7 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
+import { tenantWhere } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -37,31 +38,31 @@ router.get("/dollar-statement", requireAuth, async (req, res): Promise<void> => 
     : (req.userLocationId ?? null);
 
   /* ── USD Purchases from customers (USD Bridge) ── */
-  const purchaseConds = [];
+  const purchaseConds = [tenantWhere(req, usdPurchasesTable.businessId)];
   if (fromDate) purchaseConds.push(gte(usdPurchasesTable.createdAt, fromDate));
   if (toDate)   purchaseConds.push(lte(usdPurchasesTable.createdAt, toDate));
   if (scopeLocId) purchaseConds.push(eq(usdPurchasesTable.locationId, scopeLocId));
 
   const purchases = await db.select().from(usdPurchasesTable)
-    .where(purchaseConds.length ? and(...purchaseConds) : undefined)
+    .where(and(...purchaseConds))
     .orderBy(usdPurchasesTable.createdAt);
 
   /* ── Dollar Wallet ledger entries ── */
-  const ledgerConds = [];
+  const ledgerConds = [tenantWhere(req, dollarWalletTable.businessId)];
   if (fromDate)  ledgerConds.push(gte(dollarWalletTable.createdAt, fromDate));
   if (toDate)    ledgerConds.push(lte(dollarWalletTable.createdAt, toDate));
   if (wIdParam)  ledgerConds.push(eq(dollarWalletTable.walletId, wIdParam));
 
   const ledger = await db.select().from(dollarWalletTable)
-    .where(ledgerConds.length ? and(...ledgerConds) : undefined)
+    .where(and(...ledgerConds))
     .orderBy(dollarWalletTable.createdAt);
 
   /* ── USD Wallets ── */
   const wallets = await db.select().from(walletsTable)
-    .where(eq(walletsTable.currency, "USD"));
+    .where(and(eq(walletsTable.currency, "USD"), tenantWhere(req, walletsTable.businessId)));
 
   /* ── All active locations ── */
-  const locations = await db.select().from(locationsTable);
+  const locations = await db.select().from(locationsTable).where(tenantWhere(req, locationsTable.businessId));
 
   /* ── Purchase summary totals ── */
   const totPurchUsd    = purchases.reduce((s, r) => s + parseFloat(r.dollarAmount), 0);

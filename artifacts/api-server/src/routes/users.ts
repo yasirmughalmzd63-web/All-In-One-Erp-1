@@ -98,8 +98,9 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
 router.get("/users/:id/privileges", requireAuth, async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw!, 10);
-  const [user] = await db.select({ id: usersTable.id, role: usersTable.role, privileges: usersTable.privileges }).from(usersTable).where(eq(usersTable.id, id));
+  const [user] = await db.select({ id: usersTable.id, role: usersTable.role, privileges: usersTable.privileges, businessId: usersTable.businessId }).from(usersTable).where(eq(usersTable.id, id));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  if (!ownsRow(req, user.businessId)) { res.status(404).json({ error: "User not found" }); return; }
   res.json({ userId: id, role: user.role, privileges: user.privileges ? JSON.parse(user.privileges) : null });
 });
 

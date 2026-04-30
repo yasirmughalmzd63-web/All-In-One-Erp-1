@@ -15,6 +15,7 @@ export const leaveRequestsTable = pgTable("leave_requests", {
   reviewNotes:  text("review_notes"),
   submittedBy:  integer("submitted_by").notNull(),
   locationId:   integer("location_id"),
+  businessId:   integer("business_id"),
   createdAt:    timestamp("created_at",  { withTimezone: true }).notNull().defaultNow(),
   updatedAt:    timestamp("updated_at",  { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

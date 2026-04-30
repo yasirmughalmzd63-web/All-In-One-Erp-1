@@ -8,15 +8,16 @@ import {
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
 /* ───────────────────────── EMPLOYEES ────────────────────────────────────── */
 
 router.get("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
-  const rows = !isAdmin(req) && req.userLocationId != null
-    ? await db.select().from(employeesTable).where(eq(employeesTable.locationId, req.userLocationId)).orderBy(employeesTable.name)
-    : await db.select().from(employeesTable).orderBy(employeesTable.name);
+  const conds = [tenantWhere(req, employeesTable.businessId)];
+  if (!isAdmin(req) && req.userLocationId != null) conds.push(eq(employeesTable.locationId, req.userLocationId));
+  const rows = await db.select().from(employeesTable).where(and(...conds)).orderBy(employeesTable.name);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 
@@ -34,6 +35,7 @@ router.post("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
     baseSalary: baseSalary ?? "0.00", joinDate: joinDate ?? null,
     paymentMethod: paymentMethod ?? null,
     locationId: effectiveLocationId,
+    businessId: tenantStamp(req),
   }).returning();
   await logAudit(req.userId, "create", "employee", row!.id, name);
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
@@ -41,6 +43,10 @@ router.post("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/hrm/employees/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
+  const [existing] = await db.select({ businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Employee not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
+
   const updates: Record<string, unknown> = {};
   const fields = ["name", "phone", "email", "address", "position", "department", "baseSalary", "joinDate", "status", "locationId", "paymentMethod"];
   for (const f of fields) if (req.body[f] !== undefined) updates[f === "baseSalary" ? "baseSalary" : f] = req.body[f];
@@ -52,12 +58,15 @@ router.patch("/hrm/employees/:id", requireAuth, async (req, res): Promise<void> 
 
 router.delete("/hrm/employees/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
+  const [existing] = await db.select({ businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
+
   await db.delete(attendanceTable).where(eq(attendanceTable.employeeId, id));
   await db.delete(employeeFinesTable).where(eq(employeeFinesTable.employeeId, id));
   await db.delete(employeeBonusesTable).where(eq(employeeBonusesTable.employeeId, id));
   await db.delete(payrollTable).where(eq(payrollTable.employeeId, id));
-  const [row] = await db.delete(employeesTable).where(eq(employeesTable.id, id)).returning();
-  if (!row) { res.status(404).json({ error: "Not found" }); return; }
+  await db.delete(employeesTable).where(eq(employeesTable.id, id));
   res.sendStatus(204);
 });
 
@@ -67,9 +76,9 @@ router.get("/hrm/attendance", requireAuth, async (req, res): Promise<void> => {
   const { employeeId, date, month, year } = req.query as {
     employeeId?: string; date?: string; month?: string; year?: string;
   };
-  let rows = !isAdmin(req) && req.userLocationId != null
-    ? await db.select().from(attendanceTable).where(eq(attendanceTable.locationId, req.userLocationId)).orderBy(desc(attendanceTable.date))
-    : await db.select().from(attendanceTable).orderBy(desc(attendanceTable.date));
+  const conds = [tenantWhere(req, attendanceTable.businessId)];
+  if (!isAdmin(req) && req.userLocationId != null) conds.push(eq(attendanceTable.locationId, req.userLocationId));
+  let rows = await db.select().from(attendanceTable).where(and(...conds)).orderBy(desc(attendanceTable.date));
 
   if (employeeId) rows = rows.filter(r => r.employeeId === parseInt(employeeId));
   if (date) rows = rows.filter(r => r.date === date);
@@ -87,9 +96,13 @@ router.post("/hrm/attendance", requireAuth, async (req, res): Promise<void> => {
   };
   if (!employeeId || !date || !status) { res.status(400).json({ error: "employeeId, date, status required" }); return; }
 
-  // Upsert — update if same employee+date exists
+  // Verify employee belongs to caller's tenant
+  const [emp] = await db.select({ businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, employeeId));
+  if (!emp || !ownsRow(req, emp.businessId)) { res.status(403).json({ error: "Forbidden employee" }); return; }
+
+  // Upsert — update if same employee+date exists (within tenant scope)
   const existing = await db.select().from(attendanceTable)
-    .where(and(eq(attendanceTable.employeeId, employeeId), eq(attendanceTable.date, date)));
+    .where(and(eq(attendanceTable.employeeId, employeeId), eq(attendanceTable.date, date), tenantWhere(req, attendanceTable.businessId)));
 
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? null);
 
@@ -103,6 +116,7 @@ router.post("/hrm/attendance", requireAuth, async (req, res): Promise<void> => {
     const [row] = await db.insert(attendanceTable).values({
       employeeId, date, status, checkIn: checkIn ?? null, checkOut: checkOut ?? null,
       notes: notes ?? null, markedBy: req.userId, locationId: effectiveLocationId,
+      businessId: tenantStamp(req),
     }).returning();
     res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
   }
@@ -112,7 +126,9 @@ router.post("/hrm/attendance", requireAuth, async (req, res): Promise<void> => {
 
 router.get("/hrm/fines", requireAuth, async (req, res): Promise<void> => {
   const { employeeId } = req.query as { employeeId?: string };
-  let rows = await db.select().from(employeeFinesTable).orderBy(desc(employeeFinesTable.createdAt));
+  let rows = await db.select().from(employeeFinesTable)
+    .where(tenantWhere(req, employeeFinesTable.businessId))
+    .orderBy(desc(employeeFinesTable.createdAt));
   if (!isAdmin(req) && req.userLocationId != null) rows = rows.filter(r => r.locationId === req.userLocationId);
   if (employeeId) rows = rows.filter(r => r.employeeId === parseInt(employeeId));
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
@@ -132,17 +148,22 @@ router.post("/hrm/fines", requireAuth, async (req, res): Promise<void> => {
     res.status(422).json({ error: `Invalid date "${date}". Use YYYY-MM-DD format.` });
     return;
   }
-  const [empCheck] = await db.select({ id: employeesTable.id, name: employeesTable.name }).from(employeesTable).where(eq(employeesTable.id, employeeId));
+  const [empCheck] = await db.select({ id: employeesTable.id, name: employeesTable.name, businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, employeeId));
   if (!empCheck) { res.status(404).json({ error: "Employee not found." }); return; }
+  if (!ownsRow(req, empCheck.businessId)) { res.status(403).json({ error: "Forbidden employee" }); return; }
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? null);
   const [row] = await db.insert(employeeFinesTable).values({
     employeeId, amount: fineAmt.toFixed(2), reason, date, locationId: effectiveLocationId,
+    businessId: tenantStamp(req),
   }).returning();
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
 
 router.delete("/hrm/fines/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
+  const [existing] = await db.select({ businessId: employeeFinesTable.businessId }).from(employeeFinesTable).where(eq(employeeFinesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.delete(employeeFinesTable).where(eq(employeeFinesTable.id, id));
   res.sendStatus(204);
 });
@@ -151,7 +172,9 @@ router.delete("/hrm/fines/:id", requireAuth, async (req, res): Promise<void> => 
 
 router.get("/hrm/bonuses", requireAuth, async (req, res): Promise<void> => {
   const { employeeId } = req.query as { employeeId?: string };
-  let rows = await db.select().from(employeeBonusesTable).orderBy(desc(employeeBonusesTable.createdAt));
+  let rows = await db.select().from(employeeBonusesTable)
+    .where(tenantWhere(req, employeeBonusesTable.businessId))
+    .orderBy(desc(employeeBonusesTable.createdAt));
   if (!isAdmin(req) && req.userLocationId != null) rows = rows.filter(r => r.locationId === req.userLocationId);
   if (employeeId) rows = rows.filter(r => r.employeeId === parseInt(employeeId));
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
@@ -171,17 +194,22 @@ router.post("/hrm/bonuses", requireAuth, async (req, res): Promise<void> => {
     res.status(422).json({ error: `Invalid date "${date}". Use YYYY-MM-DD format.` });
     return;
   }
-  const [empCheckB] = await db.select({ id: employeesTable.id }).from(employeesTable).where(eq(employeesTable.id, employeeId));
+  const [empCheckB] = await db.select({ id: employeesTable.id, businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, employeeId));
   if (!empCheckB) { res.status(404).json({ error: "Employee not found." }); return; }
+  if (!ownsRow(req, empCheckB.businessId)) { res.status(403).json({ error: "Forbidden employee" }); return; }
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? null);
   const [row] = await db.insert(employeeBonusesTable).values({
     employeeId, amount: bonusAmt.toFixed(2), reason, date, locationId: effectiveLocationId,
+    businessId: tenantStamp(req),
   }).returning();
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
 
 router.delete("/hrm/bonuses/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
+  const [existing] = await db.select({ businessId: employeeBonusesTable.businessId }).from(employeeBonusesTable).where(eq(employeeBonusesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
   await db.delete(employeeBonusesTable).where(eq(employeeBonusesTable.id, id));
   res.sendStatus(204);
 });
@@ -190,9 +218,9 @@ router.delete("/hrm/bonuses/:id", requireAuth, async (req, res): Promise<void> =
 
 router.get("/hrm/payroll", requireAuth, async (req, res): Promise<void> => {
   const { employeeId, month, year } = req.query as { employeeId?: string; month?: string; year?: string };
-  let rows = !isAdmin(req) && req.userLocationId != null
-    ? await db.select().from(payrollTable).where(eq(payrollTable.locationId, req.userLocationId)).orderBy(desc(payrollTable.createdAt))
-    : await db.select().from(payrollTable).orderBy(desc(payrollTable.createdAt));
+  const conds = [tenantWhere(req, payrollTable.businessId)];
+  if (!isAdmin(req) && req.userLocationId != null) conds.push(eq(payrollTable.locationId, req.userLocationId));
+  let rows = await db.select().from(payrollTable).where(and(...conds)).orderBy(desc(payrollTable.createdAt));
   if (employeeId) rows = rows.filter(r => r.employeeId === parseInt(employeeId));
   if (month) rows = rows.filter(r => r.month === parseInt(month));
   if (year) rows = rows.filter(r => r.year === parseInt(year));
@@ -222,13 +250,14 @@ router.post("/hrm/payroll/generate", requireAuth, async (req, res): Promise<void
 
   const [emp] = await db.select().from(employeesTable).where(eq(employeesTable.id, employeeId));
   if (!emp) { res.status(404).json({ error: "Employee not found." }); return; }
+  if (!ownsRow(req, emp.businessId)) { res.status(403).json({ error: "Forbidden employee" }); return; }
 
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null ? req.userLocationId : (locationId ?? emp.locationId ?? null);
 
-  // Count attendance for the month
+  // Count attendance for the month (tenant-scoped)
   const monthStr = String(month).padStart(2, "0");
   const allAttendance = await db.select().from(attendanceTable)
-    .where(eq(attendanceTable.employeeId, employeeId));
+    .where(and(eq(attendanceTable.employeeId, employeeId), tenantWhere(req, attendanceTable.businessId)));
   const monthAttendance = allAttendance.filter(a => {
     const d = new Date(a.date);
     return d.getMonth() + 1 === month && d.getFullYear() === year;
@@ -242,12 +271,14 @@ router.post("/hrm/payroll/generate", requireAuth, async (req, res): Promise<void
   const effectiveDays = presentDays + halfDays * 0.5;
   const grossSalary = perDay * effectiveDays;
 
-  // Sum pending fines/bonuses
-  const allFines = await db.select().from(employeeFinesTable).where(eq(employeeFinesTable.employeeId, employeeId));
+  // Sum pending fines/bonuses (tenant-scoped)
+  const allFines = await db.select().from(employeeFinesTable)
+    .where(and(eq(employeeFinesTable.employeeId, employeeId), tenantWhere(req, employeeFinesTable.businessId)));
   const pendingFines = allFines.filter(f => !f.payrollId && f.date.startsWith(`${year}-${monthStr}`));
   const fineTotal = pendingFines.reduce((s, f) => s + parseFloat(f.amount), 0);
 
-  const allBonuses = await db.select().from(employeeBonusesTable).where(eq(employeeBonusesTable.employeeId, employeeId));
+  const allBonuses = await db.select().from(employeeBonusesTable)
+    .where(and(eq(employeeBonusesTable.employeeId, employeeId), tenantWhere(req, employeeBonusesTable.businessId)));
   const pendingBonuses = allBonuses.filter(b => !b.payrollId && b.date.startsWith(`${year}-${monthStr}`));
   const bonusTotal = pendingBonuses.reduce((s, b) => s + parseFloat(b.amount), 0);
 
@@ -256,9 +287,9 @@ router.post("/hrm/payroll/generate", requireAuth, async (req, res): Promise<void
   const otPay   = otHours * otRate;
   const netSalary = Math.max(0, grossSalary + bonusTotal + otPay - fineTotal);
 
-  // Check if payroll for this month/employee already exists
+  // Check if payroll for this month/employee already exists (tenant-scoped)
   const existing = await db.select().from(payrollTable)
-    .where(and(eq(payrollTable.employeeId, employeeId), eq(payrollTable.month, month), eq(payrollTable.year, year)));
+    .where(and(eq(payrollTable.employeeId, employeeId), eq(payrollTable.month, month), eq(payrollTable.year, year), tenantWhere(req, payrollTable.businessId)));
 
   let row;
   if (existing.length > 0) {
@@ -278,6 +309,7 @@ router.post("/hrm/payroll/generate", requireAuth, async (req, res): Promise<void
       fineTotal: fineTotal.toFixed(2), deductions: "0.00",
       netSalary: netSalary.toFixed(2), status: "pending",
       locationId: effectiveLocationId, notes: notes ?? null,
+      businessId: tenantStamp(req),
     }).returning();
   }
 
@@ -290,6 +322,9 @@ router.post("/hrm/payroll/generate", requireAuth, async (req, res): Promise<void
 
 router.patch("/hrm/payroll/:id/pay", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(req.params.id!, 10);
+  const [existing] = await db.select({ businessId: payrollTable.businessId }).from(payrollTable).where(eq(payrollTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
   const today = new Date().toISOString().slice(0, 10);
   const [row] = await db.update(payrollTable).set({ status: "paid", paidAt: today }).where(eq(payrollTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Not found" }); return; }
@@ -301,19 +336,21 @@ router.patch("/hrm/payroll/:id/pay", requireAuth, async (req, res): Promise<void
 router.get("/hrm/report", requireAuth, async (req, res): Promise<void> => {
   const { month, year, locationId } = req.query as { month?: string; year?: string; locationId?: string };
 
-  let employees = !isAdmin(req) && req.userLocationId != null
-    ? await db.select().from(employeesTable).where(eq(employeesTable.locationId, req.userLocationId))
-    : locationId
-      ? await db.select().from(employeesTable).where(eq(employeesTable.locationId, parseInt(locationId)))
-      : await db.select().from(employeesTable);
+  const empConds = [tenantWhere(req, employeesTable.businessId)];
+  if (!isAdmin(req) && req.userLocationId != null) {
+    empConds.push(eq(employeesTable.locationId, req.userLocationId));
+  } else if (locationId) {
+    empConds.push(eq(employeesTable.locationId, parseInt(locationId)));
+  }
+  const employees = await db.select().from(employeesTable).where(and(...empConds));
 
   const activeEmps = employees.filter(e => e.status === "active");
   const empIds = activeEmps.map(e => e.id);
 
-  const allPayroll    = (await db.select().from(payrollTable).orderBy(desc(payrollTable.createdAt)));
-  const allFines      = await db.select().from(employeeFinesTable);
-  const allBonuses    = await db.select().from(employeeBonusesTable);
-  const allAttendance = await db.select().from(attendanceTable).orderBy(desc(attendanceTable.date));
+  const allPayroll    = await db.select().from(payrollTable).where(tenantWhere(req, payrollTable.businessId)).orderBy(desc(payrollTable.createdAt));
+  const allFines      = await db.select().from(employeeFinesTable).where(tenantWhere(req, employeeFinesTable.businessId));
+  const allBonuses    = await db.select().from(employeeBonusesTable).where(tenantWhere(req, employeeBonusesTable.businessId));
+  const allAttendance = await db.select().from(attendanceTable).where(tenantWhere(req, attendanceTable.businessId)).orderBy(desc(attendanceTable.date));
 
   const filteredPayroll  = allPayroll.filter(p => empIds.includes(p.employeeId) && (!month || p.month === parseInt(month)) && (!year || p.year === parseInt(year)));
   const filteredFines    = allFines.filter(f => empIds.includes(f.employeeId));
@@ -346,19 +383,7 @@ router.get("/hrm/report", requireAuth, async (req, res): Promise<void> => {
   });
 });
 
-/* ─────────────── SALES PERFORMANCE  (per-employee + per-app) ─────────────
- * Returns a comprehensive sales view scoped to a date window. Used by the
- * HRM "Sales Performance" report tab.
- *
- * Query params:
- *   period = daily | weekly | monthly      (default: monthly)
- *   date   = YYYY-MM-DD                    (anchor date, default: today)
- *
- * Window resolution:
- *   daily   → that single date
- *   weekly  → Mon..Sun containing the anchor date
- *   monthly → 1st..last day of the anchor's month
- * ────────────────────────────────────────────────────────────────────────── */
+/* ─────────────── SALES PERFORMANCE  (per-employee + per-app) ───────────── */
 router.get("/hrm/sales-performance", requireAuth, async (req, res): Promise<void> => {
   const period = (req.query["period"] as string) || "monthly";
   const dateStr = (req.query["date"] as string) || new Date().toISOString().slice(0, 10);
@@ -371,44 +396,40 @@ router.get("/hrm/sales-performance", requireAuth, async (req, res): Promise<void
   if (period === "daily") {
     startDate = endDate = dateStr;
   } else if (period === "weekly") {
-    // ISO week: Monday-start
     const d = new Date(anchor);
-    const day = d.getUTCDay();           // 0=Sun..6=Sat
-    const diffToMon = (day + 6) % 7;     // shift so Mon=0
+    const day = d.getUTCDay();
+    const diffToMon = (day + 6) % 7;
     d.setUTCDate(d.getUTCDate() - diffToMon);
     startDate = d.toISOString().slice(0, 10);
     d.setUTCDate(d.getUTCDate() + 6);
     endDate = d.toISOString().slice(0, 10);
   } else {
-    // monthly
     const y = anchor.getUTCFullYear(), m = anchor.getUTCMonth();
     startDate = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
     endDate   = new Date(Date.UTC(y, m + 1, 0)).toISOString().slice(0, 10);
   }
 
-  // Sales in window (location-scoped for non-admin)
+  // Sales in window — tenant-scoped + (location-scoped for non-admin)
   const baseConditions = [
     sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') >= ${startDate}::date`,
     sql`DATE(${salesTable.createdAt} AT TIME ZONE 'UTC') <= ${endDate}::date`,
     eq(salesTable.status, "completed"),
   ];
+  const tWhereSales = tenantWhere(req, salesTable.businessId);
+  if (tWhereSales) baseConditions.push(tWhereSales);
   if (!isAdmin(req) && req.userLocationId != null) {
     baseConditions.push(eq(salesTable.locationId, req.userLocationId));
   }
 
   const sales = await db.select().from(salesTable).where(and(...baseConditions));
 
-  // Resolve users → employee mapping (sales.userId -> users -> employee by name match)
-  // The codebase keeps users (login accounts) and employees (HR records) as
-  // separate tables — sales link to userId, so we group by userId here.
   const userIds = Array.from(new Set(sales.map(s => s.userId).filter((x): x is number => x != null)));
   const users = userIds.length
-    ? await db.select().from(usersTable)
+    ? await db.select().from(usersTable).where(tenantWhere(req, usersTable.businessId))
     : [];
   const userMap: Record<number, { id: number; name: string; username: string }> = {};
   for (const u of users) userMap[u.id] = { id: u.id, name: u.name ?? u.username, username: u.username };
 
-  // Per-user (salesperson) totals
   const byUser: Record<number, { userId: number; name: string; username: string; salesCount: number; salesTotal: number }> = {};
   for (const s of sales) {
     if (s.userId == null) continue;
@@ -426,8 +447,7 @@ router.get("/hrm/sales-performance", requireAuth, async (req, res): Promise<void
     byUser[s.userId].salesTotal += parseFloat(s.total);
   }
 
-  // Per-location (app) totals
-  const locations = await db.select().from(locationsTable);
+  const locations = await db.select().from(locationsTable).where(tenantWhere(req, locationsTable.businessId));
   const locMap: Record<number, string> = {};
   for (const l of locations) locMap[l.id] = l.name;
 
@@ -446,14 +466,12 @@ router.get("/hrm/sales-performance", requireAuth, async (req, res): Promise<void
     byApp[s.locationId].salesTotal += parseFloat(s.total);
   }
 
-  // Targets that fall in the window — used to count achievements & list pending verifications.
-  // Non-admin users can only see targets at their own location (or location-less ones).
-  const allTargets = await db.select().from(targetsTable);
+  // Targets — tenant-scoped + location-scoped for non-admin
+  const allTargets = await db.select().from(targetsTable).where(tenantWhere(req, targetsTable.businessId));
   const scopeTargets = (!isAdmin(req) && req.userLocationId != null)
     ? allTargets.filter(t => t.locationId == null || t.locationId === req.userLocationId)
     : allTargets;
   const windowTargets = scopeTargets.filter(t =>
-    // any overlap with window
     t.startDate <= endDate && t.endDate >= startDate
   );
 
@@ -477,29 +495,18 @@ router.get("/hrm/sales-performance", requireAuth, async (req, res): Promise<void
   });
 });
 
-/* ─────────────── EMPLOYEE BADGES — verified-sale tier per employee ───────
- * Returns per-employee aggregate stats used to render achievement badges
- * in HRM. Tiers are based on lifetime VERIFIED target achievements.
- *
- *   bronze   →  1+
- *   silver   →  5+
- *   gold     → 15+
- *   platinum → 30+
- * ────────────────────────────────────────────────────────────────────────── */
+/* ─────────────── EMPLOYEE BADGES — verified-sale tier per employee ─────── */
 router.get("/hrm/employee-badges", requireAuth, async (req, res): Promise<void> => {
-  // Restrict to the user's location for non-admin/manager — same scoping rule
-  // used by /hrm/employees so the badges always agree with what they can see.
   const scopeByLocation = !isAdmin(req) && req.userLocationId != null;
 
-  // Pre-fetch the visible employee set so we never expose IDs from other locations,
-  // even via bonuses that happen to be tagged with another locationId.
-  const visibleEmployees = scopeByLocation
-    ? await db.select({ id: employeesTable.id }).from(employeesTable).where(eq(employeesTable.locationId, req.userLocationId!))
-    : await db.select({ id: employeesTable.id }).from(employeesTable);
+  // Pre-fetch the visible employee set so we never expose IDs from other tenants/locations.
+  const empConds = [tenantWhere(req, employeesTable.businessId)];
+  if (scopeByLocation) empConds.push(eq(employeesTable.locationId, req.userLocationId!));
+  const visibleEmployees = await db.select({ id: employeesTable.id }).from(employeesTable).where(and(...empConds));
   const visibleEmpIds = new Set(visibleEmployees.map(e => e.id));
 
-  const allTargets = await db.select().from(targetsTable);
-  const allBonuses = await db.select().from(employeeBonusesTable);
+  const allTargets = await db.select().from(targetsTable).where(tenantWhere(req, targetsTable.businessId));
+  const allBonuses = await db.select().from(employeeBonusesTable).where(tenantWhere(req, employeeBonusesTable.businessId));
 
   const targets = scopeByLocation
     ? allTargets.filter(t => t.locationId == null || t.locationId === req.userLocationId)
@@ -524,7 +531,6 @@ router.get("/hrm/employee-badges", requireAuth, async (req, res): Promise<void> 
     return "none";
   };
 
-  // Initialize from targets (skip employees we're not allowed to see)
   for (const t of targets) {
     if (!t.employeeId) continue;
     if (!visibleEmpIds.has(t.employeeId)) continue;
@@ -539,8 +545,6 @@ router.get("/hrm/employee-badges", requireAuth, async (req, res): Promise<void> 
     }
   }
 
-  // Sum bonuses earned (any source — covers historical "auto-bonus" rows that
-  // pre-date the verification gate, plus current verified rows).
   for (const b of bonuses) {
     if (!visibleEmpIds.has(b.employeeId)) continue;
     if (!out[b.employeeId]) {
@@ -549,7 +553,6 @@ router.get("/hrm/employee-badges", requireAuth, async (req, res): Promise<void> 
     out[b.employeeId].totalBonusEarned += parseFloat(b.amount);
   }
 
-  // Compute final tier
   for (const empId of Object.keys(out)) {
     const e = out[parseInt(empId)]!;
     e.tier = tierFor(e.verifiedCount);
@@ -564,7 +567,9 @@ router.get("/hrm/leave", requireAuth, async (req, res): Promise<void> => {
   const empId = req.query["employeeId"] ? parseInt(String(req.query["employeeId"]), 10) : null;
   const status = req.query["status"] as string | undefined;
 
-  let rows = await db.select().from(leaveRequestsTable).orderBy(desc(leaveRequestsTable.createdAt));
+  let rows = await db.select().from(leaveRequestsTable)
+    .where(tenantWhere(req, leaveRequestsTable.businessId))
+    .orderBy(desc(leaveRequestsTable.createdAt));
 
   if (!isAdmin(req) && req.userLocationId != null)
     rows = rows.filter(r => r.locationId === req.userLocationId);
@@ -584,6 +589,10 @@ router.post("/hrm/leave", requireAuth, async (req, res): Promise<void> => {
     res.status(400).json({ error: "employeeId, startDate, endDate are required" }); return;
   }
 
+  // Verify employee belongs to caller's tenant
+  const [emp] = await db.select({ businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, employeeId));
+  if (!emp || !ownsRow(req, emp.businessId)) { res.status(403).json({ error: "Forbidden employee" }); return; }
+
   const effectiveLocationId = !isAdmin(req) && req.userLocationId != null
     ? req.userLocationId : (locationId ?? null);
 
@@ -597,6 +606,7 @@ router.post("/hrm/leave", requireAuth, async (req, res): Promise<void> => {
     status: "pending",
     submittedBy: req.userId!,
     locationId: effectiveLocationId,
+    businessId: tenantStamp(req),
   }).returning();
 
   await logAudit(req.userId, "create", "leave_request", row!.id, `Leave for employee #${employeeId} from ${startDate} to ${endDate}`);
@@ -612,6 +622,7 @@ router.patch("/hrm/leave/:id", requireAuth, async (req, res): Promise<void> => {
 
   const [existing] = await db.select().from(leaveRequestsTable).where(eq(leaveRequestsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Leave request not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const updates: Record<string, unknown> = {};
   const isReview = status === "approved" || status === "rejected";
@@ -643,6 +654,7 @@ router.delete("/hrm/leave/:id", requireAuth, async (req, res): Promise<void> => 
   const id = parseInt(req.params.id!, 10);
   const [existing] = await db.select().from(leaveRequestsTable).where(eq(leaveRequestsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
 
   if (!isAdmin(req) && existing.submittedBy !== req.userId) {
     res.status(403).json({ error: "Can only cancel your own leave requests" }); return;

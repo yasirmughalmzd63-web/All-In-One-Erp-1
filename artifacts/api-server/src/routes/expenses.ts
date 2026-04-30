@@ -55,6 +55,7 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
       res.status(422).json({ error: "Selected account does not exist." });
       return;
     }
+    if (!ownsRow(req, account.businessId)) { res.status(403).json({ error: "Account belongs to another business" }); return; }
     if (!account.isActive) {
       res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for expenses.` });
       return;

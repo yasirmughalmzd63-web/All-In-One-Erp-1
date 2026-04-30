@@ -70,6 +70,7 @@ router.post("/accounts/transfer", requireAuth, async (req, res): Promise<void> =
   if (fromAccountId) {
     const [from] = await db.select().from(accountsTable).where(eq(accountsTable.id, fromAccountId));
     if (!from) { res.status(404).json({ error: "Source account not found." }); return; }
+    if (!ownsRow(req, from.businessId)) { res.status(403).json({ error: "Source account belongs to another business" }); return; }
     if (!from.isActive) {
       res.status(422).json({ error: `Source account "${from.name}" is inactive and cannot send funds.` });
       return;
@@ -86,6 +87,7 @@ router.post("/accounts/transfer", requireAuth, async (req, res): Promise<void> =
   if (toAccountId) {
     const [to] = await db.select().from(accountsTable).where(eq(accountsTable.id, toAccountId));
     if (!to) { res.status(404).json({ error: "Destination account not found." }); return; }
+    if (!ownsRow(req, to.businessId)) { res.status(403).json({ error: "Destination account belongs to another business" }); return; }
     if (!to.isActive) {
       res.status(422).json({ error: `Destination account "${to.name}" is inactive and cannot receive funds.` });
       return;

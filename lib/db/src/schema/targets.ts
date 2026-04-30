@@ -18,6 +18,7 @@ export const targetsTable = pgTable("targets", {
   achievedAmount: text("achieved_amount").notNull().default("0.00"),
   bonusId: integer("bonus_id"),                          // set after commission applied
   locationId: integer("location_id"),
+  businessId: integer("business_id"),
   notes: text("notes"),
   // Challenge targets get a higher bonus multiplier (set on the target itself);
   // this flag is purely for badging + filtering.

@@ -8,23 +8,36 @@ import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
-router.get("/locations", requireAuth, async (_req, res): Promise<void> => {
-  const rows = await db.select().from(locationsTable).orderBy(locationsTable.name);
+router.get("/locations", requireAuth, async (req, res): Promise<void> => {
+  const rows = await db.select().from(locationsTable)
+    .where(tenantWhere(req, locationsTable.businessId))
+    .orderBy(locationsTable.name);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 
 router.post("/locations", requireAuth, async (req, res): Promise<void> => {
-  if (req.userRole !== "super_admin") { res.status(403).json({ error: "Only super admins can create locations" }); return; }
+  // super_admin (no business) creates global locations; business admins create their own.
+  if (req.userRole !== "super_admin" && req.userRole !== "admin") {
+    res.status(403).json({ error: "Only admins can create locations" }); return;
+  }
   const { name, address, phone } = req.body as { name?: string; address?: string | null; phone?: string | null };
   if (!name) { res.status(400).json({ error: "name required" }); return; }
-  const [row] = await db.insert(locationsTable).values({ name, address: address ?? null, phone: phone ?? null }).returning();
+  const [row] = await db.insert(locationsTable).values({
+    name, address: address ?? null, phone: phone ?? null,
+    businessId: tenantStamp(req),
+  }).returning();
   await logAudit(req.userId, "create", "location", row!.id, `Created location ${name}`);
   res.status(201).json({ ...row!, createdAt: row!.createdAt.toISOString() });
 });
 
 router.patch("/locations/:id", requireAuth, async (req, res): Promise<void> => {
-  if (req.userRole !== "super_admin") { res.status(403).json({ error: "Only super admins can modify locations" }); return; }
+  if (req.userRole !== "super_admin" && req.userRole !== "admin") {
+    res.status(403).json({ error: "Only admins can modify locations" }); return;
+  }
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  const [existing] = await db.select({ businessId: locationsTable.businessId }).from(locationsTable).where(eq(locationsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Location not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Location belongs to another business" }); return; }
   const { name, address, phone, isActive } = req.body as { name?: string; address?: string | null; phone?: string | null; isActive?: boolean };
   const updates: Record<string, unknown> = {};
   if (name != null) updates.name = name;
@@ -38,8 +51,13 @@ router.patch("/locations/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.delete("/locations/:id", requireAuth, async (req, res): Promise<void> => {
-  if (req.userRole !== "super_admin") { res.status(403).json({ error: "Only super admins can delete locations" }); return; }
+  if (req.userRole !== "super_admin" && req.userRole !== "admin") {
+    res.status(403).json({ error: "Only admins can delete locations" }); return;
+  }
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  const [existing] = await db.select({ businessId: locationsTable.businessId }).from(locationsTable).where(eq(locationsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Location not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Location belongs to another business" }); return; }
   const [row] = await db.delete(locationsTable).where(eq(locationsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Location not found" }); return; }
   await logAudit(req.userId, "delete", "location", id);

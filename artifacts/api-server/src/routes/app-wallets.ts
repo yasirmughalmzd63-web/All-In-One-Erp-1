@@ -3,12 +3,18 @@ import { eq, desc, sql, and } from "drizzle-orm";
 import { db, productsTable, dollarWalletTable, saleItemsTable, salesTable, appCoinCreditsTable, appCoinCreditPaymentsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 const fmt = (n: number, d = 8) => n.toFixed(d);
 
 // GET /api/app-wallets — summary for all products
 router.get("/app-wallets", requireAuth, async (req, res): Promise<void> => {
+  const tProd = tenantWhere(req, productsTable.businessId);
+  const tDollar = tenantWhere(req, dollarWalletTable.businessId);
+  const tSales = tenantWhere(req, salesTable.businessId);
+  const tCredits = tenantWhere(req, appCoinCreditsTable.businessId);
+
   const products = await db.select({
     id: productsTable.id,
     name: productsTable.name,
@@ -19,7 +25,7 @@ router.get("/app-wallets", requireAuth, async (req, res): Promise<void> => {
     wholesalePrice: productsTable.wholesalePrice,
     topupCoinsPerUsd: productsTable.topupCoinsPerUsd,
     topupExchangeRatePkr: productsTable.topupExchangeRatePkr,
-  }).from(productsTable).where(eq(productsTable.isActive, true)).orderBy(productsTable.name);
+  }).from(productsTable).where(and(eq(productsTable.isActive, true), tProd)).orderBy(productsTable.name);
 
   // Aggregate dollar topups per product
   const topupRows = await db
@@ -32,7 +38,7 @@ router.get("/app-wallets", requireAuth, async (req, res): Promise<void> => {
       directCount: sql<string>`count(*) filter (where ${dollarWalletTable.paymentMode} = 'direct')`,
     })
     .from(dollarWalletTable)
-    .where(eq(dollarWalletTable.entryType, "topup"))
+    .where(and(eq(dollarWalletTable.entryType, "topup"), tDollar))
     .groupBy(dollarWalletTable.productId);
 
   // Aggregate coin sales per product (from sale_items)
@@ -44,7 +50,7 @@ router.get("/app-wallets", requireAuth, async (req, res): Promise<void> => {
     })
     .from(saleItemsTable)
     .innerJoin(salesTable, eq(saleItemsTable.saleId, salesTable.id))
-    .where(eq(salesTable.status, "completed"))
+    .where(and(eq(salesTable.status, "completed"), tSales))
     .groupBy(saleItemsTable.productId);
 
   // Aggregate outstanding credit per product
@@ -58,6 +64,7 @@ router.get("/app-wallets", requireAuth, async (req, res): Promise<void> => {
       pendingCount: sql<string>`count(*) filter (where ${appCoinCreditsTable.status} in ('pending','partial'))`,
     })
     .from(appCoinCreditsTable)
+    .where(tCredits)
     .groupBy(appCoinCreditsTable.productId);
 
   const topupMap = Object.fromEntries(topupRows.map(r => [String(r.productId), r]));
@@ -95,9 +102,14 @@ router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<voi
 
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+  if (!ownsRow(req, product.businessId)) { res.status(404).json({ error: "Product not found" }); return; }
+
+  const tDollar = tenantWhere(req, dollarWalletTable.businessId);
+  const tCredits = tenantWhere(req, appCoinCreditsTable.businessId);
+  const tSales = tenantWhere(req, salesTable.businessId);
 
   const topups = await db.select().from(dollarWalletTable)
-    .where(and(eq(dollarWalletTable.entryType, "topup"), eq(dollarWalletTable.productId, productId)))
+    .where(and(eq(dollarWalletTable.entryType, "topup"), eq(dollarWalletTable.productId, productId), tDollar))
     .orderBy(desc(dollarWalletTable.createdAt))
     .limit(100);
 
@@ -105,7 +117,7 @@ router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<voi
   // products — USD sale rate is global, not per-product).
   const lastReceived = await db.select({ rate: dollarWalletTable.rate })
     .from(dollarWalletTable)
-    .where(eq(dollarWalletTable.entryType, "received"))
+    .where(and(eq(dollarWalletTable.entryType, "received"), tDollar))
     .orderBy(desc(dollarWalletTable.createdAt))
     .limit(1);
   const currentDollarSaleRate = lastReceived.length > 0
@@ -113,7 +125,7 @@ router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<voi
     : 0;
 
   const credits = await db.select().from(appCoinCreditsTable)
-    .where(eq(appCoinCreditsTable.productId, productId))
+    .where(and(eq(appCoinCreditsTable.productId, productId), tCredits))
     .orderBy(desc(appCoinCreditsTable.createdAt))
     .limit(200);
 
@@ -129,7 +141,7 @@ router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<voi
     })
     .from(saleItemsTable)
     .innerJoin(salesTable, eq(saleItemsTable.saleId, salesTable.id))
-    .where(and(eq(saleItemsTable.productId, productId), eq(salesTable.status, "completed")))
+    .where(and(eq(saleItemsTable.productId, productId), eq(salesTable.status, "completed"), tSales))
     .orderBy(desc(salesTable.createdAt))
     .limit(100);
 
@@ -147,6 +159,7 @@ router.get("/app-wallets/credits/:creditId", requireAuth, async (req, res): Prom
   const creditId = parseInt(req.params.creditId!, 10);
   const [credit] = await db.select().from(appCoinCreditsTable).where(eq(appCoinCreditsTable.id, creditId));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!ownsRow(req, credit.businessId)) { res.status(404).json({ error: "Credit not found" }); return; }
 
   const payments = await db.select().from(appCoinCreditPaymentsTable)
     .where(eq(appCoinCreditPaymentsTable.creditId, creditId))
@@ -177,6 +190,7 @@ router.post("/app-wallets/:productId/credits", requireAuth, async (req, res): Pr
 
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
   if (!product) { res.status(404).json({ error: "Product not found" }); return; }
+  if (!ownsRow(req, product.businessId)) { res.status(404).json({ error: "Product not found" }); return; }
 
   const totalPkr = qty * parseFloat(unitPricePkr);
 
@@ -194,6 +208,7 @@ router.post("/app-wallets/:productId/credits", requireAuth, async (req, res): Pr
     date,
     dueDate: dueDate ?? null,
     userId: String(req.userId),
+    businessId: tenantStamp(req),
   }).returning();
 
   await logAudit(req.userId, "create", "app_coin_credits", row!.id,
@@ -221,6 +236,7 @@ router.post("/app-wallets/credits/:creditId/payment", requireAuth, async (req, r
 
   const [credit] = await db.select().from(appCoinCreditsTable).where(eq(appCoinCreditsTable.id, creditId));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!ownsRow(req, credit.businessId)) { res.status(404).json({ error: "Credit not found" }); return; }
 
   const remaining = parseFloat(credit.remainingPkr);
   if (amount > remaining + 0.001) {
@@ -240,6 +256,7 @@ router.post("/app-wallets/credits/:creditId/payment", requireAuth, async (req, r
       notes: notes ?? null,
       date,
       userId: String(req.userId),
+      businessId: tenantStamp(req),
     });
     await tx.update(appCoinCreditsTable).set({
       paidPkr: fmt(newPaid),
@@ -260,6 +277,7 @@ router.delete("/app-wallets/credits/:creditId", requireAuth, async (req, res): P
   const creditId = parseInt(req.params.creditId!, 10);
   const [credit] = await db.select().from(appCoinCreditsTable).where(eq(appCoinCreditsTable.id, creditId));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!ownsRow(req, credit.businessId)) { res.status(404).json({ error: "Credit not found" }); return; }
 
   await db.delete(appCoinCreditPaymentsTable).where(eq(appCoinCreditPaymentsTable.creditId, creditId));
   await db.delete(appCoinCreditsTable).where(eq(appCoinCreditsTable.id, creditId));

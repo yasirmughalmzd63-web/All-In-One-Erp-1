@@ -82,10 +82,11 @@ router.get("/customers/:id/statement", requireAuth, async (req, res): Promise<vo
 
   const [customer] = await db.select().from(customersTable).where(eq(customersTable.id, id));
   if (!customer) { res.status(404).json({ error: "Customer not found" }); return; }
+  if (!ownsRow(req, customer.businessId)) { res.status(404).json({ error: "Customer not found" }); return; }
 
   // Fetch all credits for this customer
   const credits = await db.select().from(creditsTable)
-    .where(eq(creditsTable.partyId, id))
+    .where(and(eq(creditsTable.partyId, id), tenantWhere(req, creditsTable.businessId)))
     .orderBy(desc(creditsTable.createdAt));
 
   // Fetch all credit payments for those credits
@@ -100,7 +101,7 @@ router.get("/customers/:id/statement", requireAuth, async (req, res): Promise<vo
 
   // Fetch all sales for this customer
   const sales = await db.select().from(salesTable)
-    .where(eq(salesTable.customerId, id))
+    .where(and(eq(salesTable.customerId, id), tenantWhere(req, salesTable.businessId)))
     .orderBy(desc(salesTable.createdAt));
 
   // Compute summary

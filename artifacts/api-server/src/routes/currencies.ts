@@ -1,12 +1,13 @@
 import { Router } from "express";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db, currencyTransactionsTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
-router.get("/currencies", requireAuth, async (_req, res): Promise<void> => {
+router.get("/currencies", requireAuth, async (req, res): Promise<void> => {
   const rows = await db.select({
     id: currencyTransactionsTable.id,
     currencyType: currencyTransactionsTable.currencyType,
@@ -22,6 +23,7 @@ router.get("/currencies", requireAuth, async (_req, res): Promise<void> => {
     createdAt: currencyTransactionsTable.createdAt,
   }).from(currencyTransactionsTable)
     .leftJoin(accountsTable, eq(currencyTransactionsTable.accountId, accountsTable.id))
+    .where(tenantWhere(req, currencyTransactionsTable.businessId))
     .orderBy(desc(currencyTransactionsTable.createdAt));
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
@@ -40,14 +42,21 @@ router.post("/currencies", requireAuth, async (req, res): Promise<void> => {
   const t = type ?? "purchase";
   const total = parseFloat(totalInBase);
 
+  // If account is targeted, verify it belongs to the user's tenant
+  if (accountId) {
+    const [acct] = await db.select({ businessId: accountsTable.businessId }).from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (!acct || !ownsRow(req, acct.businessId)) { res.status(403).json({ error: "Forbidden account" }); return; }
+  }
+
   const [row] = await db.insert(currencyTransactionsTable).values({
     currencyType: ct, type: t,
     amount: parseFloat(amount).toFixed(8),
     rate: parseFloat(rate).toFixed(8),
     totalInBase: total.toFixed(8),
     accountId: accountId ?? null,
-    userId: req.userId,
+    userId: req.userId!,
     notes: notes ?? null, date,
+    businessId: tenantStamp(req),
   }).returning();
 
   if (accountId) {
@@ -68,6 +77,7 @@ router.delete("/currencies/:id", requireAuth, async (req, res): Promise<void> =>
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [existing] = await db.select().from(currencyTransactionsTable).where(eq(currencyTransactionsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
 
   if (existing.accountId) {
     const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, existing.accountId));
