@@ -10,6 +10,7 @@ export * from "./sales";
 export * from "./purchases";
 export * from "./expenses";
 export * from "./credits";
+export * from "./credit-payments";
 export * from "./wallets";
 export * from "./audit";
 export * from "./currencies";
