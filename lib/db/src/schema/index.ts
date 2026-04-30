@@ -24,3 +24,4 @@ export * from "./payroll";
 export * from "./employee-fines";
 export * from "./employee-bonuses";
 export * from "./usd-purchases";
+export * from "./targets";

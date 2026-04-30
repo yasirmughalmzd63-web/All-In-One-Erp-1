@@ -25,6 +25,7 @@ import registrationsRouter from "./registrations.js";
 import businessesRouter from "./businesses.js";
 import hrmRouter from "./hrm.js";
 import usdBridgeRouter from "./usd-bridge.js";
+import targetsRouter from "./targets.js";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(registrationsRouter);
 router.use(businessesRouter);
 router.use(hrmRouter);
 router.use(usdBridgeRouter);
+router.use(targetsRouter);
 
 export default router;

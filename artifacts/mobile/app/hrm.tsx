@@ -116,6 +116,9 @@ export default function HrmScreen() {
   const [payForm, setPayForm] = useState({ employeeId: 0, month: NOW.getMonth() + 1, year: NOW.getFullYear(), workingDays: "26", overtimeHours: "0", overtimeRate: "0", notes: "" });
   const [generating, setGenerating] = useState(false);
 
+  // — Targets achievement badges
+  const [pendingAchievements, setPendingAchievements] = useState<Record<number, number>>({});
+
   // — Report
   const [report, setReport] = useState<HrmReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -178,7 +181,14 @@ export default function HrmScreen() {
     } finally { setReportLoading(false); }
   }, [token, reportMonth, reportYear]);
 
-  useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+  const fetchPendingAchievements = useCallback(async () => {
+    try {
+      const r = await fetch(getApiUrl("/api/targets/pending-achievements"), { headers });
+      if (r.ok) setPendingAchievements(await r.json());
+    } catch (_) {}
+  }, [token]);
+
+  useEffect(() => { fetchEmployees(); fetchPendingAchievements(); }, [fetchEmployees, fetchPendingAchievements]);
   useEffect(() => { if (activeTab === "attendance") fetchAttendance(); }, [activeTab, fetchAttendance]);
   useEffect(() => { if (activeTab === "payroll") { fetchPayroll(); fetchFinesAndBonuses(); } }, [activeTab, fetchPayroll, fetchFinesAndBonuses]);
   useEffect(() => { if (activeTab === "report") fetchReport(); }, [activeTab, fetchReport]);
@@ -410,6 +420,14 @@ export default function HrmScreen() {
               </View>
             </View>
             <View style={s.cardActions}>
+              {pendingAchievements[e.id] > 0 && (
+                <View style={{ backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 4, alignItems: "center", marginBottom: 4 }}>
+                  <Feather name="award" size={16} color="#D97706" />
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: "#D97706" }}>
+                    {pendingAchievements[e.id]}
+                  </Text>
+                </View>
+              )}
               <TouchableOpacity onPress={() => openEmpModal(e)} style={s.iconBtn}>
                 <Feather name="edit-2" size={16} color={colors.primary} />
               </TouchableOpacity>
@@ -764,7 +782,15 @@ export default function HrmScreen() {
                       </Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[s.cardTitle, { fontSize: 15 }]}>{emp.name}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={[s.cardTitle, { fontSize: 15 }]}>{emp.name}</Text>
+                        {(pendingAchievements[emp.id] ?? 0) > 0 && (
+                          <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#FEF3C7", borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2, gap: 3 }}>
+                            <Feather name="award" size={12} color="#D97706" />
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: "#D97706" }}>{pendingAchievements[emp.id]}</Text>
+                          </View>
+                        )}
+                      </View>
                       {emp.position ? <Text style={s.cardSub}>{emp.department ? `${emp.position} · ${emp.department}` : emp.position}</Text> : null}
                     </View>
                     <View style={[s.badge, { backgroundColor: emp.status === "active" ? "#DCFCE7" : "#F3F4F6" }]}>

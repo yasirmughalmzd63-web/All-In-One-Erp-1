@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -264,6 +265,14 @@ export default function InventoryLedgerScreen() {
             
           </TouchableOpacity>
         </View>
+        {/* Targets shortcut */}
+        <TouchableOpacity
+          style={[styles.dropdownBtn, { backgroundColor: "#7C3AED" + "15", borderColor: "#7C3AED" + "40", gap: 5 }]}
+          onPress={() => router.push("/targets")}
+        >
+          <Feather name="target" size={13} color="#7C3AED" />
+          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#7C3AED" }}>Targets</Text>
+        </TouchableOpacity>
       </View>
 
       {/* List */}
