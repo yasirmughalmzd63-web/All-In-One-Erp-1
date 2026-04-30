@@ -45,9 +45,19 @@ export default function CurrencyScreen() {
   const { data: accountsRaw } = useListAccounts();
   const accounts = (accountsRaw ?? []) as unknown as Account[];
 
-  const totalInBase = form.amount && form.rate
-    ? (parseFloat(form.amount || "0") * parseFloat(form.rate || "0")).toFixed(2)
-    : "0.00";
+  const amountNum = parseFloat(form.amount || "0");
+  const rateNum   = parseFloat(form.rate   || "0");
+  const totalInBaseNum = amountNum * rateNum;
+  const totalInBase = totalInBaseNum.toFixed(2);
+
+  const isBuy = form.type === "purchase";
+  const selectedAccount = form.accountId
+    ? accounts.find(a => String(a.id) === form.accountId) ?? null
+    : null;
+  const currentBal = selectedAccount ? parseFloat(selectedAccount.balance) : 0;
+  const newBal = isBuy ? currentBal - totalInBaseNum : currentBal + totalInBaseNum;
+  const balanceWarn = isBuy && selectedAccount && newBal < 0;
+  const previewReady = amountNum > 0 && rateNum > 0;
 
   const load = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
@@ -226,12 +236,86 @@ export default function CurrencyScreen() {
                 </View>
               </View>
 
-              <View style={[styles.totalBox, { backgroundColor: colors.secondary, borderColor: "#0891B2" }]}>
-                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.mutedForeground }}>Total in PKR (Rupees)</Text>
-                <Text style={{ fontFamily: "Inter_700Bold", fontSize: 24, color: "#0891B2" }}>₨{parseFloat(totalInBase).toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
+              <View style={[styles.previewBox, {
+                backgroundColor: previewReady ? (isBuy ? "#EFF6FF" : "#ECFDF5") : colors.secondary,
+                borderColor:     previewReady ? (isBuy ? "#3B82F6" : "#10B981") : colors.border,
+              }]}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, letterSpacing: 0.6,
+                    color: previewReady ? (isBuy ? "#1D4ED8" : "#047857") : colors.mutedForeground }}>
+                    EXCHANGE PREVIEW
+                  </Text>
+                  <View style={{
+                    backgroundColor: previewReady ? (isBuy ? "#1D4ED8" : "#047857") : colors.muted,
+                    borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3,
+                  }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: previewReady ? "#FFF" : colors.mutedForeground }}>
+                      {isBuy ? "BUY" : "SELL"}
+                    </Text>
+                  </View>
+                </View>
+
+                {previewReady ? (
+                  <>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 16, color: colors.text }}>
+                      {isBuy ? "Buy" : "Sell"} {amountNum.toFixed(2)} {form.currencyType}
+                    </Text>
+                    <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 2 }}>
+                      {amountNum.toFixed(2)} {form.currencyType} × ₨{rateNum.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    </Text>
+                    <View style={{ height: 1, backgroundColor: "rgba(0,0,0,0.08)", marginVertical: 10 }} />
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                      <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: colors.mutedForeground }}>
+                        {isBuy ? "Total to pay" : "Total to receive"}
+                      </Text>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 22, color: isBuy ? "#1D4ED8" : "#047857" }}>
+                        ₨{totalInBaseNum.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </Text>
+                    </View>
+
+                    {selectedAccount ? (
+                      <View style={{
+                        marginTop: 10, padding: 10, borderRadius: 10,
+                        backgroundColor: balanceWarn ? "#FEF2F2" : "rgba(255,255,255,0.7)",
+                        borderWidth: 1, borderColor: balanceWarn ? "#FCA5A5" : "rgba(0,0,0,0.06)",
+                      }}>
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: balanceWarn ? "#991B1B" : colors.mutedForeground, letterSpacing: 0.4 }}>
+                          {selectedAccount.name.toUpperCase()} BALANCE
+                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", marginTop: 4, gap: 8 }}>
+                          <Text style={{ fontFamily: "Inter_400Regular", fontSize: 13, color: colors.text }}>
+                            ₨{currentBal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </Text>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.mutedForeground }}>→</Text>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: balanceWarn ? "#DC2626" : (isBuy ? "#1D4ED8" : "#047857") }}>
+                            ₨{newBal.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </Text>
+                          <View style={{ marginLeft: "auto", backgroundColor: balanceWarn ? "#FEE2E2" : (isBuy ? "#DBEAFE" : "#D1FAE5"), paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: balanceWarn ? "#991B1B" : (isBuy ? "#1D4ED8" : "#047857") }}>
+                              {isBuy ? "−" : "+"}₨{totalInBaseNum.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </Text>
+                          </View>
+                        </View>
+                        {balanceWarn ? (
+                          <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: "#991B1B", marginTop: 6 }}>
+                            ⚠  This account will go negative.
+                          </Text>
+                        ) : null}
+                      </View>
+                    ) : (
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 10, fontStyle: "italic" }}>
+                        No account selected — pick one below to see the balance impact.
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground }}>
+                    Enter amount and rate to see the preview.
+                  </Text>
+                )}
               </View>
 
-              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>PAY FROM ACCOUNT</Text>
+              <Text style={[styles.formLabel, { color: colors.mutedForeground }]}>{isBuy ? "PAY FROM ACCOUNT" : "DEPOSIT TO ACCOUNT"}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   <TouchableOpacity style={[styles.currencyChip, { backgroundColor: !form.accountId ? "#0891B2" : colors.card, borderColor: !form.accountId ? "#0891B2" : colors.border }]}
@@ -294,7 +378,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, fontFamily: "Inter_400Regular", fontSize: 14 },
   typeBtn: { borderWidth: 1, borderRadius: 10, padding: 12, gap: 2 },
   currencyChip: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, alignItems: "center" },
-  totalBox: { borderWidth: 1.5, borderRadius: 12, padding: 16, marginBottom: 16, alignItems: "center", gap: 4 },
+  previewBox: { borderWidth: 1.5, borderRadius: 14, padding: 14, marginBottom: 16 },
   saveBtn: { borderRadius: 12, padding: 16, alignItems: "center", marginBottom: 8 },
   saveBtnText: { fontFamily: "Inter_700Bold", fontSize: 16, color: "#FFF" },
 });
