@@ -215,6 +215,11 @@ export default function POSScreen() {
   const creditIn    = dashboardRaw?.creditReceivable ? parseFloat(dashboardRaw.creditReceivable) : null;
   const outstanding = dashboardRaw?.creditPayable    ? parseFloat(dashboardRaw.creditPayable)    : null;
 
+  // Grand total = bank + stock + credit receivable
+  const grandTotal = (bankBal !== null || stockVal !== null || creditIn !== null)
+    ? (bankBal ?? 0) + (stockVal ?? 0) + (creditIn ?? 0)
+    : null;
+
   // ── Display helpers ────────────────────────────────────────────────────
   // Show only what the user has typed — no ghost trailing zeros
   const typedPart = amount;
@@ -375,18 +380,10 @@ export default function POSScreen() {
 
         {/* ── Balance tiles ──────────────────────────────────────────── */}
         <View style={styles.balanceGrid}>
-          <BalanceTile label="BANK" icon="briefcase" value={bankBal} color={colors.primary} bg="#EFF6FF" colors={colors} borderColor={colors.border} />
-          <BalanceTile label="STOCK" icon="package" value={stockVal} color="#D97706" bg="#FFF7ED" colors={colors} borderColor={colors.border} />
-          <BalanceTile label="CREDIT IN" icon="trending-up" value={creditIn} color="#7C3AED" bg="#F3E8FF" colors={colors} borderColor={colors.border} />
-          <BalanceTile
-            label="OUTSTANDING"
-            icon="alert-triangle"
-            value={outstanding}
-            color={outstanding !== null && outstanding > 0 ? colors.danger : colors.success}
-            bg={outstanding !== null && outstanding > 0 ? "#FEF2F2" : "#ECFDF5"}
-            colors={colors}
-            borderColor={outstanding !== null && outstanding > 0 ? colors.danger : colors.success}
-          />
+          <BalanceTile label="BANK" emoji="🏦" value={bankBal} color="#2563EB" accentBg="#EFF6FF" colors={colors} />
+          <BalanceTile label="STOCK" emoji="📦" value={stockVal} color="#D97706" accentBg="#FFF7ED" colors={colors} />
+          <BalanceTile label="CREDIT" emoji="📈" value={creditIn} color="#7C3AED" accentBg="#F3E8FF" colors={colors} />
+          <BalanceTile label="TOTAL" emoji="💰" value={grandTotal} color="#059669" accentBg="#ECFDF5" colors={colors} isTotal />
         </View>
 
         {/* ── Product picker ───────────────────────────────────────────── */}
@@ -799,21 +796,37 @@ export default function POSScreen() {
 }
 
 function BalanceTile({
-  label, icon, value, color, bg, colors, borderColor,
+  label, emoji, value, color, accentBg, colors, isTotal,
 }: {
-  label: string; icon: string; value: number | null;
-  color: string; bg: string; borderColor: string;
+  label: string; emoji: string; value: number | null;
+  color: string; accentBg: string; isTotal?: boolean;
   colors: ReturnType<typeof import("@/hooks/useColors").useColors>;
 }) {
   return (
-    <View style={[styles.balanceTile, { backgroundColor: colors.card, borderColor }]}>
-      <View style={[styles.balanceIconWrap, { backgroundColor: bg }]}>
-        
+    <View style={[
+      styles.balanceTile,
+      {
+        backgroundColor: colors.card,
+        borderColor: isTotal ? color : colors.border,
+        borderWidth: isTotal ? 1.5 : 1,
+      }
+    ]}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 5 }}>
+        <View style={[styles.balanceIconWrap, { backgroundColor: accentBg }]}>
+          <Text style={{ fontSize: 14, lineHeight: 18 }}>{emoji}</Text>
+        </View>
+        <Text style={[styles.balanceLabel, { color: colors.mutedForeground }]}>{label}</Text>
       </View>
-      <Text style={[styles.balanceLabel, { color: colors.mutedForeground }]}>{label}</Text>
-      <Text style={[styles.balanceValue, { color: value !== null ? color : colors.mutedForeground }]} numberOfLines={1}>
+      <Text
+        style={[styles.balanceValue, { color: value !== null ? color : colors.mutedForeground, fontSize: isTotal ? 15 : 14 }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
         {value !== null ? formatK(value) : "—"}
       </Text>
+      {isTotal && (
+        <View style={{ height: 3, borderRadius: 2, backgroundColor: color, marginTop: 5, opacity: 0.5 }} />
+      )}
     </View>
   );
 }
@@ -837,12 +850,12 @@ const styles = StyleSheet.create({
   locationBannerLabel: { fontFamily: "Inter_500Medium", fontSize: 9, letterSpacing: 0.8 },
   locationBannerName: { fontFamily: "Inter_700Bold", fontSize: 14, marginTop: 1 },
   // Balance tiles
-  balanceGrid: { marginHorizontal: 14, marginTop: 12, flexDirection: "row", gap: 6 },
-  balanceTile: { flex: 1, alignItems: "center", paddingVertical: 10, paddingHorizontal: 2, borderRadius: 12, borderWidth: 1.5 },
+  balanceGrid: { marginHorizontal: 12, marginTop: 12, flexDirection: "row", gap: 7 },
+  balanceTile: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 13, borderWidth: 1 },
   balanceTileFirst: {},
-  balanceIconWrap: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center", marginBottom: 4 },
-  balanceLabel: { fontFamily: "Inter_600SemiBold", fontSize: 8, letterSpacing: 0.5, textAlign: "center", marginBottom: 2 },
-  balanceValue: { fontFamily: "Inter_700Bold", fontSize: 12, textAlign: "center" },
+  balanceIconWrap: { width: 24, height: 24, borderRadius: 7, alignItems: "center", justifyContent: "center" },
+  balanceLabel: { fontFamily: "Inter_600SemiBold", fontSize: 8, letterSpacing: 0.5 },
+  balanceValue: { fontFamily: "Inter_700Bold", fontSize: 13 },
   balSep: { width: 1, marginVertical: 12 },
   // Product
   productCard: { marginHorizontal: 14, marginTop: 8, borderRadius: 16, borderWidth: 2, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
