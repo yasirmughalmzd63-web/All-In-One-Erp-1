@@ -32,18 +32,31 @@ type Location = { id: number; name: string; address?: string | null };
 type RateMode = "normal" | "wholesale";
 
 // ── Account type helpers ────────────────────────────────────────────────
+function normalizeAcctType(raw: string): string {
+  const t = raw.toLowerCase().replace(/[\s_-]/g, "");
+  if (t.includes("jazzcash") || t === "jazz") return "jazzcash";
+  if (t.includes("easypaisa") || t === "easy") return "easypaisa";
+  if (t === "cash") return "cash";
+  if (t === "bank") return "bank";
+  if (t === "mobile" || t === "wallet") return "mobile";
+  return "other";
+}
 function acctEmoji(type: string): string {
-  const t = type.toLowerCase();
-  if (t === "cash")   return "💵";
-  if (t === "bank")   return "🏦";
-  if (t === "mobile") return "📱";
+  const t = normalizeAcctType(type);
+  if (t === "jazzcash")  return "🟠";
+  if (t === "easypaisa") return "🟢";
+  if (t === "cash")      return "💵";
+  if (t === "bank")      return "🏦";
+  if (t === "mobile")    return "📱";
   return "💳";
 }
 function acctColor(type: string): { bg: string; border: string; text: string } {
-  const t = type.toLowerCase();
-  if (t === "cash")   return { bg: "#ECFDF5", border: "#059669", text: "#065F46" };
-  if (t === "bank")   return { bg: "#EFF6FF", border: "#2563EB", text: "#1E3A8A" };
-  if (t === "mobile") return { bg: "#F3E8FF", border: "#7C3AED", text: "#4C1D95" };
+  const t = normalizeAcctType(type);
+  if (t === "jazzcash")  return { bg: "#FFF7ED", border: "#F97316", text: "#7C2D12" };
+  if (t === "easypaisa") return { bg: "#F0FDF4", border: "#22C55E", text: "#14532D" };
+  if (t === "cash")      return { bg: "#ECFDF5", border: "#059669", text: "#065F46" };
+  if (t === "bank")      return { bg: "#EFF6FF", border: "#2563EB", text: "#1E3A8A" };
+  if (t === "mobile")    return { bg: "#F3E8FF", border: "#7C3AED", text: "#4C1D95" };
   return { bg: "#F1F5F9", border: "#94A3B8", text: "#334155" };
 }
 
@@ -54,16 +67,22 @@ function AccountPickerModal({ visible, accounts, onSelect, onClose }: {
   onClose: () => void;
 }) {
   const colors = useColors();
-  const ORDER = ["cash", "bank", "mobile", "other"];
+  const ORDER = ["jazzcash", "easypaisa", "cash", "bank", "mobile", "other"];
+  const TYPE_LABEL: Record<string, string> = {
+    jazzcash: "Jazz Cash",
+    easypaisa: "Easypaisa",
+    cash: "Cash",
+    bank: "Bank",
+    mobile: "Mobile Wallet",
+    other: "Other",
+  };
   const grouped: Record<string, Account[]> = {};
   for (const a of accounts) {
-    const key = a.type.toLowerCase();
-    const group = ORDER.includes(key) ? key : "other";
-    if (!grouped[group]) grouped[group] = [];
-    grouped[group].push(a);
+    const key = normalizeAcctType(a.type);
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(a);
   }
   const sections = ORDER.filter(k => grouped[k]?.length);
-  const TYPE_LABEL: Record<string, string> = { cash: "Cash", bank: "Bank", mobile: "Mobile Wallet", other: "Other" };
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -94,20 +113,26 @@ function AccountPickerModal({ visible, accounts, onSelect, onClose }: {
                   {grouped[typeKey].map(a => (
                     <TouchableOpacity
                       key={a.id}
-                      style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}
+                      style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border }}
                       onPress={() => { onSelect(a); onClose(); }}
+                      activeOpacity={0.75}
                     >
-                      <View style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: bg, alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 18 }}>{acctEmoji(typeKey)}</Text>
+                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: bg, borderWidth: 1.5, borderColor: border, alignItems: "center", justifyContent: "center" }}>
+                        <Text style={{ fontSize: 20 }}>{acctEmoji(typeKey)}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 14, color: colors.text }}>{a.name}</Text>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 1 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>{a.name}</Text>
+                          <View style={{ backgroundColor: bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: border }}>
+                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: text }}>{TYPE_LABEL[typeKey]}</Text>
+                          </View>
+                        </View>
+                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
                           Balance: ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </Text>
                       </View>
-                      <View style={{ backgroundColor: bg, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: border }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: text }}>
+                      <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1.5, borderColor: border }}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: text }}>
                           ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </Text>
                       </View>
