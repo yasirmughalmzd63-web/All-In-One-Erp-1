@@ -88,56 +88,62 @@ function AccountPickerModal({ visible, accounts, onSelect, onClose }: {
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" }}>
         <View style={{ backgroundColor: colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "85%" }}>
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 20, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+          {/* Header */}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 18, borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <Text style={{ fontFamily: "Inter_700Bold", fontSize: 18, color: colors.text }}>Select Account</Text>
-            <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
-              <Text style={{ color: colors.mutedForeground, fontSize: 22, lineHeight: 24 }}>×</Text>
+            <TouchableOpacity style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: colors.input, alignItems: "center", justifyContent: "center" }} onPress={onClose}>
+              <Text style={{ color: colors.mutedForeground, fontSize: 20, lineHeight: 22 }}>×</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView contentContainerStyle={{ paddingBottom: 24 }}>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 28, paddingTop: 8 }}>
             {sections.map(typeKey => {
               const { bg, border, text } = acctColor(typeKey);
               return (
-                <View key={typeKey}>
+                <View key={typeKey} style={{ marginBottom: 16 }}>
                   {/* Section header */}
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
-                    <View style={{ width: 28, height: 28, borderRadius: 8, backgroundColor: bg, borderWidth: 1, borderColor: border, alignItems: "center", justifyContent: "center" }}>
-                      <Text style={{ fontSize: 14 }}>{acctEmoji(typeKey)}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 8, paddingHorizontal: 4 }}>
+                    <View style={{ width: 24, height: 24, borderRadius: 7, backgroundColor: bg, borderWidth: 1, borderColor: border, alignItems: "center", justifyContent: "center" }}>
+                      <Text style={{ fontSize: 12 }}>{acctEmoji(typeKey)}</Text>
                     </View>
-                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: text, letterSpacing: 0.8 }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: text, letterSpacing: 0.9 }}>
                       {TYPE_LABEL[typeKey] ?? typeKey.toUpperCase()}
                     </Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: border, opacity: 0.3 }} />
+                    <View style={{ flex: 1, height: 1, backgroundColor: border, opacity: 0.4 }} />
                   </View>
-                  {/* Accounts in this group */}
-                  {grouped[typeKey].map(a => (
-                    <TouchableOpacity
-                      key={a.id}
-                      style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border }}
-                      onPress={() => { onSelect(a); onClose(); }}
-                      activeOpacity={0.75}
-                    >
-                      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: bg, borderWidth: 1.5, borderColor: border, alignItems: "center", justifyContent: "center" }}>
-                        <Text style={{ fontSize: 20 }}>{acctEmoji(typeKey)}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-                          <Text style={{ fontFamily: "Inter_700Bold", fontSize: 14, color: colors.text }}>{a.name}</Text>
-                          <View style={{ backgroundColor: bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, borderWidth: 1, borderColor: border }}>
-                            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 9, color: text }}>{TYPE_LABEL[typeKey]}</Text>
-                          </View>
+                  {/* Grid of account cards */}
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                    {grouped[typeKey].map(a => (
+                      <TouchableOpacity
+                        key={a.id}
+                        style={{
+                          width: "30.5%",
+                          backgroundColor: bg,
+                          borderRadius: 16,
+                          borderWidth: 1.5,
+                          borderColor: border,
+                          alignItems: "center",
+                          paddingVertical: 12,
+                          paddingHorizontal: 6,
+                          gap: 6,
+                        }}
+                        onPress={() => { onSelect(a); onClose(); }}
+                        activeOpacity={0.75}
+                      >
+                        {/* Big type icon */}
+                        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: "#fff", borderWidth: 1.5, borderColor: border, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ fontSize: 26 }}>{acctEmoji(typeKey)}</Text>
                         </View>
-                        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2 }}>
-                          Balance: ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        {/* Account name */}
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: text, textAlign: "center" }} numberOfLines={1}>
+                          {a.name}
                         </Text>
-                      </View>
-                      <View style={{ backgroundColor: bg, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1.5, borderColor: border }}>
-                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 12, color: text }}>
+                        {/* Balance */}
+                        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: text, textAlign: "center" }} numberOfLines={1}>
                           ₨{parseFloat(a.balance).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
               );
             })}
