@@ -243,13 +243,43 @@ export default function WalletsScreen() {
 
   React.useEffect(() => { load(); }, []);
 
-  const params = useLocalSearchParams<{ topup?: string }>();
+  const params = useLocalSearchParams<{
+    topup?: string;
+    openBuy?: string;
+    customerId?: string;
+    customerName?: string;
+    productId?: string;
+    productName?: string;
+  }>();
+  // Consume the `topup` deep link, then clear the URL so back/refresh can't re-open the modal.
   useEffect(() => {
     if (params.topup) {
-      setTopupForm(f => ({ ...f, productId: String(params.topup) }));
+      const productId = String(params.topup);
+      setTopupForm(f => ({ ...f, productId }));
       setShowTopupModal(true);
+      router.replace("/wallets" as never);
     }
-  }, [params.topup]);
+  }, [params.topup, router]);
+
+  // Consume the `openBuy` deep link from the Coin Collection screen and prefill the Buy USD modal.
+  useEffect(() => {
+    if (params.openBuy === "1" && params.customerId) {
+      const customerId   = String(params.customerId);
+      const productName  = params.productName  ? String(params.productName)  : "";
+      const customerName = params.customerName ? String(params.customerName) : "";
+      const note = productName
+        ? `From coin credit · ${productName}${customerName ? ` · ${customerName}` : ""}`
+        : "";
+      setBuyForm(f => ({
+        ...f,
+        partyType: "customer",
+        partyId: customerId,
+        notes: note,
+      }));
+      setShowBuyModal(true);
+      router.replace("/wallets" as never);
+    }
+  }, [params.openBuy, params.customerId, params.customerName, params.productName, router]);
 
   const handleBuyUsd = async () => {
     if (!buyForm.amountUsd || !buyForm.rate || !buyForm.accountId || !buyForm.walletId || !buyForm.partyId || !buyForm.date) {

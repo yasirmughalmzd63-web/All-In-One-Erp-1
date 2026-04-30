@@ -522,7 +522,31 @@ export default function AppWalletsScreen() {
                 {c.notes ? (
                   <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 2, fontStyle: "italic" }}>{c.notes}</Text>
                 ) : null}
-                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground + "80", marginTop: 4 }}>Tap to record payment</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
+                  <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground + "80" }}>Tap to record payment</Text>
+                  {c.customerId ? (
+                    <TouchableOpacity
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        router.push({
+                          pathname: "/wallets",
+                          params: {
+                            openBuy: "1",
+                            customerId: String(c.customerId),
+                            customerName: c.customerName,
+                            productId: String(c.productId),
+                            productName: selectedApp?.name ?? "",
+                          },
+                        } as never);
+                      }}
+                      style={{
+                        flexDirection: "row", alignItems: "center", gap: 4,
+                        backgroundColor: "#0EA5E9", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14,
+                      }}>
+                      <Text style={{ fontFamily: "Inter_700Bold", fontSize: 11, color: "#FFF" }}>＄ Buy USD</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               </TouchableOpacity>
             );
           })
