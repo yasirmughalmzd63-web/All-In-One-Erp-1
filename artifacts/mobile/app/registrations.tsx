@@ -19,8 +19,10 @@ type Registration = {
   createdAt: string;
 };
 
-const PKG_EMOJI: Record<string, string> = { basic: "🟢", professional: "🔵", enterprise: "🟣" };
-const PKG_LABEL: Record<string, string> = { basic: "Basic", professional: "Professional", enterprise: "Enterprise" };
+const PKG_EMOJI: Record<string, string> = { free: "🆓", basic: "🟢", professional: "🔵", enterprise: "🟣" };
+const PKG_LABEL: Record<string, string> = { free: "Free Starter", basic: "Basic", professional: "Professional", enterprise: "Enterprise" };
+const PKG_PRICE: Record<string, string> = { free: "Free", basic: "₨999/mo", professional: "₨2,499/mo", enterprise: "₨4,999/mo" };
+const PKG_IS_PAID: Record<string, boolean> = { free: false, basic: true, professional: true, enterprise: true };
 const STATUS_COLOR: Record<string, { bg: string; text: string; border: string }> = {
   pending:  { bg: "#FFF7ED", text: "#92400E", border: "#FCD34D" },
   approved: { bg: "#ECFDF5", text: "#065F46", border: "#6EE7B7" },
@@ -39,6 +41,7 @@ export default function RegistrationsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending");
+  const [planFilter, setPlanFilter] = useState<"all" | "free" | "paid">("all");
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [rejectingId, setRejectingId] = useState<number | null>(null);
@@ -111,8 +114,15 @@ export default function RegistrationsScreen() {
     }
   };
 
-  const filtered = registrations.filter(r => filter === "all" || r.status === filter);
+  const filtered = registrations.filter(r => {
+    if (filter !== "all" && r.status !== filter) return false;
+    if (planFilter === "free" && PKG_IS_PAID[r.package]) return false;
+    if (planFilter === "paid" && !PKG_IS_PAID[r.package]) return false;
+    return true;
+  });
   const pendingCount = registrations.filter(r => r.status === "pending").length;
+  const freeCount = registrations.filter(r => !PKG_IS_PAID[r.package]).length;
+  const paidCount = registrations.filter(r => PKG_IS_PAID[r.package]).length;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -121,7 +131,7 @@ export default function RegistrationsScreen() {
           <Text style={{ fontSize: 18, color: "rgba(255,255,255,0.8)" }}>‹</Text>
           <Text style={{ fontFamily: "Inter_500Medium", fontSize: 14, color: "rgba(255,255,255,0.8)" }}>Back</Text>
         </TouchableOpacity>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
           <View>
             <Text style={styles.headerTitle}>Business Registrations</Text>
             <Text style={styles.headerSub}>
@@ -134,10 +144,25 @@ export default function RegistrationsScreen() {
             </View>
           )}
         </View>
+        {/* Paid / Free summary stats */}
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 10, alignItems: "center" }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFF" }}>{freeCount}</Text>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: "rgba(255,255,255,0.8)" }}>🆓 Free</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 10, alignItems: "center" }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#FCD34D" }}>{paidCount}</Text>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: "rgba(255,255,255,0.8)" }}>💳 Paid</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 12, padding: 10, alignItems: "center" }}>
+            <Text style={{ fontFamily: "Inter_700Bold", fontSize: 20, color: "#FFF" }}>{registrations.length}</Text>
+            <Text style={{ fontFamily: "Inter_500Medium", fontSize: 10, color: "rgba(255,255,255,0.8)" }}>📋 Total</Text>
+          </View>
+        </View>
       </LinearGradient>
 
-      {/* Filter tabs */}
-      <View style={{ flexDirection: "row", paddingHorizontal: 14, paddingVertical: 10, gap: 8, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+      {/* Status filter tabs */}
+      <View style={{ flexDirection: "row", paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, gap: 8, backgroundColor: colors.card }}>
         {(["pending", "approved", "rejected", "all"] as const).map(f => (
           <TouchableOpacity
             key={f}
@@ -149,6 +174,27 @@ export default function RegistrationsScreen() {
           >
             <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: filter === f ? "#FFF" : colors.mutedForeground, textTransform: "capitalize" }}>
               {f === "all" ? "All" : STATUS_EMOJI[f] + " " + f.charAt(0).toUpperCase() + f.slice(1)}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {/* Plan filter tabs (Free / Paid) */}
+      <View style={{ flexDirection: "row", paddingHorizontal: 14, paddingBottom: 10, gap: 8, backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        {([
+          { key: "all", label: "All Plans" },
+          { key: "free", label: "🆓 Free" },
+          { key: "paid", label: "💳 Paid" },
+        ] as const).map(f => (
+          <TouchableOpacity
+            key={f.key}
+            onPress={() => setPlanFilter(f.key)}
+            style={[styles.filterTab, {
+              backgroundColor: planFilter === f.key ? (f.key === "free" ? "#059669" : f.key === "paid" ? "#D97706" : colors.primary) : colors.input,
+              borderColor: planFilter === f.key ? (f.key === "free" ? "#059669" : f.key === "paid" ? "#D97706" : colors.primary) : colors.border,
+            }]}
+          >
+            <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: planFilter === f.key ? "#FFF" : colors.mutedForeground }}>
+              {f.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -195,11 +241,23 @@ export default function RegistrationsScreen() {
                   {reg.businessType} · {reg.ownerName}
                 </Text>
 
-                {/* Package badge */}
-                <View style={[styles.pkgBadge, { backgroundColor: colors.input, borderColor: colors.border }]}>
-                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.text }}>
-                    {PKG_EMOJI[reg.package] ?? "📦"} {PKG_LABEL[reg.package] ?? reg.package} Package
-                  </Text>
+                {/* Package badge — shows FREE / PAID + plan name + price */}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 6 }}>
+                  <View style={[styles.pkgBadge, { backgroundColor: colors.input, borderColor: colors.border }]}>
+                    <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 11, color: colors.text }}>
+                      {PKG_EMOJI[reg.package] ?? "📦"} {PKG_LABEL[reg.package] ?? reg.package}
+                    </Text>
+                  </View>
+                  {/* Paid / Free pill */}
+                  <View style={{
+                    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, borderWidth: 1,
+                    backgroundColor: PKG_IS_PAID[reg.package] ? "#FEF3C7" : "#D1FAE5",
+                    borderColor: PKG_IS_PAID[reg.package] ? "#FCD34D" : "#6EE7B7",
+                  }}>
+                    <Text style={{ fontFamily: "Inter_700Bold", fontSize: 10, color: PKG_IS_PAID[reg.package] ? "#92400E" : "#065F46" }}>
+                      {PKG_IS_PAID[reg.package] ? `💳 ${PKG_PRICE[reg.package] ?? "Paid"}` : "🆓 Free"}
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Contact info */}

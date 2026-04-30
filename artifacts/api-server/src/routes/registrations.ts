@@ -9,6 +9,10 @@ const router = Router();
 
 // ── Package privilege templates ───────────────────────────────────────────
 const PACKAGE_PRIVILEGES: Record<string, string[]> = {
+  free: [
+    "pos", "sales",
+    "pos_product", "pos_location", "pos_account",
+  ],
   basic: [
     "pos", "sales", "inventory", "accounts", "locations", "categories",
     "pos_product", "pos_location", "pos_account", "pos_credit_customer",
@@ -43,8 +47,8 @@ router.post("/registrations", async (req, res): Promise<void> => {
     return;
   }
 
-  if (!["basic", "professional", "enterprise"].includes(pkg)) {
-    res.status(400).json({ error: "Invalid package. Choose: basic, professional, enterprise" });
+  if (!["free", "basic", "professional", "enterprise"].includes(pkg)) {
+    res.status(400).json({ error: "Invalid package. Choose: free, basic, professional, enterprise" });
     return;
   }
 
