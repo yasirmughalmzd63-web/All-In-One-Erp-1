@@ -9,6 +9,7 @@ declare global {
       userRole?: string;
       userName?: string;
       userLocationId?: number | null;
+      userBusinessId?: number | null;
     }
   }
 }
@@ -31,7 +32,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   }
 
   const [user] = await db
-    .select({ id: usersTable.id, role: usersTable.role, name: usersTable.name, isActive: usersTable.isActive, locationId: usersTable.locationId })
+    .select({ id: usersTable.id, role: usersTable.role, name: usersTable.name, isActive: usersTable.isActive, locationId: usersTable.locationId, businessId: usersTable.businessId })
     .from(usersTable)
     .where(eq(usersTable.id, session.userId));
 
@@ -44,5 +45,6 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   req.userRole = user.role;
   req.userName = user.name;
   req.userLocationId = user.locationId;
+  req.userBusinessId = user.businessId;
   next();
 }

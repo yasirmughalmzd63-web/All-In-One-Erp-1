@@ -18,6 +18,7 @@ export const salesTable = pgTable("sales", {
   paymentMethod: text("payment_method").notNull().default("cash"),
   status: text("status").notNull().default("completed"),
   notes: text("notes"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

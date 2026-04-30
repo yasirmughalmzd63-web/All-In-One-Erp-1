@@ -4,6 +4,7 @@ import { db, locationsTable, productsTable, stockTransfersTable } from "@workspa
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 import { requireAdminOrManager } from "../lib/permissions.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -49,6 +50,7 @@ router.delete("/locations/:id", requireAuth, async (req, res): Promise<void> => 
 
 router.get("/locations/stock-transfers", requireAuth, async (req, res): Promise<void> => {
   if (!requireAdminOrManager(req, res)) return;
+  const tenant = tenantWhere(req, stockTransfersTable.businessId);
   const rows = await db
     .select({
       id: stockTransfersTable.id,
@@ -70,6 +72,7 @@ router.get("/locations/stock-transfers", requireAuth, async (req, res): Promise<
     .leftJoin(sql`locations tl`, sql`tl.id = ${stockTransfersTable.toLocationId}`)
     .leftJoin(sql`products fp`, sql`fp.id = ${stockTransfersTable.fromProductId}`)
     .leftJoin(sql`products tp`, sql`tp.id = ${stockTransfersTable.toProductId}`)
+    .where(tenant)
     .orderBy(desc(stockTransfersTable.createdAt))
     .limit(100);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
@@ -87,9 +90,10 @@ router.post("/locations/stock-transfer", requireAuth, async (req, res): Promise<
   if (qty <= 0) { res.status(400).json({ error: "qty must be positive" }); return; }
   if (fromProductId === toProductId) { res.status(400).json({ error: "Source and destination product must be different" }); return; }
 
-  // Check source product has enough stock
+  // Check source product has enough stock & belongs to caller's business
   const [fromProduct] = await db.select().from(productsTable).where(eq(productsTable.id, fromProductId));
   if (!fromProduct) { res.status(404).json({ error: "Source product not found" }); return; }
+  if (!ownsRow(req, fromProduct.businessId)) { res.status(403).json({ error: "Source product belongs to another business" }); return; }
   if ((fromProduct.stock ?? 0) < qty) {
     res.status(422).json({ error: `Insufficient stock. Available: ${fromProduct.stock ?? 0}` });
     return;
@@ -98,14 +102,15 @@ router.post("/locations/stock-transfer", requireAuth, async (req, res): Promise<
   // Deduct from source product, add to destination product
   await db.update(productsTable).set({ stock: (fromProduct.stock ?? 0) - qty }).where(eq(productsTable.id, fromProductId));
   const [toProduct] = await db.select().from(productsTable).where(eq(productsTable.id, toProductId));
-  if (toProduct) {
-    await db.update(productsTable).set({ stock: (toProduct.stock ?? 0) + qty }).where(eq(productsTable.id, toProductId));
-  }
+  if (!toProduct) { res.status(404).json({ error: "Destination product not found" }); return; }
+  if (!ownsRow(req, toProduct.businessId)) { res.status(403).json({ error: "Destination product belongs to another business" }); return; }
+  await db.update(productsTable).set({ stock: (toProduct.stock ?? 0) + qty }).where(eq(productsTable.id, toProductId));
 
   // Record the transfer
   const [row] = await db.insert(stockTransfersTable).values({
     fromLocationId, toLocationId, fromProductId, toProductId, qty,
     notes: notes ?? null, userId: req.userId,
+    businessId: tenantStamp(req),
   }).returning();
 
   await logAudit(req.userId, "create", "stock_transfer", row!.id,

@@ -4,6 +4,7 @@ import { db, salesTable, saleItemsTable, productsTable, customersTable, location
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 import { canModify, isAdmin } from "../lib/permissions.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -14,9 +15,11 @@ function genInvoiceNo(): string {
 }
 
 router.get("/sales", requireAuth, async (req, res): Promise<void> => {
+  const tenant = tenantWhere(req, salesTable.businessId);
   const locationFilter = !isAdmin(req) && req.userLocationId != null
     ? eq(salesTable.locationId, req.userLocationId)
     : undefined;
+  const where = and(tenant, locationFilter);
 
   const sales = await db.select({
     id: salesTable.id,
@@ -42,7 +45,7 @@ router.get("/sales", requireAuth, async (req, res): Promise<void> => {
     .leftJoin(customersTable, eq(salesTable.customerId, customersTable.id))
     .leftJoin(locationsTable, eq(salesTable.locationId, locationsTable.id))
     .leftJoin(accountsTable, eq(salesTable.accountId, accountsTable.id))
-    .where(locationFilter)
+    .where(where)
     .orderBy(desc(salesTable.createdAt))
     .limit(100);
 
@@ -270,6 +273,7 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
     paymentMethod,
     status: "completed",
     notes: notes ?? null,
+    businessId: tenantStamp(req),
   }).returning();
 
   // Deduct stock — guaranteed no negative (validated above)
@@ -327,8 +331,10 @@ router.delete("/sales/:id", requireAuth, async (req, res): Promise<void> => {
   const [existing] = await db.select({
     userId: salesTable.userId, accountId: salesTable.accountId,
     total: salesTable.total, amountPaid: salesTable.amountPaid,
+    businessId: salesTable.businessId,
   }).from(salesTable).where(eq(salesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Sale not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This sale belongs to another business" }); return; }
   if (!canModify(req, res, existing.userId)) return;
 
   // Restore stock

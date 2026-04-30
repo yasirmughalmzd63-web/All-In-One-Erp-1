@@ -17,6 +17,7 @@ export const creditPaymentsTable = pgTable("credit_payments", {
   notes: text("notes"),
   userId: integer("user_id").notNull(),
   locationId: integer("location_id"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

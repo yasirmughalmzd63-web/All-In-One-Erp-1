@@ -52,6 +52,32 @@ A full-featured ERP (Enterprise Resource Planning) mobile application built with
 - Default credentials: `admin / admin123`, `cashier / cashier123`
 - Call `POST /api/seed` to initialize data
 
+## Multi-Tenant Data Isolation
+The app supports multiple businesses sharing one database. Every business-scoped table
+has a `business_id` column and routes scope reads/writes through `lib/tenant.ts`.
+
+**Roles:**
+- `super_admin` — sees and manages every business's data (no scoping). The seeded
+  `admin` user is `super_admin`.
+- `admin` (business owner) — sees and manages only rows belonging to their business.
+  Created automatically when a business registration is approved (`businessId` =
+  registration id).
+- `manager`, `cashier` — same scoping as their parent business admin.
+
+**Tables with `business_id`:**
+`users`, `products`, `customers`, `suppliers`, `categories`, `accounts`,
+`expenses`, `sales`.
+
+**Helpers in `artifacts/api-server/src/lib/tenant.ts`:**
+- `tenantWhere(req, col)` — WHERE clause that scopes a SELECT (super_admin = no
+  filter, otherwise `col = userBusinessId` or `col IS NULL`).
+- `tenantStamp(req)` — value to set on `businessId` for new rows.
+- `ownsRow(req, rowBusinessId)` — guard for PATCH/DELETE; returns `false` cross-tenant.
+- `andTenant(req, col, extra)` — combine tenant filter with another condition (AND).
+
+NULL `business_id` means "main / original business" — only super_admin and users with
+NULL `business_id` themselves see those rows.
+
 ## API Endpoints
 All routes require Bearer token except `/api/auth/login` and `/api/seed`.
 

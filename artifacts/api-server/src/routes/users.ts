@@ -5,20 +5,23 @@ import { hashPassword } from "../lib/auth.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { requireAdmin } from "../lib/permissions.js";
 import { logAudit } from "../lib/audit.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
 router.get("/users", requireAuth, async (req, res): Promise<void> => {
+  const tenant = tenantWhere(req, usersTable.businessId);
   const users = await db.select({
     id: usersTable.id,
     username: usersTable.username,
     name: usersTable.name,
     role: usersTable.role,
     locationId: usersTable.locationId,
+    businessId: usersTable.businessId,
     isActive: usersTable.isActive,
     privileges: usersTable.privileges,
     createdAt: usersTable.createdAt,
-  }).from(usersTable).orderBy(usersTable.name);
+  }).from(usersTable).where(tenant).orderBy(usersTable.name);
   res.json(users.map(u => ({ ...u, privileges: u.privileges ? JSON.parse(u.privileges) : null, createdAt: u.createdAt.toISOString() })));
 });
 
@@ -37,7 +40,10 @@ router.post("/users", requireAuth, async (req, res): Promise<void> => {
     return;
   }
   const passwordHash = hashPassword(password);
-  const [user] = await db.insert(usersTable).values({ username, name, passwordHash, role, locationId: locationId ?? null }).returning();
+  const [user] = await db.insert(usersTable).values({
+    username, name, passwordHash, role, locationId: locationId ?? null,
+    businessId: tenantStamp(req),
+  }).returning();
   await logAudit(req.userId, "create", "user", user!.id, `Created user ${name}`);
   res.status(201).json({ ...user!, createdAt: user!.createdAt.toISOString() });
 });
@@ -57,6 +63,11 @@ router.patch("/users/:id", requireAuth, async (req, res): Promise<void> => {
   // Block non-super-admins from modifying any super_admin account
   if (target.role === "super_admin" && req.userRole !== "super_admin") {
     res.status(403).json({ error: "Only super admins can modify super admin accounts" });
+    return;
+  }
+  // Block cross-business modification (super_admin bypasses)
+  if (!ownsRow(req, target.businessId)) {
+    res.status(403).json({ error: "This user belongs to another business" });
     return;
   }
   // Only super_admin can change role or privileges (prevents privilege escalation)
@@ -100,6 +111,10 @@ router.delete("/users/:id", requireAuth, async (req, res): Promise<void> => {
   if (!target) { res.status(404).json({ error: "User not found" }); return; }
   if (target.role === "super_admin" && req.userRole !== "super_admin") {
     res.status(403).json({ error: "Only super admins can delete super admin accounts" });
+    return;
+  }
+  if (!ownsRow(req, target.businessId)) {
+    res.status(403).json({ error: "This user belongs to another business" });
     return;
   }
   const [user] = await db.delete(usersTable).where(eq(usersTable.id, id)).returning();

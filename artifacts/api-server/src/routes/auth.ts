@@ -36,6 +36,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       name: user.name,
       role: user.role,
       locationId: user.locationId,
+      businessId: user.businessId,
       isActive: user.isActive,
       privileges: user.privileges ? JSON.parse(user.privileges) : null,
       createdAt: user.createdAt.toISOString(),
@@ -55,6 +56,7 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     name: user.name,
     role: user.role,
     locationId: user.locationId,
+    businessId: user.businessId,
     isActive: user.isActive,
     createdAt: user.createdAt.toISOString(),
   });

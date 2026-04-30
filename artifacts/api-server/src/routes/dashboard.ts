@@ -18,6 +18,7 @@ import {
   locationsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
+import { tenantWhere } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -65,39 +66,57 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
   const periodFilter = (col: Parameters<typeof gte>[0]) =>
     isYesterday ? and(gte(col, start), lt(col, end)) : gte(col, start);
 
-  // Build sales filter: period + optional userId + optional locationId
-  const salesPeriodFilter = filterUserId && filterLocationId
-    ? and(periodFilter(salesTable.createdAt), eq(salesTable.userId, filterUserId), eq(salesTable.locationId, filterLocationId))
-    : filterUserId
-      ? and(periodFilter(salesTable.createdAt), eq(salesTable.userId, filterUserId))
-      : filterLocationId
-        ? and(periodFilter(salesTable.createdAt), eq(salesTable.locationId, filterLocationId))
-        : periodFilter(salesTable.createdAt);
+  // Tenant-aware where helpers (super_admin: undefined; business admin: businessId match)
+  const tSales     = tenantWhere(req, salesTable.businessId);
+  const tPurchases = tenantWhere(req, purchasesTable.businessId);
+  const tExpenses  = tenantWhere(req, expensesTable.businessId);
+  const tCustomers = tenantWhere(req, customersTable.businessId);
+  const tProducts  = tenantWhere(req, productsTable.businessId);
+  const tSuppliers = tenantWhere(req, suppliersTable.businessId);
+  const tCredits   = tenantWhere(req, creditsTable.businessId);
+  const tAccounts  = tenantWhere(req, accountsTable.businessId);
+  const tWallets   = tenantWhere(req, walletsTable.businessId);
+  const tDollar    = tenantWhere(req, dollarWalletTable.businessId);
+  const tTransfers = tenantWhere(req, stockTransfersTable.businessId);
 
-  // Helper: combine periodFilter with optional userId/locationId scoping
+  // Build sales filter: period + optional userId + optional locationId + tenant
+  const salesPeriodFilter = and(
+    periodFilter(salesTable.createdAt),
+    filterUserId ? eq(salesTable.userId, filterUserId) : undefined,
+    filterLocationId ? eq(salesTable.locationId, filterLocationId) : undefined,
+    tSales,
+  );
+
+  // Helper: combine periodFilter with optional userId/locationId + tenant scoping
   const scopedPeriodFilter = (
     col: Parameters<typeof gte>[0],
     userIdCol?: Parameters<typeof eq>[0],
     locationIdCol?: Parameters<typeof eq>[0],
+    tenantClause?: ReturnType<typeof tenantWhere>,
   ) => {
     const parts: Parameters<typeof and>[number][] = [periodFilter(col)];
     if (filterUserId && userIdCol) parts.push(eq(userIdCol, filterUserId));
     if (filterLocationId && locationIdCol) parts.push(eq(locationIdCol, filterLocationId));
+    if (tenantClause) parts.push(tenantClause);
     return parts.length === 1 ? parts[0] : and(...parts);
   };
 
   // Credits filter by userId
   const creditUserFilter = filterUserId ? eq(creditsTable.userId, filterUserId) : undefined;
 
-  // Build product scope (active + optional location filter for non-admin)
-  const productScope = filterLocationId
-    ? and(eq(productsTable.isActive, true), eq(productsTable.locationId, filterLocationId))
-    : eq(productsTable.isActive, true);
+  // Build product scope (active + optional location filter + tenant)
+  const productScope = and(
+    eq(productsTable.isActive, true),
+    filterLocationId ? eq(productsTable.locationId, filterLocationId) : undefined,
+    tProducts,
+  );
 
-  // Account scope (location filter when present)
-  const accountScope = filterLocationId
-    ? and(eq(accountsTable.isActive, true), eq(accountsTable.locationId, filterLocationId))
-    : eq(accountsTable.isActive, true);
+  // Account scope (location filter when present + tenant)
+  const accountScope = and(
+    eq(accountsTable.isActive, true),
+    filterLocationId ? eq(accountsTable.locationId, filterLocationId) : undefined,
+    tAccounts,
+  );
 
   const [
     periodSalesRows, periodPurchasesRows, periodExpensesRows,
@@ -110,18 +129,19 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
   ] = await Promise.all([
     db.select({ total: salesTable.total }).from(salesTable).where(salesPeriodFilter),
     db.select({ total: purchasesTable.total }).from(purchasesTable)
-      .where(scopedPeriodFilter(purchasesTable.createdAt, purchasesTable.userId, purchasesTable.locationId)),
+      .where(scopedPeriodFilter(purchasesTable.createdAt, purchasesTable.userId, purchasesTable.locationId, tPurchases)),
     db.select({ amount: expensesTable.amount }).from(expensesTable)
-      .where(scopedPeriodFilter(expensesTable.createdAt, expensesTable.userId)),
-    db.select({ id: customersTable.id }).from(customersTable),
-    db.select({ id: productsTable.id }).from(productsTable),
-    db.select({ id: suppliersTable.id }).from(suppliersTable),
+      .where(scopedPeriodFilter(expensesTable.createdAt, expensesTable.userId, undefined, tExpenses)),
+    db.select({ id: customersTable.id }).from(customersTable).where(tCustomers),
+    db.select({ id: productsTable.id }).from(productsTable).where(tProducts),
+    db.select({ id: suppliersTable.id }).from(suppliersTable).where(tSuppliers),
     db.select({ remaining: creditsTable.remainingAmount })
       .from(creditsTable)
       .where(and(
         eq(creditsTable.type, "receivable"),
         or(eq(creditsTable.status, "pending"), eq(creditsTable.status, "partial")),
         creditUserFilter,
+        tCredits,
       )),
     db.select({ remaining: creditsTable.remainingAmount })
       .from(creditsTable)
@@ -129,6 +149,7 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
         eq(creditsTable.type, "payable"),
         or(eq(creditsTable.status, "pending"), eq(creditsTable.status, "partial")),
         creditUserFilter,
+        tCredits,
       )),
     // Products with locationId for per-location breakdown
     db.select({
@@ -138,12 +159,12 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     }).from(productsTable).where(productScope),
     db.select().from(accountsTable).where(accountScope),
     db.select().from(salesTable)
-      .where(period === "today" || isYesterday ? salesPeriodFilter : undefined)
+      .where(period === "today" || isYesterday ? salesPeriodFilter : tSales)
       .orderBy(desc(salesTable.createdAt))
       .limit(10),
     // Period purchase IDs to aggregate received stock qty
     db.select({ id: purchasesTable.id }).from(purchasesTable)
-      .where(scopedPeriodFilter(purchasesTable.createdAt, purchasesTable.userId, purchasesTable.locationId)),
+      .where(scopedPeriodFilter(purchasesTable.createdAt, purchasesTable.userId, purchasesTable.locationId, tPurchases)),
     // Stock transfers for the period (with product price for value)
     db.select({
       qty: stockTransfersTable.qty,
@@ -157,21 +178,22 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
         stockTransfersTable.createdAt,
         stockTransfersTable.userId,
         stockTransfersTable.fromLocationId,
+        tTransfers,
       )),
     // Dollar wallet "received" entries for the period
     db.select({ amountUsd: dollarWalletTable.amountUsd, totalPkr: dollarWalletTable.totalPkr, rate: dollarWalletTable.rate })
       .from(dollarWalletTable)
-      .where(and(eq(dollarWalletTable.entryType, "received"), periodFilter(dollarWalletTable.createdAt))),
+      .where(and(eq(dollarWalletTable.entryType, "received"), periodFilter(dollarWalletTable.createdAt), tDollar)),
     // All locations for per-location naming
     db.select().from(locationsTable).where(eq(locationsTable.isActive, true)),
     // ALL USD wallets (currency = USD) — to value USD inventory at sale price
     db.select({ id: walletsTable.id, name: walletsTable.name, balance: walletsTable.balance, currency: walletsTable.currency })
       .from(walletsTable)
-      .where(and(eq(walletsTable.isActive, true), eq(walletsTable.currency, "USD"))),
+      .where(and(eq(walletsTable.isActive, true), eq(walletsTable.currency, "USD"), tWallets)),
     // Most recent "received" entry — its rate is the current SALE rate of USD
     db.select({ rate: dollarWalletTable.rate, date: dollarWalletTable.date, createdAt: dollarWalletTable.createdAt })
       .from(dollarWalletTable)
-      .where(eq(dollarWalletTable.entryType, "received"))
+      .where(and(eq(dollarWalletTable.entryType, "received"), tDollar))
       .orderBy(desc(dollarWalletTable.createdAt))
       .limit(1),
   ]);

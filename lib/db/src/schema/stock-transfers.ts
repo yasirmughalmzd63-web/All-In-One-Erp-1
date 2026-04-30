@@ -11,6 +11,7 @@ export const stockTransfersTable = pgTable("stock_transfers", {
   qty: integer("qty").notNull(),
   notes: text("notes"),
   userId: integer("user_id").notNull(),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -4,6 +4,7 @@ import { db, purchasesTable, purchaseItemsTable, productsTable, suppliersTable, 
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 import { canModify, isAdmin } from "../lib/permissions.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -19,6 +20,8 @@ router.get("/purchases", requireAuth, async (req, res): Promise<void> => {
   const locationFilter = !isAdmin(req) && req.userLocationId != null
     ? eq(purchasesTable.locationId, req.userLocationId)
     : undefined;
+  const tenant = tenantWhere(req, purchasesTable.businessId);
+  const where = and(tenant, locationFilter);
 
   const rows = await db.select({
     id: purchasesTable.id,
@@ -37,7 +40,7 @@ router.get("/purchases", requireAuth, async (req, res): Promise<void> => {
     createdAt: purchasesTable.createdAt,
   }).from(purchasesTable)
     .leftJoin(suppliersTable, eq(purchasesTable.supplierId, suppliersTable.id))
-    .where(locationFilter)
+    .where(where)
     .orderBy(desc(purchasesTable.createdAt))
     .limit(100);
 
@@ -60,6 +63,7 @@ router.get("/purchases/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
   const [row] = await db.select().from(purchasesTable).where(eq(purchasesTable.id, id));
   if (!row) { res.status(404).json({ error: "Purchase not found" }); return; }
+  if (!ownsRow(req, row.businessId)) { res.status(403).json({ error: "This purchase belongs to another business" }); return; }
   const items = await db.select({
     productId: purchaseItemsTable.productId,
     productName: productsTable.name,
@@ -123,6 +127,21 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
     }
   }
 
+  // Tenant isolation: validate that supplier, account, location, and every product
+  // belong to the caller's business so admins of one business can't reach into another.
+  if (supplierId) {
+    const [s] = await db.select({ businessId: suppliersTable.businessId }).from(suppliersTable).where(eq(suppliersTable.id, supplierId));
+    if (s && !ownsRow(req, s.businessId)) { res.status(403).json({ error: "Supplier belongs to another business" }); return; }
+  }
+  if (accountId) {
+    const [a] = await db.select({ businessId: accountsTable.businessId }).from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (a && !ownsRow(req, a.businessId)) { res.status(403).json({ error: "Account belongs to another business" }); return; }
+  }
+  for (const item of items) {
+    const [p] = await db.select({ businessId: productsTable.businessId }).from(productsTable).where(eq(productsTable.id, item.productId));
+    if (p && !ownsRow(req, p.businessId)) { res.status(403).json({ error: `Product #${item.productId} belongs to another business` }); return; }
+  }
+
   let subtotal = 0;
   const itemsWithTotal = items.map(item => {
     const lineTotal = parseFloat(item.unitCost) * item.qty;
@@ -161,6 +180,7 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
     invoiceNo, supplierId: supplierId ?? null, locationId: effectiveLocationId, accountId: accountId ?? null,
     userId, subtotal: formatAmount(subtotal), discount: formatAmount(discountAmt), total: formatAmount(total),
     amountPaid: formatAmount(paid), status: "completed", notes: notes ?? null,
+    businessId: tenantStamp(req),
   }).returning();
 
   for (const item of itemsWithTotal) {
@@ -185,9 +205,10 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/purchases/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const [existing] = await db.select({ userId: purchasesTable.userId, accountId: purchasesTable.accountId, total: purchasesTable.total })
+  const [existing] = await db.select({ userId: purchasesTable.userId, accountId: purchasesTable.accountId, total: purchasesTable.total, businessId: purchasesTable.businessId })
     .from(purchasesTable).where(eq(purchasesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Purchase not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This purchase belongs to another business" }); return; }
   if (!canModify(req, res, existing.userId)) return;
 
   await db.delete(purchaseItemsTable).where(eq(purchaseItemsTable.purchaseId, id));

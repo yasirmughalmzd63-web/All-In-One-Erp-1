@@ -7,6 +7,7 @@ export const appCoinCreditsTable = pgTable("app_coin_credits", {
   productId: integer("product_id").notNull(),
   customerId: integer("customer_id"),
   customerName: text("customer_name").notNull(),
+  businessId: integer("business_id"),
   qty: integer("qty").notNull().default(0),
   unitPricePkr: text("unit_price_pkr").notNull().default("0"),
   totalPkr: text("total_pkr").notNull().default("0"),
@@ -24,6 +25,7 @@ export const appCoinCreditsTable = pgTable("app_coin_credits", {
 export const appCoinCreditPaymentsTable = pgTable("app_coin_credit_payments", {
   id: serial("id").primaryKey(),
   creditId: integer("credit_id").notNull(),
+  businessId: integer("business_id"),
   amountPkr: text("amount_pkr").notNull().default("0"),
   method: text("method").notNull().default("cash"),
   notes: text("notes"),

@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db, expensesTable, categoriesTable, accountsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 import { canModify, isAdmin } from "../lib/permissions.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -24,9 +25,9 @@ router.get("/expenses", requireAuth, async (req, res): Promise<void> => {
     .leftJoin(categoriesTable, eq(expensesTable.categoryId, categoriesTable.id))
     .leftJoin(accountsTable, eq(expensesTable.accountId, accountsTable.id));
 
-  const rows = !isAdmin(req)
-    ? await query.where(eq(expensesTable.userId, req.userId!)).orderBy(desc(expensesTable.createdAt))
-    : await query.orderBy(desc(expensesTable.createdAt));
+  const tenant = tenantWhere(req, expensesTable.businessId);
+  const ownerFilter = !isAdmin(req) ? eq(expensesTable.userId, req.userId!) : undefined;
+  const rows = await query.where(and(tenant, ownerFilter)).orderBy(desc(expensesTable.createdAt));
 
   res.json(rows.map(r => ({ ...r, categoryName: r.categoryName ?? null, accountName: r.accountName ?? null, createdAt: r.createdAt.toISOString() })));
 });
@@ -69,6 +70,7 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
 
   const [row] = await db.insert(expensesTable).values({
     title, amount: amtNum.toFixed(8), categoryId: categoryId ?? null, accountId: accountId ?? null, userId, notes: notes ?? null, date,
+    businessId: tenantStamp(req),
   }).returning();
 
   if (accountId) {
@@ -84,8 +86,9 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const [existing] = await db.select({ userId: expensesTable.userId }).from(expensesTable).where(eq(expensesTable.id, id));
+  const [existing] = await db.select({ userId: expensesTable.userId, businessId: expensesTable.businessId }).from(expensesTable).where(eq(expensesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Expense not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This expense belongs to another business" }); return; }
   if (!canModify(req, res, existing.userId)) return;
 
   const { title, amount, notes } = req.body as { title?: string; amount?: string; notes?: string | null };
@@ -101,8 +104,9 @@ router.patch("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
 
 router.delete("/expenses/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const [existing] = await db.select({ userId: expensesTable.userId }).from(expensesTable).where(eq(expensesTable.id, id));
+  const [existing] = await db.select({ userId: expensesTable.userId, businessId: expensesTable.businessId }).from(expensesTable).where(eq(expensesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Expense not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This expense belongs to another business" }); return; }
   if (!canModify(req, res, existing.userId)) return;
 
   await db.delete(expensesTable).where(eq(expensesTable.id, id));

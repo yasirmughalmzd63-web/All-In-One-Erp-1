@@ -120,7 +120,7 @@ router.patch("/registrations/:id", requireAuth, async (req, res): Promise<void> 
     return;
   }
 
-  // Approve: create the admin user with package-based privileges
+  // Approve: create the admin user with package-based privileges, scoped to this business
   const privileges = PACKAGE_PRIVILEGES[reg.package] ?? PACKAGE_PRIVILEGES.basic!;
   const [newUser] = await db.insert(usersTable).values({
     username: reg.adminUsername,
@@ -129,6 +129,7 @@ router.patch("/registrations/:id", requireAuth, async (req, res): Promise<void> 
     role: "admin",
     privileges: JSON.stringify(privileges),
     isActive: true,
+    businessId: reg.id,
   }).returning();
 
   const [updated] = await db.update(businessRegistrationsTable)

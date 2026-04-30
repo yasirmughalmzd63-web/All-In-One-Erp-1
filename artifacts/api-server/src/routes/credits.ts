@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db, creditsTable, creditPaymentsTable, customersTable, suppliersTable, accountsTable, productsTable, dollarWalletTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 import { canModify, isAdmin } from "../lib/permissions.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -18,6 +19,7 @@ async function getPartyInfo(partyId: number, partyType: string): Promise<{ name:
 }
 
 router.get("/credits", requireAuth, async (req, res): Promise<void> => {
+  const tenant = tenantWhere(req, creditsTable.businessId);
   let rows;
   if (!isAdmin(req) && req.userLocationId != null) {
     const locationId = req.userLocationId;
@@ -27,13 +29,13 @@ router.get("/credits", requireAuth, async (req, res): Promise<void> => {
     ]);
     const customerIds = customers.map(c => c.id);
     const supplierIds = suppliers.map(s => s.id);
-    const allCredits = await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
+    const allCredits = await db.select().from(creditsTable).where(tenant).orderBy(desc(creditsTable.createdAt));
     rows = allCredits.filter(r =>
       (r.partyType === "customer" && customerIds.includes(r.partyId)) ||
       (r.partyType === "supplier" && supplierIds.includes(r.partyId))
     );
   } else {
-    rows = await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
+    rows = await db.select().from(creditsTable).where(tenant).orderBy(desc(creditsTable.createdAt));
   }
   const result = await Promise.all(rows.map(async (row) => {
     const info = await getPartyInfo(row.partyId, row.partyType);
@@ -45,6 +47,9 @@ router.get("/credits", requireAuth, async (req, res): Promise<void> => {
 // Individual credit payment history
 router.get("/credits/:id/payments", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+  const [credit] = await db.select({ businessId: creditsTable.businessId }).from(creditsTable).where(eq(creditsTable.id, id));
+  if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!ownsRow(req, credit.businessId)) { res.status(403).json({ error: "This credit belongs to another business" }); return; }
   const payments = await db.select().from(creditPaymentsTable).where(eq(creditPaymentsTable.creditId, id)).orderBy(desc(creditPaymentsTable.createdAt));
   res.json(payments.map(p => ({ ...p, createdAt: p.createdAt.toISOString() })));
 });
@@ -55,7 +60,8 @@ router.get("/credits/report", requireAuth, async (req, res): Promise<void> => {
     dateFrom?: string; dateTo?: string; locationId?: string; userId?: string;
   };
 
-  let creditRows = await db.select().from(creditsTable).orderBy(desc(creditsTable.createdAt));
+  const tenant = tenantWhere(req, creditsTable.businessId);
+  let creditRows = await db.select().from(creditsTable).where(tenant).orderBy(desc(creditsTable.createdAt));
 
   // Location filter — resolve via customer/supplier
   if (locationId) {
@@ -136,9 +142,22 @@ router.post("/credits", requireAuth, async (req, res): Promise<void> => {
     dueDate?: string | null; notes?: string | null; userId: number;
   };
   if (!type || !partyId || !partyType || !amount || !userId) { res.status(400).json({ error: "type, partyId, partyType, amount, userId required" }); return; }
+
+  // Tenant isolation: ensure the customer/supplier belongs to caller's business
+  if (partyType === "customer") {
+    const [c] = await db.select({ businessId: customersTable.businessId }).from(customersTable).where(eq(customersTable.id, partyId));
+    if (!c) { res.status(404).json({ error: "Customer not found" }); return; }
+    if (!ownsRow(req, c.businessId)) { res.status(403).json({ error: "Customer belongs to another business" }); return; }
+  } else if (partyType === "supplier") {
+    const [s] = await db.select({ businessId: suppliersTable.businessId }).from(suppliersTable).where(eq(suppliersTable.id, partyId));
+    if (!s) { res.status(404).json({ error: "Supplier not found" }); return; }
+    if (!ownsRow(req, s.businessId)) { res.status(403).json({ error: "Supplier belongs to another business" }); return; }
+  }
+
   const [row] = await db.insert(creditsTable).values({
     type, partyId, partyType, amount, paidAmount: "0.00000000", remainingAmount: amount,
     dueDate: dueDate ?? null, notes: notes ?? null, userId, status: "pending",
+    businessId: tenantStamp(req),
   }).returning();
   const info = await getPartyInfo(partyId, partyType);
   await logAudit(req.userId, "create", "credit", row!.id);
@@ -163,6 +182,17 @@ router.post("/credits/:id/pay", requireAuth, async (req, res): Promise<void> => 
 
   const [credit] = await db.select().from(creditsTable).where(eq(creditsTable.id, id));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!ownsRow(req, credit.businessId)) { res.status(403).json({ error: "This credit belongs to another business" }); return; }
+
+  // Validate referenced account/product belong to caller's business
+  if (paymentMethod === "account" && accountId) {
+    const [a] = await db.select({ businessId: accountsTable.businessId }).from(accountsTable).where(eq(accountsTable.id, accountId));
+    if (a && !ownsRow(req, a.businessId)) { res.status(403).json({ error: "Account belongs to another business" }); return; }
+  }
+  if (paymentMethod === "coins_withdraw" && productId) {
+    const [p] = await db.select({ businessId: productsTable.businessId }).from(productsTable).where(eq(productsTable.id, productId));
+    if (p && !ownsRow(req, p.businessId)) { res.status(403).json({ error: "Product belongs to another business" }); return; }
+  }
 
   const paid = parseFloat(payAmount);
   if (isNaN(paid) || paid <= 0) { res.status(400).json({ error: "Invalid payAmount" }); return; }
@@ -232,6 +262,7 @@ router.post("/credits/:id/pay", requireAuth, async (req, res): Promise<void> => 
     notes: notes ?? null,
     userId: req.userId!,
     locationId: info.locationId,
+    businessId: credit.businessId,
   }).returning();
 
   await logAudit(req.userId, "payment", "credit", id, `${paymentMethod} ₨${paid.toFixed(2)}${dollarAmount ? ` ($${dollarAmount})` : ""}${productName ? ` via ${productName}` : ""}`);
@@ -263,6 +294,7 @@ router.post("/credits/:id/pay/multi", requireAuth, async (req, res): Promise<voi
 
   const [credit] = await db.select().from(creditsTable).where(eq(creditsTable.id, id));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!ownsRow(req, credit.businessId)) { res.status(403).json({ error: "This credit belongs to another business" }); return; }
   if (credit.status === "paid") { res.status(400).json({ error: "Credit is already fully paid" }); return; }
 
   // Validate + compute each leg's PKR amount
@@ -277,6 +309,15 @@ router.post("/credits/:id/pay/multi", requireAuth, async (req, res): Promise<voi
     }
     if (leg.paymentMethod === "coins_withdraw" && (!leg.productId || !leg.productQty)) {
       res.status(400).json({ error: "Coins withdraw legs require productId and productQty" }); return;
+    }
+    // Tenant isolation per leg
+    if (leg.paymentMethod === "account" && leg.accountId) {
+      const [a] = await db.select({ businessId: accountsTable.businessId }).from(accountsTable).where(eq(accountsTable.id, leg.accountId));
+      if (a && !ownsRow(req, a.businessId)) { res.status(403).json({ error: "Account belongs to another business" }); return; }
+    }
+    if (leg.paymentMethod === "coins_withdraw" && leg.productId) {
+      const [p] = await db.select({ businessId: productsTable.businessId }).from(productsTable).where(eq(productsTable.id, leg.productId));
+      if (p && !ownsRow(req, p.businessId)) { res.status(403).json({ error: "Product belongs to another business" }); return; }
     }
     legAmounts.push(amt);
   }
@@ -353,6 +394,7 @@ router.post("/credits/:id/pay/multi", requireAuth, async (req, res): Promise<voi
           notes: notes ?? null,
           userId: req.userId!,
           locationId: info.locationId,
+          businessId: credit.businessId,
         }).returning();
         payments.push(payRec!);
       }
@@ -375,8 +417,9 @@ router.post("/credits/:id/pay/multi", requireAuth, async (req, res): Promise<voi
 
 router.delete("/credits/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
-  const [existing] = await db.select({ userId: creditsTable.userId }).from(creditsTable).where(eq(creditsTable.id, id));
+  const [existing] = await db.select({ userId: creditsTable.userId, businessId: creditsTable.businessId }).from(creditsTable).where(eq(creditsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Credit not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This credit belongs to another business" }); return; }
   if (!canModify(req, res, existing.userId)) return;
   await db.delete(creditPaymentsTable).where(eq(creditPaymentsTable.creditId, id));
   await db.delete(creditsTable).where(eq(creditsTable.id, id));

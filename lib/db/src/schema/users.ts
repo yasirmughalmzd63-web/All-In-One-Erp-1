@@ -11,6 +11,7 @@ export const usersTable = pgTable("users", {
   locationId: integer("location_id"),
   isActive: boolean("is_active").notNull().default(true),
   privileges: text("privileges"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

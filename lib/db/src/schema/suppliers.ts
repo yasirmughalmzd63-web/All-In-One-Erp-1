@@ -10,6 +10,7 @@ export const suppliersTable = pgTable("suppliers", {
   address: text("address"),
   balance: text("balance").notNull().default("0.00000000"),
   locationId: integer("location_id"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

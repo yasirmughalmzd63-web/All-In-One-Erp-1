@@ -9,6 +9,7 @@ export const purchasesTable = pgTable("purchases", {
   locationId: integer("location_id"),
   accountId: integer("account_id"),
   userId: integer("user_id").notNull(),
+  businessId: integer("business_id"),
   subtotal: text("subtotal").notNull().default("0.00000000"),
   discount: text("discount").notNull().default("0.00000000"),
   total: text("total").notNull().default("0.00000000"),

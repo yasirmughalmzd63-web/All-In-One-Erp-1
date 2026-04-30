@@ -4,6 +4,7 @@ import { db, productsTable, categoriesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { logAudit } from "../lib/audit.js";
 import { requireAdmin, isAdmin } from "../lib/permissions.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
@@ -11,6 +12,9 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
   const locationFilter = !isAdmin(req) && req.userLocationId != null
     ? eq(productsTable.locationId, req.userLocationId)
     : undefined;
+
+  const tenantFilter = tenantWhere(req, productsTable.businessId);
+  const where = and(tenantFilter, locationFilter);
 
   const rows = await db.select({
     id: productsTable.id,
@@ -31,7 +35,7 @@ router.get("/products", requireAuth, async (req, res): Promise<void> => {
     createdAt: productsTable.createdAt,
   }).from(productsTable)
     .leftJoin(categoriesTable, eq(productsTable.categoryId, categoriesTable.id))
-    .where(locationFilter)
+    .where(where)
     .orderBy(productsTable.name);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
@@ -47,6 +51,7 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
     name, sku: sku ?? null, categoryId: categoryId ?? null,
     unitPrice, wholesalePrice: wholesalePrice ?? unitPrice, costPrice,
     stock: stock ?? 0, locationId: locationId ?? null, unit, imageUrl: imageUrl ?? null,
+    businessId: tenantStamp(req),
   }).returning();
   await logAudit(req.userId, "create", "product", row!.id, `Created product ${name}`);
   res.status(201).json({ ...row!, categoryName: null, createdAt: row!.createdAt.toISOString() });
@@ -55,6 +60,11 @@ router.post("/products", requireAuth, async (req, res): Promise<void> => {
 router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (!requireAdmin(req, res)) return;
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+
+  const [existing] = await db.select({ businessId: productsTable.businessId }).from(productsTable).where(eq(productsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Product not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This product belongs to another business" }); return; }
+
   const { name, sku, categoryId, unitPrice, wholesalePrice, costPrice, stock, unit, isActive, locationId, imageUrl, topupCoinsPerUsd, topupExchangeRatePkr } = req.body as {
     name?: string; sku?: string | null; categoryId?: number | null;
     unitPrice?: string; wholesalePrice?: string; costPrice?: string; stock?: number; unit?: string; isActive?: boolean; locationId?: number | null; imageUrl?: string | null;
@@ -83,6 +93,11 @@ router.patch("/products/:id", requireAuth, async (req, res): Promise<void> => {
 router.delete("/products/:id", requireAuth, async (req, res): Promise<void> => {
   if (!requireAdmin(req, res)) return;
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+
+  const [existing] = await db.select({ businessId: productsTable.businessId }).from(productsTable).where(eq(productsTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Product not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This product belongs to another business" }); return; }
+
   const [row] = await db.delete(productsTable).where(eq(productsTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Product not found" }); return; }
   await logAudit(req.userId, "delete", "product", id);

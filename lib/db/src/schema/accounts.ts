@@ -10,6 +10,7 @@ export const accountsTable = pgTable("accounts", {
   currency: text("currency").notNull().default("USD"),
   locationId: integer("location_id"),
   isActive: boolean("is_active").notNull().default(true),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

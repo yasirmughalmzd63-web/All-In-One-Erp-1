@@ -23,6 +23,7 @@ export const dollarWalletTable = pgTable("dollar_wallet", {
   paymentProofKey: text("payment_proof_key"),
   proofVerifiedAt: timestamp("proof_verified_at", { withTimezone: true }),
   proofVerifiedBy: integer("proof_verified_by"),
+  businessId: integer("business_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (t) => ({

@@ -1,15 +1,18 @@
 import { Router } from "express";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db, customersTable, creditsTable, creditPaymentsTable, salesTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
+import { tenantWhere, tenantStamp, ownsRow } from "../lib/tenant.js";
 
 const router = Router();
 
 router.get("/customers", requireAuth, async (req, res): Promise<void> => {
-  const rows = !isAdmin(req) && req.userLocationId != null
-    ? await db.select().from(customersTable).where(eq(customersTable.locationId, req.userLocationId)).orderBy(customersTable.name)
-    : await db.select().from(customersTable).orderBy(customersTable.name);
+  const tenant = tenantWhere(req, customersTable.businessId);
+  const locationFilter = !isAdmin(req) && req.userLocationId != null
+    ? eq(customersTable.locationId, req.userLocationId)
+    : undefined;
+  const rows = await db.select().from(customersTable).where(and(tenant, locationFilter)).orderBy(customersTable.name);
   res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 
@@ -28,6 +31,7 @@ router.post("/customers", requireAuth, async (req, res): Promise<void> => {
   const [customer] = await db.insert(customersTable).values({
     name, phone: phone ?? null, email: email ?? null, address: address ?? null,
     locationId: effectiveLocationId,
+    businessId: tenantStamp(req),
   }).returning();
 
   const balanceNum = openingCreditBalance ? parseFloat(String(openingCreditBalance)) : 0;
@@ -52,6 +56,11 @@ router.post("/customers", requireAuth, async (req, res): Promise<void> => {
 
 router.patch("/customers/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+
+  const [existing] = await db.select({ businessId: customersTable.businessId }).from(customersTable).where(eq(customersTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Customer not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This customer belongs to another business" }); return; }
+
   const { name, phone, email, address, locationId } = req.body as {
     name?: string; phone?: string | null; email?: string | null; address?: string | null; locationId?: number | null;
   };
@@ -173,6 +182,11 @@ router.get("/customers/:id/statement", requireAuth, async (req, res): Promise<vo
 
 router.delete("/customers/:id", requireAuth, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0]! : req.params.id!, 10);
+
+  const [existing] = await db.select({ businessId: customersTable.businessId }).from(customersTable).where(eq(customersTable.id, id));
+  if (!existing) { res.status(404).json({ error: "Customer not found" }); return; }
+  if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "This customer belongs to another business" }); return; }
+
   const [row] = await db.delete(customersTable).where(eq(customersTable.id, id)).returning();
   if (!row) { res.status(404).json({ error: "Customer not found" }); return; }
   res.sendStatus(204);
