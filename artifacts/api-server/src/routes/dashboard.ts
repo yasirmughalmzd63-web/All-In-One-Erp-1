@@ -187,6 +187,17 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
   );
   const dollarWalletValuePkr = dollarWalletBalanceUsd * currentDollarSaleRate;
 
+  // Per-wallet breakdown — each USD wallet's balance + sale value PKR
+  const dollarWalletsBreakdown = usdWallets.map(w => {
+    const usd = parseFloat(w.balance ?? "0");
+    return {
+      id: w.id,
+      name: w.name,
+      balanceUsd: usd.toFixed(8),
+      valuePkr: (usd * currentDollarSaleRate).toFixed(8),
+    };
+  }).sort((a, b) => parseFloat(b.balanceUsd) - parseFloat(a.balanceUsd));
+
   // Received stock qty: sum of all purchase_items.qty for purchases in this period
   const purchaseIds = periodPurchaseIds.map(p => p.id);
   const receivedStockItems = purchaseIds.length > 0
@@ -305,6 +316,7 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     dollarReceivedCount: periodDollarReceived.length,
     // Inventory & wealth breakdowns
     inventoryByLocation,
+    dollarWalletsBreakdown,
     totalsBreakdown,
     // Scope info so the UI can show "viewing your data" vs "viewing all"
     scope: {

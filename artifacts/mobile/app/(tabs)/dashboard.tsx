@@ -37,6 +37,12 @@ type InventoryLoc = {
   value: string;
   productCount: number;
 };
+type DollarWalletBreakdown = {
+  id: number;
+  name: string;
+  balanceUsd: string;
+  valuePkr: string;
+};
 type TotalsBreakdown = {
   cash: string;
   stock: string;
@@ -65,6 +71,7 @@ type DashboardData = {
   dollarReceivedUsd: string; dollarExchangedPkr: string; dollarAvgRate: string; dollarReceivedCount: number;
   accountBalances: Account[];
   inventoryByLocation: InventoryLoc[];
+  dollarWalletsBreakdown?: DollarWalletBreakdown[];
   totalsBreakdown: TotalsBreakdown;
   scope: { isAdmin: boolean; userId: number | null; locationId: number | null; role: string | null };
 };
@@ -392,6 +399,90 @@ export default function DashboardScreen() {
               />
             </View>
 
+            {/* 2.4 Dollar in Hand — Per USD wallet breakdown + activity */}
+            {(() => {
+              const wallets = dash.dollarWalletsBreakdown ?? [];
+              const totalUsd = parseFloat(dash.totalsBreakdown?.dollarInventoryUsd ?? "0");
+              const totalPkr = parseFloat(dash.totalsBreakdown?.dollarInventoryPkr ?? "0");
+              const saleRate = parseFloat(dash.totalsBreakdown?.dollarSaleRate ?? "0");
+              const periodReceivedUsd = parseFloat(dash.dollarReceivedUsd ?? "0");
+              const periodReceivedPkr = parseFloat(dash.dollarExchangedPkr ?? "0");
+              const periodCount = dash.dollarReceivedCount ?? 0;
+              if (wallets.length === 0 && totalUsd === 0 && periodCount === 0) return null;
+              return (
+                <View>
+                  <View style={styles.sectionHeaderRow}>
+                    <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0 }]}>Dollar in Hand</Text>
+                    <View style={[styles.scopeBadge, { backgroundColor: colors.sale + "15" }]}>
+                      <Text style={[styles.scopeBadgeText, { color: colors.sale }]}>
+                        {saleRate > 0 ? `Sale ₨${saleRate.toFixed(0)}` : "No Sale Yet"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Per-wallet breakdown list */}
+                  <View style={[styles.summaryCard, { backgroundColor: colors.card, borderColor: colors.border, marginBottom: 10 }]}>
+                    {wallets.length === 0 ? (
+                      <View style={{ padding: 20, alignItems: "center" }}>
+                        <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.mutedForeground }}>
+                          No USD wallets yet
+                        </Text>
+                      </View>
+                    ) : (
+                      wallets.map((w, idx, arr) => (
+                        <View
+                          key={String(w.id)}
+                          style={[locStyles.row, { borderBottomWidth: idx < arr.length - 1 ? 1 : 0, borderBottomColor: colors.border }]}
+                        >
+                          <View style={[locStyles.iconBox, { backgroundColor: colors.sale + "18" }]} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={[locStyles.locName, { color: colors.text }]} numberOfLines={1}>{w.name}</Text>
+                            <Text style={[locStyles.locSub, { color: colors.mutedForeground }]}>
+                              USD wallet
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: "flex-end" }}>
+                            <Text style={[locStyles.locQty, { color: colors.sale }]}>{fmtUSD(w.balanceUsd)}</Text>
+                            <Text style={[locStyles.locValue, { color: colors.text }]}>{fmtPKRk(w.valuePkr)}</Text>
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+
+                  {/* Grand totals card */}
+                  <DualMetricCard
+                    icon="dollar-sign"
+                    title="Dollar Total (Sale Value)"
+                    primaryLabel="Total USD"
+                    primaryValue={fmtUSD(totalUsd.toFixed(2))}
+                    secondaryLabel="Total PKR @ Sale"
+                    secondaryValue={fmtPKRk(totalPkr.toString())}
+                    footer={`${wallets.length} wallet${wallets.length !== 1 ? "s" : ""}${saleRate > 0 ? ` • valued at ₨${saleRate.toFixed(0)}/USD` : ""}`}
+                    color={colors.sale}
+                    bg={colors.saleBg}
+                  />
+
+                  {/* Period activity row — Dollar received in this period */}
+                  {periodCount > 0 && (
+                    <View style={{ marginTop: 10 }}>
+                      <DualMetricCard
+                        icon="arrow-down-circle"
+                        title={`Dollar Received — ${PERIOD_LABELS[period]}`}
+                        primaryLabel="USD Received"
+                        primaryValue={fmtUSD(periodReceivedUsd.toFixed(2))}
+                        secondaryLabel="PKR Earned (at sale rate)"
+                        secondaryValue={fmtPKRk(periodReceivedPkr.toString())}
+                        footer={`${periodCount} transaction${periodCount !== 1 ? "s" : ""}${parseFloat(dash.dollarAvgRate ?? "0") > 0 ? ` • avg ₨${parseFloat(dash.dollarAvgRate).toFixed(2)}/USD` : ""}`}
+                        color={colors.success}
+                        bg={colors.saleBg}
+                      />
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
+
             {/* 2.5 Net Worth Breakdown — Cash / Stock / Credit / Other → Total */}
             <View>
               <Text style={[styles.sectionTitle, { color: colors.text }]}>Net Worth Breakdown</Text>
@@ -401,7 +492,7 @@ export default function DashboardScreen() {
                 {/* USD Inventory — valued at SALE PRICE (most recent received rate) */}
                 {parseFloat(dash.totalsBreakdown?.dollarInventoryUsd ?? "0") > 0 && (
                   <BreakdownRow
-                    label="USD Inventory"
+                    label="Dollar"
                     icon="dollar-sign"
                     color={colors.sale}
                     value={fmtPKRk(dash.totalsBreakdown?.dollarInventoryPkr)}
