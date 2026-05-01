@@ -101,7 +101,9 @@ router.get("/dashboard", requireAuth, async (req, res): Promise<void> => {
     if (filterUserId && userIdCol) parts.push(eq(userIdCol, filterUserId));
     if (filterLocationId && locationIdCol) parts.push(eq(locationIdCol, filterLocationId));
     if (tenantClause) parts.push(tenantClause);
-    return parts.length === 1 ? parts[0] : and(...parts);
+    // Always return via `and(...)` so the result is `SQL<unknown> | undefined`
+    // (drizzle's `.where()` expects an `SQL`, not a bare `SQLWrapper`).
+    return and(...parts);
   };
 
   // Credits filter by userId

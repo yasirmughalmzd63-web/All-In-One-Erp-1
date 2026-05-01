@@ -127,7 +127,7 @@ router.post("/locations/stock-transfer", requireAuth, async (req, res): Promise<
   // Record the transfer
   const [row] = await db.insert(stockTransfersTable).values({
     fromLocationId, toLocationId, fromProductId, toProductId, qty,
-    notes: notes ?? null, userId: req.userId,
+    notes: notes ?? null, userId: req.userId!,
     businessId: tenantStamp(req),
   }).returning();
 

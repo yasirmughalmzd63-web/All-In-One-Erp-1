@@ -175,7 +175,7 @@ router.post("/businesses", requireAuth, requireSuperAdmin, async (req, res): Pro
 
 // ── PATCH /api/businesses/:id/modules — super admin updates modules ─────────────
 router.patch("/businesses/:id/modules", requireAuth, requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { modules } = req.body as { modules?: string[] | null };
   if (modules === undefined) { res.status(400).json({ error: "modules array required (or null for full access)" }); return; }
 
@@ -195,7 +195,7 @@ router.patch("/businesses/:id/modules", requireAuth, requireSuperAdmin, async (r
 
 // ── PATCH /api/businesses/:id — super admin updates business info/package/payment
 router.patch("/businesses/:id", requireAuth, requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const {
     package: pkg, isActive,
     paymentMethod, paymentStatus, subscriptionEndDate, monthlyFee, notes,
@@ -242,7 +242,7 @@ router.patch("/businesses/:id", requireAuth, requireSuperAdmin, async (req, res)
 
 // ── DELETE /api/businesses/:id — super admin deletes business + admin user ───
 router.delete("/businesses/:id", requireAuth, requireSuperAdmin, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
 
   const [reg] = await db.select().from(businessRegistrationsTable).where(eq(businessRegistrationsTable.id, id));
   if (!reg) { res.status(404).json({ error: "Business not found" }); return; }

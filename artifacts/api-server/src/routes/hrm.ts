@@ -42,7 +42,7 @@ router.post("/hrm/employees", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.patch("/hrm/employees/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select({ businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Employee not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -57,7 +57,7 @@ router.patch("/hrm/employees/:id", requireAuth, async (req, res): Promise<void> 
 });
 
 router.delete("/hrm/employees/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select({ businessId: employeesTable.businessId }).from(employeesTable).where(eq(employeesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -160,7 +160,7 @@ router.post("/hrm/fines", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.delete("/hrm/fines/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select({ businessId: employeeFinesTable.businessId }).from(employeeFinesTable).where(eq(employeeFinesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -206,7 +206,7 @@ router.post("/hrm/bonuses", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.delete("/hrm/bonuses/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select({ businessId: employeeBonusesTable.businessId }).from(employeeBonusesTable).where(eq(employeeBonusesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -321,7 +321,7 @@ router.post("/hrm/payroll/generate", requireAuth, async (req, res): Promise<void
 });
 
 router.patch("/hrm/payroll/:id/pay", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select({ businessId: payrollTable.businessId }).from(payrollTable).where(eq(payrollTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -614,7 +614,7 @@ router.post("/hrm/leave", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.patch("/hrm/leave/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const { status, reviewNotes, leaveType, startDate, endDate, totalDays, reason } = req.body as {
     status?: string; reviewNotes?: string;
     leaveType?: string; startDate?: string; endDate?: string; totalDays?: string; reason?: string;
@@ -651,7 +651,7 @@ router.patch("/hrm/leave/:id", requireAuth, async (req, res): Promise<void> => {
 });
 
 router.delete("/hrm/leave/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select().from(leaveRequestsTable).where(eq(leaveRequestsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
