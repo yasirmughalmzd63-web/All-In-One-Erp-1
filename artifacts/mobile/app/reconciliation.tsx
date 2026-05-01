@@ -17,6 +17,18 @@ type Snapshot = {
 type Wallet = { id: number; currency: string; balance: string; name: string };
 type Account = { id: number; name: string; type: string; balance: string };
 
+type EmployeeBucket = { count: number; total: string; cash: string };
+type EmployeeRow = {
+  userId: number; name: string; username: string; role: string; locationId: number | null;
+  today: EmployeeBucket; yesterday: EmployeeBucket; lifetime: EmployeeBucket;
+};
+type EmployeeRecon = {
+  generatedAt: string;
+  today: string; yesterday: string;
+  rows: EmployeeRow[];
+  totals: { today: EmployeeBucket; yesterday: EmployeeBucket; lifetime: EmployeeBucket };
+};
+
 const fmt = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const fmtDec = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const p = (s: string | number) => (typeof s === "string" ? parseFloat(s) : s) || 0;
@@ -40,6 +52,187 @@ function StatRow({ label, value, color, bold }: { label: string; value: string; 
     </View>
   );
 }
+
+// ─── Compact ₨ formatter for the per-employee table ───────────────────────
+function fmtMoney(s: string): string {
+  const n = parseFloat(s);
+  if (!isFinite(n) || n === 0) return "₨0";
+  if (Math.abs(n) >= 1_000_000) return `₨${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000)     return `₨${(n / 1_000).toFixed(1)}K`;
+  return `₨${n.toFixed(0)}`;
+}
+
+function roleBadge(role: string): { label: string; color: string; bg: string } {
+  switch (role) {
+    case "super_admin": return { label: "SUPER",   color: "#1E1B4B", bg: "#EDE9FE" };
+    case "admin":       return { label: "ADMIN",   color: "#7C3AED", bg: "#F3E8FF" };
+    case "manager":     return { label: "MGR",     color: "#0369A1", bg: "#E0F2FE" };
+    case "cashier":     return { label: "CASHIER", color: "#059669", bg: "#ECFDF5" };
+    default:            return { label: role.toUpperCase().slice(0, 7), color: "#475569", bg: "#F1F5F9" };
+  }
+}
+
+function EmployeeReconBlock({ data, loading }: { data: EmployeeRecon | null; loading: boolean }) {
+  const colors = useColors();
+  if (loading) {
+    return (
+      <View style={[reconStyles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: "center", paddingVertical: 24 }]}>
+        <ActivityIndicator color={colors.primary} />
+        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 12, color: colors.mutedForeground, marginTop: 8 }}>
+          Loading employee records…
+        </Text>
+      </View>
+    );
+  }
+  if (!data) {
+    return (
+      <View style={[reconStyles.card, { backgroundColor: colors.card, borderColor: colors.border, alignItems: "center", paddingVertical: 24 }]}>
+        <Text style={{ fontSize: 28, marginBottom: 6 }}>⚠️</Text>
+        <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 13, color: "#DC2626" }}>
+          Employee reconciliation unavailable
+        </Text>
+        <Text style={{ fontFamily: "Inter_400Regular", fontSize: 11, color: colors.mutedForeground, marginTop: 4, textAlign: "center" }}>
+          Pull down to refresh, or check your connection.
+        </Text>
+      </View>
+    );
+  }
+
+  const rows = data.rows ?? [];
+
+  return (
+    <View style={[reconStyles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      {/* Date row */}
+      <View style={reconStyles.dateRow}>
+        <View style={reconStyles.dateBadge}>
+          <Text style={[reconStyles.dateLabel, { color: "#7C3AED" }]}>TODAY</Text>
+          <Text style={[reconStyles.dateValue, { color: colors.text }]}>{data.today}</Text>
+        </View>
+        <View style={reconStyles.dateBadge}>
+          <Text style={[reconStyles.dateLabel, { color: "#0369A1" }]}>YESTERDAY</Text>
+          <Text style={[reconStyles.dateValue, { color: colors.text }]}>{data.yesterday}</Text>
+        </View>
+        <View style={reconStyles.dateBadge}>
+          <Text style={[reconStyles.dateLabel, { color: "#059669" }]}>LIFETIME</Text>
+          <Text style={[reconStyles.dateValue, { color: colors.text }]}>All time</Text>
+        </View>
+      </View>
+
+      {rows.length === 0 ? (
+        <View style={{ alignItems: "center", paddingVertical: 24 }}>
+          <Text style={{ fontSize: 32, marginBottom: 6 }}>👤</Text>
+          <Text style={{ fontFamily: "Inter_500Medium", fontSize: 13, color: colors.mutedForeground }}>
+            No active employees
+          </Text>
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View>
+            {/* Header row */}
+            <View style={[reconStyles.tRow, reconStyles.tHeadRow, { borderBottomColor: colors.border }]}>
+              <Text style={[reconStyles.cEmp,    reconStyles.tHead, { color: colors.mutedForeground }]}>Employee</Text>
+              <Text style={[reconStyles.cBucket, reconStyles.tHead, { color: "#7C3AED" }]}>Today</Text>
+              <Text style={[reconStyles.cBucket, reconStyles.tHead, { color: "#0369A1" }]}>Yesterday</Text>
+              <Text style={[reconStyles.cBucket, reconStyles.tHead, { color: "#059669" }]}>Lifetime</Text>
+            </View>
+
+            {/* Body rows */}
+            {rows.map((r, idx) => {
+              const badge = roleBadge(r.role);
+              return (
+                <View
+                  key={r.userId}
+                  style={[
+                    reconStyles.tRow,
+                    {
+                      borderBottomColor: colors.border,
+                      backgroundColor: idx % 2 === 0 ? "transparent" : colors.background,
+                    },
+                  ]}
+                >
+                  <View style={reconStyles.cEmp}>
+                    <Text style={[reconStyles.empName, { color: colors.text }]} numberOfLines={1}>
+                      {r.name}
+                    </Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+                      <View style={[reconStyles.rolePill, { backgroundColor: badge.bg }]}>
+                        <Text style={{ fontFamily: "Inter_700Bold", fontSize: 9, color: badge.color }}>
+                          {badge.label}
+                        </Text>
+                      </View>
+                      <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground }}>
+                        @{r.username}
+                      </Text>
+                    </View>
+                  </View>
+                  <BucketCell bucket={r.today}     accent="#7C3AED" />
+                  <BucketCell bucket={r.yesterday} accent="#0369A1" />
+                  <BucketCell bucket={r.lifetime}  accent="#059669" />
+                </View>
+              );
+            })}
+
+            {/* Totals row */}
+            <View style={[reconStyles.tRow, reconStyles.tFootRow, { borderTopColor: colors.border, backgroundColor: colors.background }]}>
+              <View style={reconStyles.cEmp}>
+                <Text style={[reconStyles.empName, { color: colors.text }]}>Σ Totals</Text>
+                <Text style={{ fontFamily: "Inter_400Regular", fontSize: 10, color: colors.mutedForeground, marginTop: 2 }}>
+                  {rows.length} employee{rows.length === 1 ? "" : "s"}
+                </Text>
+              </View>
+              <BucketCell bucket={data.totals.today}     accent="#7C3AED" bold />
+              <BucketCell bucket={data.totals.yesterday} accent="#0369A1" bold />
+              <BucketCell bucket={data.totals.lifetime}  accent="#059669" bold />
+            </View>
+          </View>
+        </ScrollView>
+      )}
+    </View>
+  );
+}
+
+function BucketCell({ bucket, accent, bold }: { bucket: EmployeeBucket; accent: string; bold?: boolean }) {
+  const colors = useColors();
+  const empty = bucket.count === 0;
+  return (
+    <View style={reconStyles.cBucket}>
+      {empty ? (
+        <Text style={{ color: colors.mutedForeground, fontSize: 12, textAlign: "right" }}>—</Text>
+      ) : (
+        <>
+          <Text style={{ color: accent, fontFamily: bold ? "Inter_800ExtraBold" : "Inter_700Bold", fontSize: 13, textAlign: "right" }}>
+            {fmtMoney(bucket.total)}
+          </Text>
+          <Text style={{ color: colors.mutedForeground, fontSize: 10, textAlign: "right" }}>
+            {bucket.count} sale{bucket.count === 1 ? "" : "s"}
+          </Text>
+          <Text style={{ color: "#059669", fontSize: 9.5, textAlign: "right", marginTop: 1 }}>
+            cash {fmtMoney(bucket.cash)}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+const reconStyles = StyleSheet.create({
+  card: { borderRadius: 16, borderWidth: 1, padding: 12, marginBottom: 4 },
+  dateRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+  dateBadge: { flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: 10, backgroundColor: "rgba(0,0,0,0.03)" },
+  dateLabel: { fontFamily: "Inter_700Bold", fontSize: 9.5, letterSpacing: 0.6 },
+  dateValue: { fontFamily: "Inter_600SemiBold", fontSize: 11.5, marginTop: 2 },
+
+  tRow: { flexDirection: "row", paddingVertical: 8, alignItems: "flex-start", borderBottomWidth: StyleSheet.hairlineWidth },
+  tHeadRow: { borderBottomWidth: 1, paddingBottom: 8 },
+  tFootRow: { borderTopWidth: 1, borderBottomWidth: 0, paddingTop: 10, paddingBottom: 6 },
+  tHead: { fontFamily: "Inter_700Bold", fontSize: 10.5, letterSpacing: 0.5, textTransform: "uppercase" },
+
+  cEmp:    { width: 130, paddingRight: 8 },
+  cBucket: { width: 100, paddingRight: 8, alignItems: "flex-end" },
+
+  empName: { fontFamily: "Inter_600SemiBold", fontSize: 12.5 },
+  rolePill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+});
 
 function InputRow({ label, value, onChangeText, placeholder, keyboardType }: {
   label: string; value: string; onChangeText: (v: string) => void;
@@ -72,6 +265,8 @@ export default function ReconciliationScreen() {
 
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [wallets, setWallets] = useState<Wallet[]>([]);
+  const [empRecon, setEmpRecon] = useState<EmployeeRecon | null>(null);
+  const [empReconLoading, setEmpReconLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -98,16 +293,20 @@ export default function ReconciliationScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true); else setLoading(true);
+    setEmpReconLoading(true);
     try {
-      const [snap, w] = await Promise.all([
+      const [snap, w, er] = await Promise.all([
         customFetch<Snapshot>("/api/cash-counts/snapshot"),
         customFetch<Wallet[]>("/api/dollar-wallet/wallets").catch(() => [] as Wallet[]),
+        customFetch<EmployeeRecon>("/api/reports/employee-reconciliation").catch(() => null),
       ]);
       setSnapshot(snap);
       setWallets(w);
+      setEmpRecon(er);
     } catch {}
     setLoading(false);
     setRefreshing(false);
+    setEmpReconLoading(false);
   }, []);
 
   useEffect(() => { load(); }, []);
@@ -238,7 +437,7 @@ export default function ReconciliationScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Reconciliation</Text>
-          <Text style={styles.headerSub}>Daily closing · Dollar · Exchange</Text>
+          <Text style={styles.headerSub}>Employee · Daily · Dollar · Exchange</Text>
         </View>
         <TouchableOpacity onPress={() => load(true)} style={{ padding: 8 }}>
           <Text style={{ fontSize: 18 }}>🔄</Text>
@@ -250,6 +449,10 @@ export default function ReconciliationScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />}
         contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
       >
+
+        {/* ── SECTION 0: Employee-wise Reconciliation ──────────────── */}
+        <SectionHeader emoji="👥" title="EMPLOYEE RECONCILIATION" color="#7C3AED" />
+        <EmployeeReconBlock data={empRecon} loading={empReconLoading} />
 
         {/* ── SECTION 1: Opening Balance Breakdown ─────────────────── */}
         <SectionHeader emoji="📊" title="OPENING BALANCE" color="#2563EB" />

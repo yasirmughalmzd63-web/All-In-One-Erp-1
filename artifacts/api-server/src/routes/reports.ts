@@ -769,6 +769,126 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// EMPLOYEE RECONCILIATION  GET /api/reports/employee-reconciliation
+// Per-user breakdown of sales activity for Today, Yesterday, and Lifetime.
+// Used by the More → Reconciliation screen.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/reports/employee-reconciliation", requireAuth, async (req, res): Promise<void> => {
+  const scope = readScope(req as never);
+  if ("error" in scope) { res.status(scope.error.status).json(scope.error.body); return; }
+
+  // Date boundaries in server local time (matches dashboard.ts convention).
+  // We use Date objects with gte/lt rather than `date(createdAt) = 'YYYY-MM-DD'`
+  // so timezone semantics are identical to the dashboard's daily totals.
+  const now = new Date();
+  const todayStart = new Date(now);     todayStart.setHours(0, 0, 0, 0);
+  const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const todayStr     = localDayString(todayStart);
+  const yesterdayStr = localDayString(yesterdayStart);
+
+  const tUsers = tenantWhere(req, usersTable.businessId);
+  const tSales = tenantWhere(req, salesTable.businessId);
+
+  // Active users in this tenant (optionally filtered by location for non-admins)
+  const userConds = [eq(usersTable.isActive, true), tUsers];
+  if (scope.locationId) userConds.push(eq(usersTable.locationId, scope.locationId));
+  const users = await db.select({
+    id: usersTable.id,
+    name: usersTable.name,
+    username: usersTable.username,
+    role: usersTable.role,
+    locationId: usersTable.locationId,
+  }).from(usersTable).where(and(...userConds));
+
+  if (users.length === 0) {
+    res.json({
+      generatedAt: now.toISOString(),
+      scope,
+      today: todayStr,
+      yesterday: yesterdayStr,
+      rows: [],
+      totals: {
+        today:     { count: 0, total: "0.00", cash: "0.00" },
+        yesterday: { count: 0, total: "0.00", cash: "0.00" },
+        lifetime:  { count: 0, total: "0.00", cash: "0.00" },
+      },
+    });
+    return;
+  }
+
+  // Build sales aggregation for a date condition (or null = lifetime)
+  const baseSalesConds = [tSales];
+  if (scope.locationId) baseSalesConds.push(eq(salesTable.locationId, scope.locationId));
+
+  type Bucket = Record<number, { count: number; total: number; cash: number }>;
+  async function aggregate(extraDateCond: ReturnType<typeof sql> | null): Promise<Bucket> {
+    const conds = [...baseSalesConds];
+    if (extraDateCond) conds.push(extraDateCond);
+    const rows = await db.select({
+      userId: salesTable.userId,
+      count:  sql<string>`count(*)`,
+      total:  sql<string>`coalesce(sum(cast(${salesTable.total} as numeric)), 0)`,
+      cash:   sql<string>`coalesce(sum(cast(${salesTable.amountPaid} as numeric)), 0)`,
+    }).from(salesTable).where(and(...conds)).groupBy(salesTable.userId);
+    const map: Bucket = {};
+    for (const r of rows) {
+      map[r.userId] = {
+        count: parseInt(r.count, 10),
+        total: parseFloat(r.total),
+        cash:  parseFloat(r.cash),
+      };
+    }
+    return map;
+  }
+
+  const [todayMap, yesterdayMap, lifetimeMap] = await Promise.all([
+    aggregate(and(gte(salesTable.createdAt, todayStart),     lt(salesTable.createdAt, tomorrowStart))!),
+    aggregate(and(gte(salesTable.createdAt, yesterdayStart), lt(salesTable.createdAt, todayStart))!),
+    aggregate(null),
+  ]);
+
+  const blank = { count: 0, total: 0, cash: 0 };
+  const rows = users.map(u => {
+    const t = todayMap[u.id]     ?? blank;
+    const y = yesterdayMap[u.id] ?? blank;
+    const l = lifetimeMap[u.id]  ?? blank;
+    return {
+      userId: u.id,
+      name: u.name,
+      username: u.username,
+      role: u.role,
+      locationId: u.locationId,
+      today:     { count: t.count, total: t.total.toFixed(2), cash: t.cash.toFixed(2) },
+      yesterday: { count: y.count, total: y.total.toFixed(2), cash: y.cash.toFixed(2) },
+      lifetime:  { count: l.count, total: l.total.toFixed(2), cash: l.cash.toFixed(2) },
+    };
+  })
+  // Surface most-active users first (lifetime sales count desc, then name)
+  .sort((a, b) => (b.lifetime.count - a.lifetime.count) || a.name.localeCompare(b.name));
+
+  // Grand totals (across all users in scope)
+  const sumBucket = (bucket: Bucket) => {
+    let count = 0, total = 0, cash = 0;
+    for (const v of Object.values(bucket)) { count += v.count; total += v.total; cash += v.cash; }
+    return { count, total: total.toFixed(2), cash: cash.toFixed(2) };
+  };
+
+  res.json({
+    generatedAt: now.toISOString(),
+    scope,
+    today: todayStr,
+    yesterday: yesterdayStr,
+    rows,
+    totals: {
+      today:     sumBucket(todayMap),
+      yesterday: sumBucket(yesterdayMap),
+      lifetime:  sumBucket(lifetimeMap),
+    },
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CUSTOMER DOLLAR REPORT  GET /api/reports/customer-dollar-report
 // Per customer: USD received / products sent / net balance — period + lifetime
 // ─────────────────────────────────────────────────────────────────────────────
