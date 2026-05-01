@@ -28,4 +28,10 @@ title = "Mobile App — Build the APK"
 id = "kf1e45OvDz1vgBrDVfHB0"
 uri = "file://deploy-package/coins-sale-source.tar.gz"
 type = "unspecified"
-title = "Mobile Source Code (full monorepo)"
+title = "Mobile Source Code (.tar.gz — same content, smaller)"
+
+[[outputs]]
+id = "XQN9Zwa3-K-QFWfUJqqla"
+uri = "file://deploy-package/coins-sale-source.zip"
+type = "unspecified"
+title = "Mobile Source Code (.zip — easiest on Windows)"
