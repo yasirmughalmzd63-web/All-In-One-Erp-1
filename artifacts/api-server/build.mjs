@@ -101,7 +101,11 @@ async function buildAll() {
       "puppeteer-core",
       "electron",
     ],
-    sourcemap: "linked",
+    // Source maps are only emitted outside production. In production
+    // (e.g. Vercel) we omit them so the deployed bundle is smaller AND so
+    // the platform's bundler can't follow `.mjs.map` references back to the
+    // original `src/*.ts` files and try to typecheck them with a stray tsc.
+    sourcemap: process.env.NODE_ENV === "production" ? false : "linked",
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
       esbuildPluginPino({ transports: ["pino-pretty"] })

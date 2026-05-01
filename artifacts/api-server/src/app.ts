@@ -1,6 +1,9 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import pinoHttp from "pino-http";
+// Use the named export (always callable). Default-import interop varies
+// between TS module-resolution modes — the named export is unambiguous.
+import { pinoHttp } from "pino-http";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import router from "./routes";
 import { UPLOADS_DIR } from "./routes/upload";
 import { logger } from "./lib/logger";
@@ -16,14 +19,14 @@ app.use(
   pinoHttp({
     logger,
     serializers: {
-      req(req) {
+      req(req: IncomingMessage & { id?: string | number }) {
         return {
           id: req.id,
           method: req.method,
           url: req.url?.split("?")[0],
         };
       },
-      res(res) {
+      res(res: ServerResponse) {
         return {
           statusCode: res.statusCode,
         };
