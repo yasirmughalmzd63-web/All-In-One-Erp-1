@@ -73,16 +73,22 @@ File Manager, or `scp`). Recommended location:
 
 Copy `.env.example` → `.env` and fill in **at minimum**:
 
-| Variable          | What to set it to                                              |
-|-------------------|----------------------------------------------------------------|
-| `DATABASE_URL`    | The Postgres URL from step 1                                   |
-| `PORT`            | Use the port Hostinger gave you (often 8080 or auto-assigned)  |
-| `NODE_ENV`        | `production`                                                   |
-| `SESSION_SECRET`  | Any long random string (≥ 32 chars)                            |
+| Variable          | What to set it to                                                                |
+|-------------------|----------------------------------------------------------------------------------|
+| `DATABASE_URL`    | The Postgres URL from step 1                                                     |
+| `PORT`            | Use the port Hostinger gave you (often 8080 or auto-assigned)                    |
+| `NODE_ENV`        | `production`                                                                     |
+| `SESSION_SECRET`  | Any long random string (≥ 32 chars)                                              |
+| `UPLOADS_DIR`     | Folder to store product images & payment-proof screenshots (e.g. `/home/<hostinger-user>/coins-sale-uploads`). Defaults to `./uploads`. Use a path **outside** the app folder so files survive redeploys. |
+| `PUBLIC_BASE_URL` | *(optional)* Your public HTTPS base URL, e.g. `https://api.your-domain.com`. If blank, derived from the incoming request — usually fine on Hostinger. |
 
 The server always exposes its routes under the path `/api` (this is hardcoded —
 the mobile app expects it). Your reverse proxy / Hostinger app URL just needs
 to forward all traffic to the Node process.
+
+**Image storage:** product images and payment-proof screenshots are saved to
+`UPLOADS_DIR` and served at `https://<your-domain>/api/uploads/<key>`. No
+cloud SDK is required — uploads work out of the box on any Node host.
 
 ---
 

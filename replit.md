@@ -141,6 +141,25 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
+### May 1, 2026 — Replaced @replit/object-storage with local-FS uploads (Hostinger crash fix)
+- **Bug found via Hostinger build log**: `pnpm install` succeeded at the workspace root (1137 pkgs) but the start phase would have crashed because the bundle imports `@google-cloud/storage` (transitively, via `@replit/object-storage` which esbuild bundles) and that package can't be esbuild-bundled (uses `.proto` path traversal). Hostinger has neither package installed, so `node dist/index.mjs` fails with `ERR_MODULE_NOT_FOUND: Cannot find package '@google-cloud/storage'`. Confirmed by simulating Hostinger boot in `/tmp/hostinger-sim/` against a clean dir.
+- **Fix**: switched product-image and payment-proof storage from Replit object storage to local filesystem. The same bundle now runs identically on Replit, Hostinger, VPS, Docker — no cloud SDK required.
+  - `artifacts/api-server/src/routes/upload.ts`: rewrote `POST /api/upload/product-image` and `POST /api/upload/product-image-refresh` to write/read files under `process.env.UPLOADS_DIR ?? ./uploads`. Returns absolute URL `${PUBLIC_BASE_URL or req-derived}/api/uploads/<key>`. Path-traversal-safe (`..` and absolute keys rejected on refresh).
+  - `artifacts/api-server/src/app.ts`: added `app.set("trust proxy", 1)` so `req.protocol` returns `https` behind Hostinger's reverse proxy. Mounted `express.static(UPLOADS_DIR)` at `/api/uploads` with 1-day cache. Bumped `express.json({ limit: "20mb" })` and `urlencoded({ limit: "20mb" })` to fit base64 image payloads (was crashing silently at the default 100kb).
+  - `artifacts/api-server/package.json`: removed `@google-cloud/storage` and `@replit/object-storage` from `dependencies`. `pnpm install` removed 50 transitive packages.
+  - `deploy-package/api-server/.env.example`: replaced the dead `DEFAULT_OBJECT_STORAGE_BUCKET_ID` block with `UPLOADS_DIR=./uploads` (recommended: persistent path outside app folder) and optional `PUBLIC_BASE_URL=https://api.your-domain.com`.
+  - `deploy-package/api-server/README.md` and root `README.md`: documented the new env vars and that uploads work out-of-the-box on any Node host with no cloud SDK.
+- **End-to-end smoke test passed** (against dev server at `localhost:80`):
+  - `POST /api/auth/login admin/admin123` → token
+  - `POST /api/upload/product-image` (1×1 transparent PNG, base64) → `{url, key}` with absolute URL
+  - `GET /api/uploads/<key>` → HTTP 200, content-type `image/png`, 68 bytes
+  - `POST /api/upload/product-image-refresh` → returns same URL
+- **Hostinger boot simulation passed**: copied `deploy-package/api-server/` to `/tmp/hostinger-sim/` (no `node_modules`), ran `npm start` → server listening, `/api/healthz` → 200, `/api/uploads/missing.jpg` → 404 (no crash).
+- Rebuilt deploy bundle: `api-server/dist/index.mjs` (2.5 MB), `coins-sale-source.tar.gz` (1.6 MB), `coins-sale-source.zip` (1.8 MB).
+
+### May 1, 2026 — Root `start` script for Hostinger root-mounted deploys
+- Added `"start": "node --enable-source-maps ./deploy-package/api-server/dist/index.mjs"` to the root `package.json` so Hostinger works whether Application Root is set to the repo root OR to `deploy-package/api-server`. README updated with both configs (repo-subfolder root recommended for fastest install).
+
 ### May 1, 2026 — GitHub-ready repo (Hostinger one-click deploy)
 - Rewrote `.gitignore` to make the repo clean for `git push origin main` and seamless Hostinger Node.js deployment from GitHub:
   - **Un-ignored** `deploy-package/api-server/dist/**` so the prebuilt ESM bundle (`index.mjs`) ships to GitHub. Hostinger never runs `npm install`/`build` — it just runs `node dist/index.mjs`.

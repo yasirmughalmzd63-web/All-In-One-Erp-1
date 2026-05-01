@@ -23,6 +23,10 @@ node_modules/
 *.pem
 *.key
 
+# ── User-uploaded files (product images, payment proofs) ──────
+uploads/
+artifacts/api-server/uploads/
+
 # ── Android build output (mobile) ──────────────────────────────
 artifacts/mobile/android/build/
 artifacts/mobile/android/app/build/

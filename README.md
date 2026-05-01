@@ -36,15 +36,16 @@ You only need the contents of **`deploy-package/api-server/`** on Hostinger —
 the rest of the repo is the source code (used to rebuild the bundle when you
 change something).
 
-### Quickstart
+### Quickstart — recommended config (fastest, cleanest)
 
 1. **Push this repo to GitHub** (see "Push to GitHub" below).
 2. In Hostinger control panel → **PostgreSQL** → create a database.
-   Run `deploy-package/api-server/schema.sql` against it once.
+   Run `deploy-package/api-server/schema.sql` against it once (see
+   `deploy-package/api-server/README.md` for the SQL).
 3. In Hostinger → **Node.js** → create a new app:
    - **Git repo:** your GitHub repo URL
    - **Branch:** `main`
-   - **Application root:** `deploy-package/api-server`
+   - **Application root:** `deploy-package/api-server`  ← important!
    - **Startup file:** `dist/index.mjs`
    - **Node.js version:** 20.x or later
 4. In the Node.js app's **Environment Variables** tab, set:
@@ -52,15 +53,40 @@ change something).
    - `NODE_ENV` — `production`
    - `SESSION_SECRET` — any long random string (≥ 32 chars)
    - `PORT` — usually auto-assigned by Hostinger; leave blank if so
+   - `UPLOADS_DIR` — path to a writable folder for product images and
+     payment-proof screenshots. Recommend a persistent path **outside** the
+     app folder so files survive redeploys, e.g.
+     `/home/<hostinger-user>/coins-sale-uploads`. Defaults to `./uploads`.
+   - `PUBLIC_BASE_URL` *(optional)* — your HTTPS base URL, e.g.
+     `https://api.your-domain.com`. If blank, the server derives it from
+     the request. Setting it explicitly is safer.
 5. Click **Start App**. Visit `https://your-domain.com/api/health` — it should
    return `{"ok": true, ...}`.
 
-Full step-by-step (with screenshots-style guidance) is in
-**`deploy-package/api-server/README.md`**.
+> Why **Application Root = `deploy-package/api-server`**? That folder has its
+> own tiny `package.json` with **zero** runtime dependencies. Hostinger's
+> install phase finishes in ~2 seconds and then `npm start` runs
+> `node --enable-source-maps ./dist/index.mjs`. The bundle is fully
+> self-contained.
+
+### Alternative — Application Root = repo root (also works)
+
+If you'd rather keep Hostinger pointed at the repo root (e.g. you set it up
+that way already), that's fine — the root `package.json` now has a `start`
+script that points at the same bundle:
+
+- **Application root:** `/` (repo root)
+- **Startup file:** leave default; Hostinger will run `pnpm start` which
+  invokes `node --enable-source-maps ./deploy-package/api-server/dist/index.mjs`
+- The install step will be slower (~10 s) because pnpm walks the whole
+  workspace, but it only installs root devDependencies (prettier, typescript)
+  — nothing runtime.
+
+Either way works. The first option is just leaner.
 
 > The bundle in `deploy-package/api-server/dist/` is committed to the repo on
-> purpose. Hostinger does **not** need to run `npm install` or build anything —
-> it just runs `node dist/index.mjs`.
+> purpose. Hostinger does **not** need to compile or build anything — it just
+> runs `node dist/index.mjs`.
 
 ---
 
