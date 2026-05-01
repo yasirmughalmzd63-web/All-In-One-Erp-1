@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { and, eq, gte, lte, isNotNull } from "drizzle-orm";
+import { and, eq, gte, lte, inArray, isNotNull } from "drizzle-orm";
 import {
-  db, accountsTable, salesTable, purchasesTable,
-  expensesTable, creditPaymentsTable,
+  db, accountsTable, salesTable, saleItemsTable, purchasesTable,
+  expensesTable, creditPaymentsTable, usersTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { isAdmin } from "../lib/permissions.js";
@@ -28,6 +28,12 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
   const fromDate = fromStr ? new Date(fromStr + "T00:00:00Z") : null;
   const toDate   = toStr   ? new Date(toStr   + "T23:59:59Z") : null;
 
+  /* Optional userId / productId (app) filters */
+  const userIdRaw    = req.query["userId"];
+  const productIdRaw = req.query["productId"];
+  const filterUserId    = userIdRaw    && !isNaN(parseInt(String(userIdRaw),    10)) ? parseInt(String(userIdRaw),    10) : null;
+  const filterProductId = productIdRaw && !isNaN(parseInt(String(productIdRaw), 10)) ? parseInt(String(productIdRaw), 10) : null;
+
   /* ── Fetch account info ── */
   const [account] = await db.select().from(accountsTable).where(eq(accountsTable.id, accountId));
   if (!account) { res.status(404).json({ error: "Account not found" }); return; }
@@ -49,6 +55,22 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
     return parts;
   };
 
+  const userFilter = (col: Parameters<typeof eq>[0]) =>
+    filterUserId != null ? [eq(col, filterUserId)] : [];
+
+  /* When an "App" (product) filter is active we restrict to entry-source rows
+     that are tied to that product. Sales link via saleItems; credit_payments
+     have a direct productId column. Purchases/expenses have no product
+     concept, so they are excluded when the filter is on. */
+  const salesProductFilter = filterProductId != null
+    ? [inArray(
+        salesTable.id,
+        db.select({ id: saleItemsTable.saleId })
+          .from(saleItemsTable)
+          .where(eq(saleItemsTable.productId, filterProductId))
+      )]
+    : [];
+
   /* ── Sales → money IN ── */
   const salesRows = await db.select({
     id: salesTable.id,
@@ -56,65 +78,105 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
     amountPaid: salesTable.amountPaid,
     paymentMethod: salesTable.paymentMethod,
     notes: salesTable.notes,
+    userId: salesTable.userId,
     createdAt: salesTable.createdAt,
   }).from(salesTable).where(
     and(
       eq(salesTable.accountId, accountId),
       tenantWhere(req, salesTable.businessId),
       ...dateFilters(salesTable.createdAt),
+      ...userFilter(salesTable.userId),
+      ...salesProductFilter,
     )
   );
 
-  /* ── Purchases → money OUT ── */
-  const purchaseRows = await db.select({
+  /* ── Purchases → money OUT (skipped when product filter is on) ── */
+  const purchaseRows = filterProductId != null ? [] : await db.select({
     id: purchasesTable.id,
     invoiceNo: purchasesTable.invoiceNo,
     amountPaid: purchasesTable.amountPaid,
     notes: purchasesTable.notes,
+    userId: purchasesTable.userId,
     createdAt: purchasesTable.createdAt,
   }).from(purchasesTable).where(
     and(
       eq(purchasesTable.accountId, accountId),
       tenantWhere(req, purchasesTable.businessId),
       ...dateFilters(purchasesTable.createdAt),
+      ...userFilter(purchasesTable.userId),
     )
   );
 
-  /* ── Expenses → money OUT ── */
-  const expenseRows = await db.select({
+  /* ── Expenses → money OUT (skipped when product filter is on) ── */
+  const expenseRows = filterProductId != null ? [] : await db.select({
     id: expensesTable.id,
     title: expensesTable.title,
     amount: expensesTable.amount,
     notes: expensesTable.notes,
+    userId: expensesTable.userId,
     createdAt: expensesTable.createdAt,
   }).from(expensesTable).where(
     and(
       eq(expensesTable.accountId, accountId),
       tenantWhere(req, expensesTable.businessId),
       ...dateFilters(expensesTable.createdAt),
+      ...userFilter(expensesTable.userId),
     )
   );
 
   /* ── Credit payments → money IN ── */
+  const cpProductFilter = filterProductId != null
+    ? [eq(creditPaymentsTable.productId, filterProductId)]
+    : [];
   const cpRows = await db.select({
     id: creditPaymentsTable.id,
     creditId: creditPaymentsTable.creditId,
     amount: creditPaymentsTable.amount,
     notes: creditPaymentsTable.notes,
+    userId: creditPaymentsTable.userId,
     createdAt: creditPaymentsTable.createdAt,
   }).from(creditPaymentsTable).where(
     and(
       eq(creditPaymentsTable.accountId, accountId),
       tenantWhere(req, creditPaymentsTable.businessId),
       ...dateFilters(creditPaymentsTable.createdAt),
+      ...userFilter(creditPaymentsTable.userId),
+      ...cpProductFilter,
     )
   );
+
+  /* ── Resolve userId → username for entry display ── */
+  const userIdSet = new Set<number>();
+  salesRows.forEach(r => userIdSet.add(r.userId));
+  purchaseRows.forEach(r => userIdSet.add(r.userId));
+  expenseRows.forEach(r => userIdSet.add(r.userId));
+  cpRows.forEach(r => userIdSet.add(r.userId));
+  const userMap = new Map<number, { username: string; name: string | null }>();
+  if (userIdSet.size > 0) {
+    const users = await db.select({
+      id: usersTable.id,
+      username: usersTable.username,
+      name: usersTable.name,
+    }).from(usersTable).where(
+      and(
+        inArray(usersTable.id, Array.from(userIdSet)),
+        tenantWhere(req, usersTable.businessId),
+      )
+    );
+    users.forEach(u => userMap.set(u.id, { username: u.username, name: u.name ?? null }));
+  }
+  const labelFor = (uid: number) => {
+    const u = userMap.get(uid);
+    if (!u) return `#${uid}`;
+    return u.name && u.name.trim() ? u.name : u.username;
+  };
 
   /* ── Merge all into a flat entry list ── */
   type Entry = {
     id: string; date: string; description: string;
     credit: number; debit: number; kind: string;
     notes: string | null;
+    userId: number; userName: string;
   };
 
   const entries: Entry[] = [
@@ -126,6 +188,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
       debit: 0,
       kind: "sale",
       notes: r.notes ?? null,
+      userId: r.userId, userName: labelFor(r.userId),
     })),
     ...purchaseRows.map(r => ({
       id: `purchase-${r.id}`,
@@ -135,6 +198,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
       debit: parseFloat(r.amountPaid),
       kind: "purchase",
       notes: r.notes ?? null,
+      userId: r.userId, userName: labelFor(r.userId),
     })),
     ...expenseRows.map(r => ({
       id: `expense-${r.id}`,
@@ -144,6 +208,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
       debit: parseFloat(r.amount),
       kind: "expense",
       notes: r.notes ?? null,
+      userId: r.userId, userName: labelFor(r.userId),
     })),
     ...cpRows.map(r => ({
       id: `cpayment-${r.id}`,
@@ -153,6 +218,7 @@ router.get("/cash-management/statement", requireAuth, async (req, res): Promise<
       debit: 0,
       kind: "credit_payment",
       notes: r.notes ?? null,
+      userId: r.userId, userName: labelFor(r.userId),
     })),
   ];
 

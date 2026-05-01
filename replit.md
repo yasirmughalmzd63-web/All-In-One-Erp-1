@@ -173,3 +173,15 @@ lib/db/src/schema/   — 14 table definitions
 - Categories: sales, purchases, expenses, credits (PKR), dollar-wallet (also resets wallet balances), app-wallets (USDT topups + coin credits), stock-transfers, cash-counts, currencies, hrm (attendance/payroll/bonuses/fines/leaves), audit-logs, account-balances → 0, product-stock → 0.
 - Special category `all-transactions` runs every category except audit-logs in sequence.
 - UI safety: each clear opens a confirm modal that requires typing **RESET** to enable the Clear Now button. Master data (users, customers, suppliers, products, accounts, wallets, employees) is never deleted by these actions.
+
+### May 1, 2026 — Cash Management user/app filters
+- Backend `GET /api/cash-management/statement` now also accepts optional `userId` and `productId` query params.
+  - `userId` filters every source-of-funds (sales, purchases, expenses, credit_payments).
+  - `productId` ("App") filters sales via a `saleItems` subquery and credit_payments via its `productId` column; purchases/expenses are excluded when this filter is on (no product concept).
+  - Each entry now also returns `userId` + `userName`, resolved via a single tenant-scoped batch lookup on `usersTable` (no per-row query).
+- Mobile `cash-management.tsx`:
+  - New top filter chip row showing **USER** and **APP** with x-circle clear buttons; opens bottom-sheet pickers.
+  - "All time" preset added to the date filter modal (sets `from` to 2000-01-01).
+  - Account tabs polished: larger icons, color-matched active background, soft shadow.
+  - Per-row user label (`👤 name`) appended to date line.
+  - Share/CSV export now includes the active User and App filter context plus a User column.

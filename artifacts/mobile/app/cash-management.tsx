@@ -21,7 +21,10 @@ interface StatementEntry {
   id: string; date: string; description: string;
   credit: number; debit: number; balance: number;
   kind: string; notes: string | null;
+  userId?: number; userName?: string;
 }
+interface UserOption { id: number; username: string; name?: string | null; role?: string }
+interface ProductOption { id: number; name: string }
 interface StatementData {
   account: AccountSummary;
   summary: {
@@ -86,18 +89,32 @@ export default function CashManagementScreen() {
   const [direction, setDirection] = useState<Direction>("all");
   const [filterOpen, setFilterOpen] = useState(false);
 
+  /* User + App (product) filters */
+  const [users,     setUsers]     = useState<UserOption[]>([]);
+  const [products,  setProducts]  = useState<ProductOption[]>([]);
+  const [userId,    setUserId]    = useState<number | null>(null);
+  const [productId, setProductId] = useState<number | null>(null);
+  const [userPickerOpen, setUserPickerOpen] = useState(false);
+  const [appPickerOpen,  setAppPickerOpen]  = useState(false);
+
   const headers = { Authorization: `Bearer ${token}` };
 
-  /* ── Load accounts ── */
+  /* ── Load accounts + users + products ── */
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(getApiUrl("/api/cash-management/accounts"), { headers });
-        if (r.ok) {
-          const list: AccountSummary[] = await r.json();
+        const [accRes, userRes, prodRes] = await Promise.all([
+          fetch(getApiUrl("/api/cash-management/accounts"), { headers }),
+          fetch(getApiUrl("/api/users"),    { headers }),
+          fetch(getApiUrl("/api/products"), { headers }),
+        ]);
+        if (accRes.ok) {
+          const list: AccountSummary[] = await accRes.json();
           setAccounts(list);
           if (list.length > 0) setSelAcc(list[0]!);
         }
+        if (userRes.ok) setUsers(await userRes.json());
+        if (prodRes.ok) setProducts(await prodRes.json());
       } finally { setAccsLoading(false); }
     })();
   }, [token]);
@@ -107,15 +124,24 @@ export default function CashManagementScreen() {
     if (!selAcc) return;
     if (refresh) setRefreshing(true); else setLoading(true);
     try {
-      const url = getApiUrl(
-        `/api/cash-management/statement?accountId=${selAcc.id}&from=${from}&to=${to}&direction=${direction}`
-      );
-      const r = await fetch(url, { headers });
+      const params = new URLSearchParams({
+        accountId: String(selAcc.id),
+        from, to, direction,
+      });
+      if (userId    != null) params.set("userId",    String(userId));
+      if (productId != null) params.set("productId", String(productId));
+      const r = await fetch(getApiUrl(`/api/cash-management/statement?${params}`), { headers });
       if (r.ok) setData(await r.json());
     } finally { setLoading(false); setRefreshing(false); }
-  }, [selAcc?.id, from, to, direction, token]);
+  }, [selAcc?.id, from, to, direction, userId, productId, token]);
 
-  useEffect(() => { if (selAcc) loadStatement(); }, [selAcc?.id, from, to, direction]);
+  useEffect(() => { if (selAcc) loadStatement(); }, [selAcc?.id, from, to, direction, userId, productId]);
+
+  /* Lookup helpers for chip labels */
+  const selUser = userId    != null ? users.find(u => u.id === userId)       ?? null : null;
+  const selProd = productId != null ? products.find(p => p.id === productId) ?? null : null;
+  const selUserLabel = selUser ? (selUser.name && selUser.name.trim() ? selUser.name : selUser.username) : "All Users";
+  const selProdLabel = selProd ? selProd.name : "All Apps";
 
   /* ── Export ── */
   const handleExport = async () => {
@@ -126,17 +152,20 @@ export default function CashManagementScreen() {
       `Cash Management Statement — ${account.name}`,
       `Type: ${account.type.toUpperCase()} | Currency: ${account.currency}`,
       `Period: ${from} to ${to}`,
+      `User filter: ${selUserLabel}`,
+      `App  filter: ${selProdLabel}`,
       "",
       `Opening Balance:  ${PKR(summary.openingBalance)}`,
       `Total In:         ${PKR(summary.totalIn)}`,
       `Total Out:        ${PKR(summary.totalOut)}`,
       `Closing Balance:  ${PKR(summary.closingBalance)}`,
       "",
-      "Date,Time,Description,Debit,Credit,Balance,Kind",
+      "Date,Time,Description,User,Debit,Credit,Balance,Kind",
     ].join("\n");
 
     const rows = entries.map(e =>
       `"${isoToDate(e.date)}","${isoToTime(e.date)}","${e.description.replace(/"/g, "'")}",` +
+      `"${(e.userName ?? "").replace(/"/g, "'")}",` +
       `${e.debit > 0 ? PKR(e.debit) : ""},${e.credit > 0 ? PKR(e.credit) : ""},${PKR(e.balance)},${e.kind}`
     ).join("\n");
 
@@ -180,9 +209,42 @@ export default function CashManagementScreen() {
         </View>
       </View>
 
+      {/* ── User + App filter chips (TOP of screen) ── */}
+      <View style={[s.topFilterBar, { backgroundColor: colors.card, borderBottomColor: colors.border }]}>
+        <TouchableOpacity style={[s.topFilterChip, userId != null && s.topFilterChipActive]} onPress={() => setUserPickerOpen(true)}>
+          <View style={[s.topFilterIcon, { backgroundColor: userId != null ? "rgba(255,255,255,0.25)" : "#EEF2FF" }]}>
+            <Feather name="user" size={13} color={userId != null ? "#FFF" : "#4F46E5"} />
+          </View>
+          <View style={{ flexShrink: 1 }}>
+            <Text style={[s.topFilterChipLabel, userId != null && { color: "rgba(255,255,255,0.8)" }]}>USER</Text>
+            <Text style={[s.topFilterChipValue, userId != null && { color: "#FFF" }]} numberOfLines={1}>{selUserLabel}</Text>
+          </View>
+          {userId != null && (
+            <TouchableOpacity onPress={() => setUserId(null)} hitSlop={8}>
+              <Feather name="x-circle" size={15} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.topFilterChip, productId != null && s.topFilterChipActive]} onPress={() => setAppPickerOpen(true)}>
+          <View style={[s.topFilterIcon, { backgroundColor: productId != null ? "rgba(255,255,255,0.25)" : "#FEF3C7" }]}>
+            <Feather name="grid" size={13} color={productId != null ? "#FFF" : "#D97706"} />
+          </View>
+          <View style={{ flexShrink: 1 }}>
+            <Text style={[s.topFilterChipLabel, productId != null && { color: "rgba(255,255,255,0.8)" }]}>APP</Text>
+            <Text style={[s.topFilterChipValue, productId != null && { color: "#FFF" }]} numberOfLines={1}>{selProdLabel}</Text>
+          </View>
+          {productId != null && (
+            <TouchableOpacity onPress={() => setProductId(null)} hitSlop={8}>
+              <Feather name="x-circle" size={15} color="rgba(255,255,255,0.85)" />
+            </TouchableOpacity>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* ── Account tabs ── */}
       <View style={[s.accTabBar, { borderBottomColor: colors.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 8, paddingVertical: 10 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 10, paddingVertical: 12 }}>
           {accounts.map(a => {
             const meta = getAccColor(a.type);
             const active = selAcc?.id === a.id;
@@ -190,14 +252,19 @@ export default function CashManagementScreen() {
               <TouchableOpacity
                 key={a.id}
                 onPress={() => setSelAcc(a)}
-                style={[s.accTab, active && { backgroundColor: "#2563EB", borderColor: "#2563EB" }, !active && { borderColor: colors.border, backgroundColor: colors.card }]}
+                style={[
+                  s.accTab,
+                  active
+                    ? { backgroundColor: meta.color, borderColor: meta.color, shadowColor: meta.color, shadowOpacity: 0.3, shadowRadius: 6, shadowOffset: { width: 0, height: 3 }, elevation: 3 }
+                    : { borderColor: colors.border, backgroundColor: colors.card },
+                ]}
               >
                 <View style={[s.accTabIcon, { backgroundColor: active ? "rgba(255,255,255,0.25)" : meta.bg }]}>
-                  <Feather name={meta.icon} size={13} color={active ? "#FFF" : meta.color} />
+                  <Feather name={meta.icon} size={16} color={active ? "#FFF" : meta.color} />
                 </View>
                 <View>
                   <Text style={[s.accTabName, active && { color: "#FFF" }]}>{a.name}</Text>
-                  <Text style={[s.accTabBal, active && { color: "rgba(255,255,255,0.8)" }]}>
+                  <Text style={[s.accTabBal, active && { color: "rgba(255,255,255,0.85)" }]}>
                     {PKR(a.balance)}
                   </Text>
                 </View>
@@ -212,7 +279,7 @@ export default function CashManagementScreen() {
         </ScrollView>
       </View>
 
-      {/* ── Filter bar ── */}
+      {/* ── Date + Direction bar ── */}
       <View style={[s.filterBar, { borderBottomColor: colors.border, backgroundColor: colors.card }]}>
         <TouchableOpacity style={s.filterPill} onPress={() => setFilterOpen(true)}>
           <Feather name="calendar" size={14} color="#2563EB" />
@@ -284,10 +351,13 @@ export default function CashManagementScreen() {
                     <Feather name={meta.icon} size={15} color={meta.color} />
                   </View>
 
-                  {/* Description + date */}
+                  {/* Description + date + user */}
                   <View style={{ flex: 2.8 }}>
                     <Text style={s.entryDesc} numberOfLines={1}>{e.description}</Text>
-                    <Text style={s.entryDate}>{isoToDate(e.date)} · {isoToTime(e.date)}</Text>
+                    <Text style={s.entryDate}>
+                      {isoToDate(e.date)} · {isoToTime(e.date)}
+                      {e.userName ? `  ·  👤 ${e.userName}` : ""}
+                    </Text>
                     {e.notes ? <Text style={s.entryNotes} numberOfLines={1}>{e.notes}</Text> : null}
                   </View>
 
@@ -346,12 +416,15 @@ export default function CashManagementScreen() {
               { label: "30 days",  days: 30 },
               { label: "90 days",  days: 90 },
               { label: "This month", days: -1 },
+              { label: "All time",   days: -2 },
             ].map(({ label, days }) => (
               <TouchableOpacity
                 key={label}
                 style={s.quickRange}
                 onPress={() => {
-                  if (days === -1) {
+                  if (days === -2) {
+                    setFrom("2000-01-01"); setTo(todayStr());
+                  } else if (days === -1) {
                     const now = new Date();
                     const f = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
                     setFrom(f); setTo(todayStr());
@@ -369,6 +442,87 @@ export default function CashManagementScreen() {
           <TouchableOpacity style={s.applyBtn} onPress={() => setFilterOpen(false)}>
             <Text style={s.applyBtnText}>Apply Filter</Text>
           </TouchableOpacity>
+        </View>
+      </Modal>
+
+      {/* ── User picker ── */}
+      <Modal visible={userPickerOpen} transparent animationType="slide" onRequestClose={() => setUserPickerOpen(false)}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setUserPickerOpen(false)} />
+        <View style={[s.filterSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 20, maxHeight: "75%" }]}>
+          <View style={s.filterSheetHandle} />
+          <Text style={[s.filterSheetTitle, { color: colors.text }]}>Filter by User</Text>
+          <ScrollView style={{ maxHeight: 420 }}>
+            <TouchableOpacity
+              style={[s.pickerRow, userId == null && s.pickerRowActive]}
+              onPress={() => { setUserId(null); setUserPickerOpen(false); }}
+            >
+              <View style={[s.pickerIcon, { backgroundColor: "#EEF2FF" }]}>
+                <Feather name="users" size={15} color="#4F46E5" />
+              </View>
+              <Text style={[s.pickerName, { color: colors.text }]}>All Users</Text>
+              {userId == null && <Feather name="check" size={18} color="#059669" />}
+            </TouchableOpacity>
+            {users.map(u => {
+              const label = u.name && u.name.trim() ? u.name : u.username;
+              const active = userId === u.id;
+              return (
+                <TouchableOpacity
+                  key={u.id}
+                  style={[s.pickerRow, active && s.pickerRowActive]}
+                  onPress={() => { setUserId(u.id); setUserPickerOpen(false); }}
+                >
+                  <View style={[s.pickerIcon, { backgroundColor: "#EEF2FF" }]}>
+                    <Feather name="user" size={15} color="#4F46E5" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[s.pickerName, { color: colors.text }]}>{label}</Text>
+                    {u.role ? <Text style={s.pickerSub}>{u.role}</Text> : null}
+                  </View>
+                  {active && <Feather name="check" size={18} color="#059669" />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── App (Product) picker ── */}
+      <Modal visible={appPickerOpen} transparent animationType="slide" onRequestClose={() => setAppPickerOpen(false)}>
+        <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setAppPickerOpen(false)} />
+        <View style={[s.filterSheet, { backgroundColor: colors.card, paddingBottom: insets.bottom + 20, maxHeight: "75%" }]}>
+          <View style={s.filterSheetHandle} />
+          <Text style={[s.filterSheetTitle, { color: colors.text }]}>Filter by App</Text>
+          <Text style={[s.filterLabel, { color: colors.textSecondary, marginBottom: 8 }]}>
+            Note: when an App filter is on, only sales and credit-payments tied to that app are shown.
+          </Text>
+          <ScrollView style={{ maxHeight: 400 }}>
+            <TouchableOpacity
+              style={[s.pickerRow, productId == null && s.pickerRowActive]}
+              onPress={() => { setProductId(null); setAppPickerOpen(false); }}
+            >
+              <View style={[s.pickerIcon, { backgroundColor: "#FEF3C7" }]}>
+                <Feather name="grid" size={15} color="#D97706" />
+              </View>
+              <Text style={[s.pickerName, { color: colors.text }]}>All Apps</Text>
+              {productId == null && <Feather name="check" size={18} color="#059669" />}
+            </TouchableOpacity>
+            {products.map(p => {
+              const active = productId === p.id;
+              return (
+                <TouchableOpacity
+                  key={p.id}
+                  style={[s.pickerRow, active && s.pickerRowActive]}
+                  onPress={() => { setProductId(p.id); setAppPickerOpen(false); }}
+                >
+                  <View style={[s.pickerIcon, { backgroundColor: "#FEF3C7" }]}>
+                    <Feather name="package" size={15} color="#D97706" />
+                  </View>
+                  <Text style={[s.pickerName, { color: colors.text, flex: 1 }]} numberOfLines={1}>{p.name}</Text>
+                  {active && <Feather name="check" size={18} color="#059669" />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -398,11 +552,24 @@ const s = StyleSheet.create({
   exportBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   exportBtnText: { color: "#FFF", fontSize: 13, fontFamily: "Inter_700Bold" },
 
+  topFilterBar: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1 },
+  topFilterChip: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 12, borderWidth: 1.5, borderColor: "#E5E7EB", backgroundColor: "#F9FAFB", paddingHorizontal: 10, paddingVertical: 8 },
+  topFilterChipActive: { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
+  topFilterIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  topFilterChipLabel: { fontSize: 9, color: "#9CA3AF", fontFamily: "Inter_700Bold", letterSpacing: 0.6 },
+  topFilterChipValue: { fontSize: 12, color: "#1F2937", fontFamily: "Inter_700Bold", marginTop: 1 },
+
   accTabBar: { borderBottomWidth: 1 },
-  accTab: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 12, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 8 },
-  accTabIcon: { width: 28, height: 28, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  accTab: { flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 10 },
+  accTabIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   accTabName: { fontSize: 13, fontWeight: "700", color: "#1F2937", fontFamily: "Inter_700Bold" },
-  accTabBal: { fontSize: 11, color: "#6B7280", fontFamily: "Inter_400Regular" },
+  accTabBal: { fontSize: 11, color: "#6B7280", fontFamily: "Inter_400Regular", marginTop: 1 },
+
+  pickerRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, paddingHorizontal: 6, borderRadius: 8 },
+  pickerRowActive: { backgroundColor: "#F0FDF4" },
+  pickerIcon: { width: 32, height: 32, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  pickerName: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  pickerSub:  { fontSize: 11, color: "#9CA3AF", fontFamily: "Inter_400Regular", marginTop: 1, textTransform: "uppercase", letterSpacing: 0.5 },
 
   filterBar: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 8, gap: 10, borderBottomWidth: 1 },
   filterPill: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#EFF6FF", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
