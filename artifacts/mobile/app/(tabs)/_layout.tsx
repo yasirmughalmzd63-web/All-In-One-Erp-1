@@ -1,3 +1,4 @@
+import { Feather } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { isLiquidGlassAvailable } from "expo-glass-effect";
 import { Tabs } from "expo-router";
@@ -11,27 +12,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useColors } from "@/hooks/useColors";
 
+type FeatherName = React.ComponentProps<typeof Feather>["name"];
+
 type TabBarProps = {
   state: { index: number; routes: { key: string; name: string }[] };
   descriptors?: unknown;
   navigation: { emit: (e: { type: string; target: string; canPreventDefault: boolean }) => { defaultPrevented: boolean }; navigate: (name: string) => void };
 };
 
-const TAB_CONFIG = [
-  { name: "index",        label: "POS",         icon: "◈", color: "#10B981", shadow: "#10B981" },
-  { name: "dashboard",    label: "Dashboard",   icon: "◉", color: "#3B82F6", shadow: "#3B82F6" },
-  { name: "transactions", label: "Ledger",      icon: "◧", color: "#8B5CF6", shadow: "#8B5CF6" },
-  { name: "inventory",    label: "Stock",       icon: "◫", color: "#F59E0B", shadow: "#F59E0B" },
-  { name: "more",         label: "More",        icon: "⋯", color: "#EC4899", shadow: "#EC4899" },
+const TAB_CONFIG: { name: string; label: string; icon: FeatherName; color: string }[] = [
+  { name: "index",        label: "POS",       icon: "shopping-bag",  color: "#10B981" },
+  { name: "dashboard",    label: "Dashboard", icon: "pie-chart",     color: "#3B82F6" },
+  { name: "transactions", label: "Ledger",    icon: "list",          color: "#8B5CF6" },
+  { name: "inventory",    label: "Stock",     icon: "package",       color: "#F59E0B" },
+  { name: "more",         label: "More",      icon: "grid",          color: "#EC4899" },
 ];
-
-const TAB_ICONS: Record<string, { active: string; inactive: string }> = {
-  index:        { active: "⚡", inactive: "⚡" },
-  dashboard:    { active: "◈", inactive: "◈" },
-  transactions: { active: "☰", inactive: "☰" },
-  inventory:    { active: "⬡", inactive: "⬡" },
-  more:         { active: "•••", inactive: "•••" },
-};
 
 function CustomTabBar({ state, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
@@ -40,63 +35,66 @@ function CustomTabBar({ state, navigation }: TabBarProps) {
   const isWeb = Platform.OS === "web";
   const isIOS = Platform.OS === "ios";
 
-  const bg = isDark ? "#0F172A" : "#FFFFFF";
-  const border = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.07)";
+  const bg = isDark ? "rgba(15,23,42,0.96)" : "rgba(255,255,255,0.96)";
+  const border = isDark ? "rgba(255,255,255,0.05)" : "rgba(15,23,42,0.06)";
+  const inactiveColor = isDark ? "rgba(255,255,255,0.5)" : "rgba(15,23,42,0.45)";
 
   return (
     <View style={[
-      styles.tabBar,
-      {
-        paddingBottom: isWeb ? 12 : Math.max(insets.bottom, 8),
-        backgroundColor: isIOS ? "transparent" : bg,
-        borderTopColor: border,
-      }
+      styles.tabBarWrap,
+      { paddingBottom: isWeb ? 10 : Math.max(insets.bottom, 8) },
     ]}>
-      {isIOS && (
-        <BlurView
-          intensity={90}
-          tint={isDark ? "dark" : "light"}
-          style={StyleSheet.absoluteFill}
-        />
-      )}
-      {state.routes.map((route, index) => {
-        const isFocused = state.index === index;
-        const tab = TAB_CONFIG.find(t => t.name === route.name) ?? TAB_CONFIG[index]!;
+      <View style={[
+        styles.tabBar,
+        {
+          backgroundColor: isIOS ? "transparent" : bg,
+          borderTopColor: border,
+        }
+      ]}>
+        {isIOS && (
+          <BlurView
+            intensity={80}
+            tint={isDark ? "dark" : "light"}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
+        {state.routes.map((route, index) => {
+          const isFocused = state.index === index;
+          const tab = TAB_CONFIG.find(t => t.name === route.name) ?? TAB_CONFIG[index]!;
 
-        const onPress = () => {
-          const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
-          if (!isFocused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
-          }
-        };
+          const onPress = () => {
+            const event = navigation.emit({ type: "tabPress", target: route.key, canPreventDefault: true });
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+            }
+          };
 
-        return (
-          <Pressable
-            key={route.key}
-            onPress={onPress}
-            style={styles.tabItem}
-            android_ripple={{ color: tab.color + "22", borderless: true }}
-          >
-            {isFocused ? (
-              <View style={[styles.activePill, { backgroundColor: tab.color + "18", borderColor: tab.color + "40" }]}>
-                <View style={[styles.iconDot, { backgroundColor: tab.color }]}>
-                  <Text style={styles.iconDotText}>{TAB_ICONS[route.name]?.active ?? "●"}</Text>
+          return (
+            <Pressable
+              key={route.key}
+              onPress={onPress}
+              style={styles.tabItem}
+              android_ripple={{ color: tab.color + "1F", borderless: true, radius: 36 }}
+            >
+              {isFocused ? (
+                <View style={[styles.activePill, { backgroundColor: tab.color + "16" }]}>
+                  <Feather name={tab.icon} size={18} color={tab.color} />
+                  <Text style={[styles.activeLabel, { color: tab.color }]}>
+                    {tab.label}
+                  </Text>
                 </View>
-                <Text style={[styles.activeLabel, { color: tab.color }]}>{tab.label}</Text>
-              </View>
-            ) : (
-              <View style={styles.inactiveTab}>
-                <Text style={[styles.inactiveIcon, { color: isDark ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)" }]}>
-                  {TAB_ICONS[route.name]?.inactive ?? "●"}
-                </Text>
-                <Text style={[styles.inactiveLabel, { color: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.35)" }]}>
-                  {tab.label}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        );
-      })}
+              ) : (
+                <View style={styles.inactiveTab}>
+                  <Feather name={tab.icon} size={20} color={inactiveColor} />
+                  <Text style={[styles.inactiveLabel, { color: inactiveColor }]}>
+                    {tab.label}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -136,54 +134,45 @@ export default function TabLayout() {
 }
 
 const styles = StyleSheet.create({
+  tabBarWrap: {
+    backgroundColor: "transparent",
+  },
   tabBar: {
     flexDirection: "row",
-    borderTopWidth: 1,
-    paddingTop: 10,
-    paddingHorizontal: 8,
+    alignItems: "center",
+    paddingTop: 8,
+    paddingHorizontal: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   tabItem: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingVertical: 4,
     paddingHorizontal: 2,
+    minHeight: 52,
   },
   activePill: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 20,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
-    gap: 6,
-    borderWidth: 1,
-  },
-  iconDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconDotText: {
-    fontSize: 10,
-    color: "#FFF",
-    fontFamily: "Inter_700Bold",
+    borderRadius: 22,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    gap: 7,
   },
   activeLabel: {
     fontFamily: "Inter_700Bold",
-    fontSize: 11,
+    fontSize: 12,
+    letterSpacing: 0.1,
   },
   inactiveTab: {
     alignItems: "center",
-    gap: 3,
+    gap: 4,
     paddingVertical: 4,
-  },
-  inactiveIcon: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
   },
   inactiveLabel: {
     fontFamily: "Inter_500Medium",
-    fontSize: 10,
+    fontSize: 10.5,
+    letterSpacing: 0.1,
   },
 });
