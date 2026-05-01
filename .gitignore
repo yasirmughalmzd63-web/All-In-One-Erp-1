@@ -1,73 +1,49 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
 
-# ── Build output ───────────────────────────────────────────────
-dist/
-tmp/
-out-tsc/
+# compiled output
+dist
+tmp
+out-tsc
 *.tsbuildinfo
-.expo/
-.expo-shared/
+.expo
+.expo-shared
 
-# IMPORTANT: keep the pre-built backend bundle in the repo so Hostinger
-# can run it directly without an `npm install` / build step.
-!deploy-package/api-server/dist/
-!deploy-package/api-server/dist/**
+# dependencies
+node_modules
 
-# ── Dependencies ───────────────────────────────────────────────
-node_modules/
-
-# ── Secrets & local env ────────────────────────────────────────
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-
-# ── Android build output (mobile) ──────────────────────────────
-artifacts/mobile/android/build/
-artifacts/mobile/android/app/build/
-artifacts/mobile/android/.gradle/
-artifacts/mobile/ios/build/
-*.apk
-*.aab
-*.keystore
-
-# ── Replit-only (do not push to GitHub) ────────────────────────
-.cache/
-.local/
-.agents/
-.replit
-.replitignore
-.upm/
-attached_assets/
-replit.md
-
-# ── Logs ───────────────────────────────────────────────────────
-npm-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-*.log
-
-# ── IDE / OS ───────────────────────────────────────────────────
-.idea/
+# IDEs and editors
+/.idea
 .project
 .classpath
 .c9/
 *.launch
 .settings/
 *.sublime-workspace
+
+# IDE - VSCode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-.DS_Store
-Thumbs.db
 
-# ── Misc ───────────────────────────────────────────────────────
+# misc
 /.sass-cache
 /connect.lock
 /coverage
+/libpeerconnection.log
+npm-debug.log
+yarn-error.log
+testem.log
 /typings
+
+# System Files
+.DS_Store
+Thumbs.db
+
 .cursor/rules/nx-rules.mdc
 .github/instructions/nx.instructions.md
+
+# Replit
+.cache/
+.local/

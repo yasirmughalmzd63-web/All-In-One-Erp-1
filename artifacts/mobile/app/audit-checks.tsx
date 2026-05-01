@@ -61,8 +61,8 @@ export default function AuditChecksScreen() {
   const load = useCallback(async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
     try {
-      const resp = await customFetch<Resp>("/api/reports/audit-checks");
-      if (resp) setData(resp);
+      const r = await customFetch("/api/reports/audit-checks");
+      if (r.ok) setData(await r.json());
     } finally { setLoading(false); setRefreshing(false); }
   }, []);
 

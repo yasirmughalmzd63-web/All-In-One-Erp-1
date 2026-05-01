@@ -59,8 +59,8 @@ export default function LocationSummaryScreen() {
       const params = new URLSearchParams();
       if (range.start) params.set("startDate", range.start);
       if (range.end)   params.set("endDate",   range.end);
-      const resp = await customFetch<Resp>(`/api/reports/location-summary?${params.toString()}`);
-      if (resp) setData(resp);
+      const r = await customFetch(`/api/reports/location-summary?${params.toString()}`);
+      if (r.ok) setData(await r.json());
     } finally { setLoading(false); setRefreshing(false); }
   }, [range]);
 

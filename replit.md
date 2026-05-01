@@ -141,16 +141,6 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
-### May 1, 2026 — GitHub-ready repo (Hostinger one-click deploy)
-- Rewrote `.gitignore` to make the repo clean for `git push origin main` and seamless Hostinger Node.js deployment from GitHub:
-  - **Un-ignored** `deploy-package/api-server/dist/**` so the prebuilt ESM bundle (`index.mjs`) ships to GitHub. Hostinger never runs `npm install`/`build` — it just runs `node dist/index.mjs`.
-  - Added explicit ignores for `.env*` (with `!.env.example`), `*.pem`, `*.key`, `*.apk`, `*.aab`, `*.keystore`.
-  - Added ignores for Android build folders (`artifacts/mobile/android/{build,app/build,.gradle}`) and `attached_assets/`, `replit.md`, `.replit`, `.replitignore`, `.local/`, `.cache/`, `.agents/` (Replit-only clutter; FUTURE additions stay out — already-tracked ones need a one-shot `git rm -r --cached` documented in the README).
-  - Other dist/ folders (e.g. `artifacts/api-server/dist/`) stay ignored.
-- Added `.gitattributes`: `* text=auto eol=lf` (LF line endings on Linux/Hostinger regardless of Windows/macOS pushes) plus binary attributes for `*.mjs(.map)` bundle, `*.tar.gz/zip`, images, and APK files.
-- Created root `README.md` with the GitHub→Hostinger quickstart: 5-minute deploy steps (set Application Root = `deploy-package/api-server`, Startup file = `dist/index.mjs`, Node 20+, env vars), what-gets-pushed/ignored explanation, optional cleanup command for legacy Replit files, mobile APK build flow, and update-and-redeploy workflow.
-- Verified: `deploy-package/api-server/dist/index.mjs` (2.6 MB) is tracked; `.env`, `attached_assets/sample.png`, `artifacts/api-server/dist/`, `node_modules/`, Android build dirs are ignored.
-
 ### May 1, 2026 — Allow account balances to go negative (removed "Insufficient funds" 422 gates)
 - Per user request: when a selected account has less balance than the deduct amount, do NOT block with red error. Instead let the transaction proceed and let the account balance go negative (deficit shown in the account's record). Removed the `acctBal < amount` 422 guards in 5 places, keeping all other checks (account exists, tenant ownership, isActive) intact:
   - `usd-bridge.ts` (cash leg of USDT Bridge sale)
@@ -198,28 +188,6 @@ lib/db/src/schema/   — 14 table definitions
 - Categories: sales, purchases, expenses, credits (PKR), dollar-wallet (also resets wallet balances), app-wallets (USDT topups + coin credits), stock-transfers, cash-counts, currencies, hrm (attendance/payroll/bonuses/fines/leaves), audit-logs, account-balances → 0, product-stock → 0.
 - Special category `all-transactions` runs every category except audit-logs in sequence.
 - UI safety: each clear opens a confirm modal that requires typing **RESET** to enable the Clear Now button. Master data (users, customers, suppliers, products, accounts, wallets, employees) is never deleted by these actions.
-
-### May 1, 2026 — Cleanup pass: zero TypeScript errors + local file uploads
-- **Mobile (`@workspace/mobile`)**: typecheck now passes with zero errors.
-  - Added `textSecondary` alias to `constants/colors.ts` (fixed 133 errors across 5 screens).
-  - Removed unused deps: `expo-symbols`, `@expo/ngrok`, `@stardazed/streams-text-encoding`, `@ungap/structured-clone`, `expo-location`, `expo-web-browser`.
-  - Cleaned `app.json`: explicit Android `versionCode`, `adaptiveIcon`, narrowed permissions whitelist (INTERNET / CAMERA / READ_MEDIA_IMAGES) and `blockedPermissions` (audio/location/contacts), proper `expo-image-picker` plugin permission strings.
-  - Rewrote `eas.json`: added `development` and `local-apk` profiles, `autoIncrement: "version"`, removed placeholder env vars.
-  - **Real runtime bug**: 5 report screens (`audit-checks`, `balance-sheet`, `location-summary`, `product-profit`, `profit-loss`) misused `customFetch` as a `Response` (`r.ok`/`r.json()`), but `customFetch<T>()` returns the parsed body directly — they were silently rendering empty. All five screens fixed.
-  - Other TS fixes: `(tabs)/_layout.tsx` TabBar prop cast, `audit.tsx` redundant `??`, `customer-profile.tsx` duplicate `gap` key, `hrm.tsx` Record<string,string> cast through `unknown`, `targets.tsx` employeeId narrowing inside async closure.
-- **API server (`@workspace/api-server`)**: typecheck now passes with zero errors (was 30).
-  - Replaced `@replit/object-storage` (deprecated API surface, won't run on Hostinger) with simple local-filesystem uploads: images saved under `uploads/product-images/<file>` and served at `GET /api/uploads/<key>` via `express.static`. 8 MB limit, key-traversal protection, no signed-URL expiry to manage.
-  - `app.ts` now mounts `/api/uploads` static, raises JSON/urlencoded body limit to 12 MB.
-  - Bulk fix `parseInt(req.params.id!, 10)` → `parseInt(String(req.params.id), 10)` across `app-wallets.ts`, `businesses.ts`, `hrm.ts`, `targets.ts`, `usd-bridge.ts`.
-  - `dashboard.ts` `scopedPeriodFilter` now always returns the result of `and(...)` so drizzle gets a proper `SQL<unknown>`.
-  - Three insert sites (`locations.ts`, `sales.ts`, `usd-bridge.ts`) now assert `req.userId!` since they're behind `requireAuth`.
-  - Removed `@replit/object-storage` from `package.json`.
-- **Deploy bundle refresh** (`deploy-package/`):
-  - Re-bundled `api-server/dist/` (2.5 MB single-file ESM).
-  - Added `api-server/uploads/product-images/` skeleton (must be writable on Hostinger).
-  - Updated `.env.example` (removed obsolete object-storage vars, documented local upload behavior).
-  - Updated `README.md` (uploads folder in tree, two new troubleshooting rows).
-  - Rebuilt `coins-sale-source.tar.gz` and `coins-sale-source.zip` (~1.7 MB each).
 
 ### May 1, 2026 — Cash Management user/app filters
 - Backend `GET /api/cash-management/statement` now also accepts optional `userId` and `productId` query params.

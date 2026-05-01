@@ -433,7 +433,7 @@ const s = StyleSheet.create({
   summaryRow: { flexDirection: "row", paddingHorizontal: 10, paddingVertical: 10, gap: 6 },
 
   tabBar:     { flexDirection: "row", borderBottomWidth: 1, backgroundColor: "#FFF" },
-  tabItem:    { flex: 1, alignItems: "center", paddingVertical: 10, flexDirection: "row", justifyContent: "center", gap: 4 },
+  tabItem:    { flex: 1, alignItems: "center", paddingVertical: 10, gap: 3, flexDirection: "row", justifyContent: "center", gap: 4 },
   tabItemActive: { borderBottomWidth: 2, borderBottomColor: "#2563EB" },
   tabLabel:   { fontSize: 12, color: "#6B7280", fontFamily: "Inter_500Medium" },
   tabLabelActive: { color: "#2563EB", fontFamily: "Inter_700Bold" },

@@ -97,7 +97,7 @@ router.get("/app-wallets", requireAuth, async (req, res): Promise<void> => {
 
 // GET /api/app-wallets/:productId — detail (topup history + credit list)
 router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<void> => {
-  const productId = parseInt(String(req.params.productId), 10);
+  const productId = parseInt(req.params.productId!, 10);
   if (!productId) { res.status(400).json({ error: "Invalid productId" }); return; }
 
   const [product] = await db.select().from(productsTable).where(eq(productsTable.id, productId));
@@ -156,7 +156,7 @@ router.get("/app-wallets/:productId", requireAuth, async (req, res): Promise<voi
 
 // GET /api/app-wallets/credits/:creditId — credit detail with payments
 router.get("/app-wallets/credits/:creditId", requireAuth, async (req, res): Promise<void> => {
-  const creditId = parseInt(String(req.params.creditId), 10);
+  const creditId = parseInt(req.params.creditId!, 10);
   const [credit] = await db.select().from(appCoinCreditsTable).where(eq(appCoinCreditsTable.id, creditId));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
   if (!ownsRow(req, credit.businessId)) { res.status(404).json({ error: "Credit not found" }); return; }
@@ -173,7 +173,7 @@ router.get("/app-wallets/credits/:creditId", requireAuth, async (req, res): Prom
 
 // POST /api/app-wallets/:productId/credits — add new coin credit
 router.post("/app-wallets/:productId/credits", requireAuth, async (req, res): Promise<void> => {
-  const productId = parseInt(String(req.params.productId), 10);
+  const productId = parseInt(req.params.productId!, 10);
   const { customerId, customerName, qty, unitPricePkr, notes, date, dueDate } = req.body as {
     customerId?: number; customerName?: string; qty?: number;
     unitPricePkr?: string; notes?: string | null; date?: string; dueDate?: string | null;
@@ -219,7 +219,7 @@ router.post("/app-wallets/:productId/credits", requireAuth, async (req, res): Pr
 
 // POST /api/app-wallets/credits/:creditId/payment — record a payment
 router.post("/app-wallets/credits/:creditId/payment", requireAuth, async (req, res): Promise<void> => {
-  const creditId = parseInt(String(req.params.creditId), 10);
+  const creditId = parseInt(req.params.creditId!, 10);
   const { amountPkr, method, notes, date } = req.body as {
     amountPkr?: string; method?: string; notes?: string | null; date?: string;
   };
@@ -274,7 +274,7 @@ router.post("/app-wallets/credits/:creditId/payment", requireAuth, async (req, r
 
 // DELETE /api/app-wallets/credits/:creditId
 router.delete("/app-wallets/credits/:creditId", requireAuth, async (req, res): Promise<void> => {
-  const creditId = parseInt(String(req.params.creditId), 10);
+  const creditId = parseInt(req.params.creditId!, 10);
   const [credit] = await db.select().from(appCoinCreditsTable).where(eq(appCoinCreditsTable.id, creditId));
   if (!credit) { res.status(404).json({ error: "Credit not found" }); return; }
   if (!ownsRow(req, credit.businessId)) { res.status(404).json({ error: "Credit not found" }); return; }

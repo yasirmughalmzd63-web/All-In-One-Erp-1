@@ -65,14 +65,14 @@ export default function ProfitLossScreen() {
       if (range.start) params.set("startDate", range.start);
       if (range.end)   params.set("endDate",   range.end);
       if (locId)       params.set("locationId", String(locId));
-      const resp = await customFetch<PLResp>(`/api/reports/profit-loss?${params.toString()}`);
-      if (resp) setData(resp);
+      const r = await customFetch(`/api/reports/profit-loss?${params.toString()}`);
+      if (r.ok) setData(await r.json());
     } finally { setLoading(false); setRefreshing(false); }
   }, [range, locId]);
 
   useEffect(() => {
     if (isAdmin) {
-      customFetch<Location[]>("/api/locations").then((arr) => setLocations(Array.isArray(arr) ? arr : [])).catch(() => setLocations([]));
+      customFetch("/api/locations").then((r: Response) => r.ok ? r.json() : []).then((arr: Location[]) => setLocations(Array.isArray(arr) ? arr : []));
     }
   }, [isAdmin]);
   useEffect(() => { void load(true); }, [load]);

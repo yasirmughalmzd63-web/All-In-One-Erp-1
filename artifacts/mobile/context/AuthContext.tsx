@@ -139,9 +139,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (username: string, password: string) => {
     const domain = process.env.EXPO_PUBLIC_DOMAIN;
-    if (!domain) {
-      throw new Error("EXPO_PUBLIC_DOMAIN is not set — APK was built without an API domain.");
-    }
     const response = await fetch(`https://${domain}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -4,54 +4,21 @@
     "appVersionSource": "local"
   },
   "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_DOMAIN": "REPLACE_WITH_YOUR_API_DOMAIN.example.com"
-      },
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleDebug"
-      }
-    },
     "preview": {
       "distribution": "internal",
-      "channel": "preview",
-      "env": {
-        "EXPO_PUBLIC_DOMAIN": "REPLACE_WITH_YOUR_API_DOMAIN.example.com"
-      },
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "your-api-domain.com"
       }
     },
     "production": {
-      "channel": "production",
-      "autoIncrement": "versionCode",
-      "env": {
-        "EXPO_PUBLIC_DOMAIN": "REPLACE_WITH_YOUR_API_DOMAIN.example.com"
-      },
-      "android": {
-        "buildType": "apk"
-      }
-    },
-    "production-aab": {
-      "channel": "production",
-      "autoIncrement": "versionCode",
-      "env": {
-        "EXPO_PUBLIC_DOMAIN": "REPLACE_WITH_YOUR_API_DOMAIN.example.com"
-      },
       "android": {
         "buildType": "app-bundle"
-      }
-    },
-    "local-apk": {
-      "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_DOMAIN": "REPLACE_WITH_YOUR_API_DOMAIN.example.com"
       },
-      "android": {
-        "buildType": "apk"
+      "env": {
+        "EXPO_PUBLIC_DOMAIN": "your-api-domain.com"
       }
     }
   },

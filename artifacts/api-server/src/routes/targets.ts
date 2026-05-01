@@ -151,7 +151,7 @@ router.post("/targets", requireAuth, async (req, res): Promise<void> => {
 
 /* ═══ UPDATE ══════════════════════════════════════════════════════════════ */
 router.patch("/targets/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
+  const id = parseInt(req.params.id!, 10);
   // NOTE: verifiedAt/verifiedBy are intentionally NOT patchable here — only the
   // verify endpoint (admin-gated) can flip those.
   const allowed = ["title","type","scope","employeeId","userId","targetAmount","commissionType","commissionValue","startDate","endDate","status","locationId","notes","isChallenge"];
@@ -170,7 +170,7 @@ router.patch("/targets/:id", requireAuth, async (req, res): Promise<void> => {
 
 /* ═══ DELETE ══════════════════════════════════════════════════════════════ */
 router.delete("/targets/:id", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
+  const id = parseInt(req.params.id!, 10);
   const [existing] = await db.select({ businessId: targetsTable.businessId, title: targetsTable.title }).from(targetsTable).where(eq(targetsTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }
@@ -190,7 +190,7 @@ router.delete("/targets/:id", requireAuth, async (req, res): Promise<void> => {
  * This is the "verification gate" the operator asked for.
  * ────────────────────────────────────────────────────────────────────────── */
 router.post("/targets/:id/check", requireAuth, async (req, res): Promise<void> => {
-  const id = parseInt(String(req.params.id), 10);
+  const id = parseInt(req.params.id!, 10);
   const target = await db.select().from(targetsTable).where(eq(targetsTable.id, id)).then(r => r[0]);
   if (!target) { res.status(404).json({ error: "Not found" }); return; }
 
@@ -315,7 +315,7 @@ router.post("/targets/:id/verify", requireAuth, async (req, res): Promise<void> 
     res.status(403).json({ error: "Only admins or managers can verify and release bonuses" });
     return;
   }
-  const id = parseInt(String(req.params.id), 10);
+  const id = parseInt(req.params.id!, 10);
   const target = await db.select().from(targetsTable).where(eq(targetsTable.id, id)).then(r => r[0]);
   if (!target)                      { res.status(404).json({ error: "Not found" }); return; }
   if (!target.employeeId)           { res.status(400).json({ error: "No employee linked to this target" }); return; }
@@ -333,7 +333,7 @@ router.post("/targets/:id/apply-commission", requireAuth, async (req, res): Prom
     res.status(403).json({ error: "Only admins or managers can verify and release bonuses" });
     return;
   }
-  const id = parseInt(String(req.params.id), 10);
+  const id = parseInt(req.params.id!, 10);
   const target = await db.select().from(targetsTable).where(eq(targetsTable.id, id)).then(r => r[0]);
   if (!target)                      { res.status(404).json({ error: "Not found" }); return; }
   if (!target.employeeId)           { res.status(400).json({ error: "No employee linked to this target" }); return; }
