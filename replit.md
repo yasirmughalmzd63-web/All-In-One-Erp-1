@@ -141,6 +141,16 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
+### May 1, 2026 — GitHub-ready repo (Hostinger one-click deploy)
+- Rewrote `.gitignore` to make the repo clean for `git push origin main` and seamless Hostinger Node.js deployment from GitHub:
+  - **Un-ignored** `deploy-package/api-server/dist/**` so the prebuilt ESM bundle (`index.mjs`) ships to GitHub. Hostinger never runs `npm install`/`build` — it just runs `node dist/index.mjs`.
+  - Added explicit ignores for `.env*` (with `!.env.example`), `*.pem`, `*.key`, `*.apk`, `*.aab`, `*.keystore`.
+  - Added ignores for Android build folders (`artifacts/mobile/android/{build,app/build,.gradle}`) and `attached_assets/`, `replit.md`, `.replit`, `.replitignore`, `.local/`, `.cache/`, `.agents/` (Replit-only clutter; FUTURE additions stay out — already-tracked ones need a one-shot `git rm -r --cached` documented in the README).
+  - Other dist/ folders (e.g. `artifacts/api-server/dist/`) stay ignored.
+- Added `.gitattributes`: `* text=auto eol=lf` (LF line endings on Linux/Hostinger regardless of Windows/macOS pushes) plus binary attributes for `*.mjs(.map)` bundle, `*.tar.gz/zip`, images, and APK files.
+- Created root `README.md` with the GitHub→Hostinger quickstart: 5-minute deploy steps (set Application Root = `deploy-package/api-server`, Startup file = `dist/index.mjs`, Node 20+, env vars), what-gets-pushed/ignored explanation, optional cleanup command for legacy Replit files, mobile APK build flow, and update-and-redeploy workflow.
+- Verified: `deploy-package/api-server/dist/index.mjs` (2.6 MB) is tracked; `.env`, `attached_assets/sample.png`, `artifacts/api-server/dist/`, `node_modules/`, Android build dirs are ignored.
+
 ### May 1, 2026 — Allow account balances to go negative (removed "Insufficient funds" 422 gates)
 - Per user request: when a selected account has less balance than the deduct amount, do NOT block with red error. Instead let the transaction proceed and let the account balance go negative (deficit shown in the account's record). Removed the `acctBal < amount` 422 guards in 5 places, keeping all other checks (account exists, tenant ownership, isActive) intact:
   - `usd-bridge.ts` (cash leg of USDT Bridge sale)
