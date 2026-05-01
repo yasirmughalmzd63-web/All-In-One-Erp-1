@@ -18,7 +18,15 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 
-setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+const API_DOMAIN = process.env.EXPO_PUBLIC_DOMAIN;
+if (!API_DOMAIN) {
+  throw new Error(
+    "EXPO_PUBLIC_DOMAIN is not set. Set it in artifacts/mobile/.env (local) " +
+    "or in eas.json `env` (cloud build) before building the APK. " +
+    "Example: EXPO_PUBLIC_DOMAIN=api.example.com",
+  );
+}
+setBaseUrl(`https://${API_DOMAIN}`);
 
 SplashScreen.preventAutoHideAsync();
 

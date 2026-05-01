@@ -256,6 +256,7 @@ export default function TargetsScreen() {
       Alert.alert("No Employee", "Link an employee to this target to verify.");
       return;
     }
+    const empId: number = t.employeeId;
     const baseAmt = t.commissionType === "percentage"
       ? (parseFloat(t.achievedAmount) * parseFloat(t.commissionValue)) / 100
       : parseFloat(t.commissionValue);
@@ -266,7 +267,7 @@ export default function TargetsScreen() {
 
     Alert.alert(
       "Verify & Pay Bonus",
-      `Release ${breakdown} bonus to ${empMap[t.employeeId] ?? "employee"} for target "${t.title}"?\n\nThis adds the bonus to HRM and the next payroll cycle.`,
+      `Release ${breakdown} bonus to ${empMap[empId] ?? "employee"} for target "${t.title}"?\n\nThis adds the bonus to HRM and the next payroll cycle.`,
       [
         { text: "Cancel", style: "cancel" },
         { text: "Verify & Pay", onPress: async () => {
@@ -275,7 +276,7 @@ export default function TargetsScreen() {
             const r = await fetch(getApiUrl(`/api/targets/${t.id}/verify`), { method: "POST", headers });
             if (!r.ok) { Alert.alert("Error", (await r.json()).error ?? "Failed"); return; }
             fetchAll();
-            Alert.alert("Done!", `${PKR(finalAmt)} bonus added for ${empMap[t.employeeId] ?? "employee"}. It will appear on the next monthly payroll.`);
+            Alert.alert("Done!", `${PKR(finalAmt)} bonus added for ${empMap[empId] ?? "employee"}. It will appear on the next monthly payroll.`);
           } catch (_) { Alert.alert("Error", "Failed to verify"); }
           setApplying(null);
         }},

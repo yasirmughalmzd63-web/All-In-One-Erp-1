@@ -115,7 +115,7 @@ function ClassicTabLayout() {
   return (
     <Tabs
       screenOptions={{ headerShown: false }}
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={(props) => <CustomTabBar {...(props as unknown as TabBarProps)} />}
     >
       <Tabs.Screen name="index"        options={{ title: "POS" }} />
       <Tabs.Screen name="dashboard"    options={{ title: "Dashboard" }} />

@@ -46,7 +46,7 @@ export default function AuditScreen() {
                     </View>
                     {log.details && <Text style={[styles.details, { color: colors.mutedForeground }]}>{log.details}</Text>}
                     <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
-                      <Text style={[styles.meta, { color: colors.mutedForeground }]}>{log.userName ?? `User #${log.userId}` ?? "System"}</Text>
+                      <Text style={[styles.meta, { color: colors.mutedForeground }]}>{log.userName ?? (log.userId ? `User #${log.userId}` : "System")}</Text>
                       <Text style={[styles.meta, { color: colors.mutedForeground }]}>{new Date(log.createdAt).toLocaleString()}</Text>
                     </View>
                   </View>

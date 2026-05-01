@@ -48,14 +48,14 @@ export default function BalanceSheetScreen() {
     try {
       const params = new URLSearchParams();
       if (locId) params.set("locationId", String(locId));
-      const r = await customFetch(`/api/reports/balance-sheet?${params.toString()}`);
-      if (r.ok) setData(await r.json());
+      const resp = await customFetch<BSResp>(`/api/reports/balance-sheet?${params.toString()}`);
+      if (resp) setData(resp);
     } finally { setLoading(false); setRefreshing(false); }
   }, [locId]);
 
   useEffect(() => {
     if (isAdmin) {
-      customFetch("/api/locations").then((r: Response) => r.ok ? r.json() : []).then((arr: Location[]) => setLocations(Array.isArray(arr) ? arr : []));
+      customFetch<Location[]>("/api/locations").then((arr) => setLocations(Array.isArray(arr) ? arr : [])).catch(() => setLocations([]));
     }
   }, [isAdmin]);
   useEffect(() => { void load(true); }, [load]);

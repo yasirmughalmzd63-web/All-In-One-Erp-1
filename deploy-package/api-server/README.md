@@ -14,6 +14,8 @@ api-server/
 │   ├── index.mjs        ← main entry — start with `node dist/index.mjs`
 │   ├── pino-*.mjs       ← logging worker files (must be next to index.mjs)
 │   └── *.map            ← source maps (delete to save ~5 MB if you want)
+├── uploads/             ← product image storage (must be writable, persistent)
+│   └── product-images/  ← created automatically on first upload
 ├── package.json         ← declares the start script
 ├── .env.example         ← copy → `.env` and fill in
 ├── schema.sql           ← run ONCE on a fresh PostgreSQL DB
@@ -139,4 +141,5 @@ You do **not** need to re-run `schema.sql` unless you've added new tables.
 | `relation "users" does not exist`             | You forgot to run `schema.sql` on the database                         |
 | Mobile app says "Network request failed"      | `EXPO_PUBLIC_API_BASE_URL` in the APK doesn't match your API URL       |
 | `Login failed` for `admin / admin123`         | You skipped the manual super-admin INSERT in step 1                    |
-| Upload-proof routes return 500                | Storage env vars are empty — see `.env.example` "Optional" section     |
+| Image upload returns 500                      | `uploads/` folder isn't writable — `chmod 755 uploads` and ensure the Node user owns it |
+| Uploaded images return 404                    | The Node app was restarted with the wrong working directory — start from the api-server/ folder |

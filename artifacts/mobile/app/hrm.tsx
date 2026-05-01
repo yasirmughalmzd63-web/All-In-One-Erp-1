@@ -1869,7 +1869,7 @@ export default function HrmScreen() {
                 <View key={f.key} style={s.fieldRow}>
                   <Text style={s.fieldLabel}>{f.label}</Text>
                   <TextInput style={s.fieldInput}
-                    value={(empForm as Record<string, string>)[f.key]}
+                    value={(empForm as unknown as Record<string, string>)[f.key]}
                     onChangeText={v => setEmpForm(p => ({ ...p, [f.key]: v }))}
                     keyboardType={f.keyboard}
                     placeholderTextColor={colors.textSecondary}

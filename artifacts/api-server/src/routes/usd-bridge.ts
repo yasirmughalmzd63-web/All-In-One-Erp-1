@@ -198,7 +198,7 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
           remainingAmount: fmt2(creditVal),
           status: "pending",
           notes: `USD purchase from ${customerName} on ${date}`,
-          userId: req.userId,
+          userId: req.userId!,
           businessId,
         }).returning();
         creditId = cr!.id;
@@ -236,7 +236,7 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
 /* ── DELETE /usd-bridge/:id ── (admin only, soft reversal info) */
 router.delete("/usd-bridge/:id", requireAuth, async (req, res): Promise<void> => {
   if (!isAdmin(req)) { res.status(403).json({ error: "Admin only" }); return; }
-  const id = parseInt(req.params.id!, 10);
+  const id = parseInt(String(req.params.id), 10);
   const [existing] = await db.select({ businessId: usdPurchasesTable.businessId }).from(usdPurchasesTable).where(eq(usdPurchasesTable.id, id));
   if (!existing) { res.status(404).json({ error: "Not found" }); return; }
   if (!ownsRow(req, existing.businessId)) { res.status(403).json({ error: "Forbidden" }); return; }

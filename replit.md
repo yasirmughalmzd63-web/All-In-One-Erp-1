@@ -199,6 +199,28 @@ lib/db/src/schema/   — 14 table definitions
 - Special category `all-transactions` runs every category except audit-logs in sequence.
 - UI safety: each clear opens a confirm modal that requires typing **RESET** to enable the Clear Now button. Master data (users, customers, suppliers, products, accounts, wallets, employees) is never deleted by these actions.
 
+### May 1, 2026 — Cleanup pass: zero TypeScript errors + local file uploads
+- **Mobile (`@workspace/mobile`)**: typecheck now passes with zero errors.
+  - Added `textSecondary` alias to `constants/colors.ts` (fixed 133 errors across 5 screens).
+  - Removed unused deps: `expo-symbols`, `@expo/ngrok`, `@stardazed/streams-text-encoding`, `@ungap/structured-clone`, `expo-location`, `expo-web-browser`.
+  - Cleaned `app.json`: explicit Android `versionCode`, `adaptiveIcon`, narrowed permissions whitelist (INTERNET / CAMERA / READ_MEDIA_IMAGES) and `blockedPermissions` (audio/location/contacts), proper `expo-image-picker` plugin permission strings.
+  - Rewrote `eas.json`: added `development` and `local-apk` profiles, `autoIncrement: "version"`, removed placeholder env vars.
+  - **Real runtime bug**: 5 report screens (`audit-checks`, `balance-sheet`, `location-summary`, `product-profit`, `profit-loss`) misused `customFetch` as a `Response` (`r.ok`/`r.json()`), but `customFetch<T>()` returns the parsed body directly — they were silently rendering empty. All five screens fixed.
+  - Other TS fixes: `(tabs)/_layout.tsx` TabBar prop cast, `audit.tsx` redundant `??`, `customer-profile.tsx` duplicate `gap` key, `hrm.tsx` Record<string,string> cast through `unknown`, `targets.tsx` employeeId narrowing inside async closure.
+- **API server (`@workspace/api-server`)**: typecheck now passes with zero errors (was 30).
+  - Replaced `@replit/object-storage` (deprecated API surface, won't run on Hostinger) with simple local-filesystem uploads: images saved under `uploads/product-images/<file>` and served at `GET /api/uploads/<key>` via `express.static`. 8 MB limit, key-traversal protection, no signed-URL expiry to manage.
+  - `app.ts` now mounts `/api/uploads` static, raises JSON/urlencoded body limit to 12 MB.
+  - Bulk fix `parseInt(req.params.id!, 10)` → `parseInt(String(req.params.id), 10)` across `app-wallets.ts`, `businesses.ts`, `hrm.ts`, `targets.ts`, `usd-bridge.ts`.
+  - `dashboard.ts` `scopedPeriodFilter` now always returns the result of `and(...)` so drizzle gets a proper `SQL<unknown>`.
+  - Three insert sites (`locations.ts`, `sales.ts`, `usd-bridge.ts`) now assert `req.userId!` since they're behind `requireAuth`.
+  - Removed `@replit/object-storage` from `package.json`.
+- **Deploy bundle refresh** (`deploy-package/`):
+  - Re-bundled `api-server/dist/` (2.5 MB single-file ESM).
+  - Added `api-server/uploads/product-images/` skeleton (must be writable on Hostinger).
+  - Updated `.env.example` (removed obsolete object-storage vars, documented local upload behavior).
+  - Updated `README.md` (uploads folder in tree, two new troubleshooting rows).
+  - Rebuilt `coins-sale-source.tar.gz` and `coins-sale-source.zip` (~1.7 MB each).
+
 ### May 1, 2026 — Cash Management user/app filters
 - Backend `GET /api/cash-management/statement` now also accepts optional `userId` and `productId` query params.
   - `userId` filters every source-of-funds (sales, purchases, expenses, credit_payments).
