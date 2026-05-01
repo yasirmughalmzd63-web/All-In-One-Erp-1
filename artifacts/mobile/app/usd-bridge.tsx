@@ -15,7 +15,7 @@ import { getApiUrl } from "@/lib/api";
 /* ─── Types ─── */
 interface Customer { id: number; name: string; }
 interface Account  { id: number; name: string; balance: string; type: string; }
-interface Product  { id: number; name: string; stock: number; price: string; }
+interface Product  { id: number; name: string; stock: number; unitPrice: string; price?: string; }
 
 interface UsdPurchase {
   id: number; customerId?: number; customerName: string;
@@ -240,7 +240,10 @@ export default function UsdBridgeScreen() {
 
   const coinsPkr = useMemo(() => {
     if (!selectedProduct || !coinsQty) return 0;
-    return parseFloat(coinsQty) * parseFloat(selectedProduct.price || "0");
+    const qty   = parseFloat(coinsQty);
+    const price = parseFloat(selectedProduct.unitPrice || selectedProduct.price || "0");
+    if (isNaN(qty) || isNaN(price)) return 0;
+    return qty * price;
   }, [selectedProduct, coinsQty]);
 
   const cashVal   = parseFloat(cashPkr   || "0");
@@ -998,7 +1001,7 @@ export default function UsdBridgeScreen() {
                   <View style={{ flex: 1 }}>
                     <Text style={s.listRowTxt}>{item.name}</Text>
                     <Text style={[s.listRowTxt, { fontSize: 11, color: colors.textSecondary }]}>
-                      Stock: {item.stock} · {PKR(parseFloat(item.price || "0"))}/unit
+                      Stock: {item.stock} · {PKR(parseFloat(item.unitPrice || item.price || "0"))}/unit
                     </Text>
                   </View>
                 </TouchableOpacity>
