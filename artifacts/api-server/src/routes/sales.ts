@@ -322,7 +322,7 @@ router.post("/sales", requireAuth, async (req, res): Promise<void> => {
       remainingAmount: fmt(remaining),
       status: paid > 0 ? "partial" : "pending",
       notes: `Credit sale: ${invoiceNo}`,
-      userId: req.userId!,
+      userId: req.userId,
     });
   }
 
