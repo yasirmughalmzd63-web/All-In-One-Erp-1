@@ -78,7 +78,6 @@ const SECTIONS: Section[] = [
       { label: "Profit & Loss",  icon: "trending-up",     route: "/profit-loss",   color: "#059669", bg: "#ECFDF5", desc: "Sales − COGS − Expenses",     module: "dashboard" },
       { label: "Balance Sheet",  icon: "grid",            route: "/balance-sheet", color: "#1E40AF", bg: "#EFF6FF", desc: "Assets / Liabilities / Equity", module: "dashboard" },
       { label: "User Report",    icon: "user",            route: "/user-report",   color: "#7C3AED", bg: "#F3E8FF", desc: "Stock issued & cash per user", module: "users", adminOnly: true },
-      { label: "Audit Checks",   icon: "alert-triangle",  route: "/audit-checks",  color: "#DC2626", bg: "#FEF2F2", desc: "Negative stock, unpaid sales", module: "audit" },
       { label: "Audit Log",      icon: "file-text",       route: "/audit",         color: "#475569", bg: "#F8FAFC", desc: "Full activity history",        module: "audit" },
     ],
   },
