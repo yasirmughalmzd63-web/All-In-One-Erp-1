@@ -140,11 +140,8 @@ export default function MoreScreen() {
       <View style={[styles.menuIcon, { backgroundColor: item.bg }]}>
         <Feather name={item.icon} size={22} color={item.color} />
       </View>
-      <Text style={[styles.menuLabel, { color: colors.text }]} numberOfLines={1}>
+      <Text style={[styles.menuLabel, { color: colors.text }]} numberOfLines={2}>
         {item.label}
-      </Text>
-      <Text style={[styles.menuDesc, { color: colors.mutedForeground }]} numberOfLines={2}>
-        {item.desc}
       </Text>
     </TouchableOpacity>
   );
@@ -304,24 +301,31 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   menuItem: {
-    width: "48%",
-    borderRadius: 16,
+    width: "31.8%",
+    borderRadius: 14,
     borderWidth: 1,
-    padding: 14,
-    gap: 8,
-    minHeight: 124,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    gap: 6,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    minHeight: 92,
   },
   menuIcon: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },
-  menuLabel: { fontFamily: "Inter_700Bold", fontSize: 14 },
-  menuDesc: { fontFamily: "Inter_400Regular", fontSize: 11, lineHeight: 14 },
+  menuLabel: {
+    fontFamily: "Inter_600SemiBold",
+    fontSize: 11.5,
+    lineHeight: 14,
+    textAlign: "center",
+  },
 
   infoCard: {
     borderRadius: 14,

@@ -141,6 +141,10 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
+### May 1, 2026 — More tab redesigned as compact 3-column nav grid
+- `artifacts/mobile/app/(tabs)/more.tsx`: Converted the More menu from 2-column tiles (icon + label + 2-line description) into a denser 3-column "app launcher" grid (icon + centered 2-line label only). Section headers and section accents preserved for grouping. Each tile is ~31.8% width × ~92px tall vs. previous 48% × 124px — fits ~50% more items per screen.
+- Item visibility (privilege/admin/super-admin gating) is unchanged. Source archives refreshed.
+
 ### May 1, 2026 — Allow account balances to go negative (removed "Insufficient funds" 422 gates)
 - Per user request: when a selected account has less balance than the deduct amount, do NOT block with red error. Instead let the transaction proceed and let the account balance go negative (deficit shown in the account's record). Removed the `acctBal < amount` 422 guards in 5 places, keeping all other checks (account exists, tenant ownership, isActive) intact:
   - `usd-bridge.ts` (cash leg of USDT Bridge sale)
