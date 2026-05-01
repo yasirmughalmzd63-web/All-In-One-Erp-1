@@ -637,15 +637,42 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
   const prodConds = [eq(productsTable.isActive, true), tenantWhere(req, productsTable.businessId)];
   if (scope.locationId) prodConds.push(eq(productsTable.locationId, scope.locationId));
 
-  // Negative stock products
+  // Negative stock products (stock < 0 = shortage)
+  // The join is tenant-scoped on the ON clause so a cross-tenant locationId
+  // on a product row can never surface another business's location name.
   const negStock = await db.select({
-    id: productsTable.id, name: productsTable.name, stock: productsTable.stock, locationId: productsTable.locationId,
-  }).from(productsTable).where(and(...prodConds, lt(productsTable.stock, 0)));
+    id: productsTable.id,
+    name: productsTable.name,
+    stock: productsTable.stock,
+    unitPrice: productsTable.unitPrice,
+    costPrice: productsTable.costPrice,
+    locationId: productsTable.locationId,
+    locationName: locationsTable.name,
+  }).from(productsTable)
+    .leftJoin(
+      locationsTable,
+      and(
+        eq(productsTable.locationId, locationsTable.id),
+        tenantWhere(req, locationsTable.businessId),
+      ),
+    )
+    .where(and(...prodConds, lt(productsTable.stock, 0)));
 
-  // Zero-stock active products (potential lost-sale alert)
+  // Zero-stock active products (potential lost-sale alert) — same tenant-scoped join
   const zeroStock = await db.select({
-    id: productsTable.id, name: productsTable.name, locationId: productsTable.locationId,
-  }).from(productsTable).where(and(...prodConds, eq(productsTable.stock, 0)));
+    id: productsTable.id,
+    name: productsTable.name,
+    locationId: productsTable.locationId,
+    locationName: locationsTable.name,
+  }).from(productsTable)
+    .leftJoin(
+      locationsTable,
+      and(
+        eq(productsTable.locationId, locationsTable.id),
+        tenantWhere(req, locationsTable.businessId),
+      ),
+    )
+    .where(and(...prodConds, eq(productsTable.stock, 0)));
 
   // Sales with credit (amountPaid < total)
   const salesConds = [sql`cast(${salesTable.amountPaid} as numeric) < cast(${salesTable.total} as numeric)`, tenantWhere(req, salesTable.businessId)];
@@ -686,9 +713,49 @@ router.get("/reports/audit-checks", requireAuth, async (req, res): Promise<void>
     .where(and(...delConds))
     .orderBy(desc(auditLogsTable.createdAt)).limit(20);
 
+  // Unified summary table: ID · Name · App · Short · Excess · Remarks
+  // Short  = how many units we are negative (deficit)
+  // Excess = currently 0 (reserved for future "system stock vs physical count" comparison)
+  // Items are sorted: shortages first (most severe), then out-of-stock
+  type SummaryRow = {
+    id: number; name: string; app: string;
+    short: number; shortValue: string;
+    excess: number; excessValue: string;
+    remarks: string;
+  };
+  const summary: SummaryRow[] = [];
+  for (const p of negStock) {
+    const shortQty = Math.abs(p.stock);
+    const unit = parseFloat(p.unitPrice ?? "0");
+    summary.push({
+      id: p.id,
+      name: p.name,
+      app: p.locationName ?? "—",
+      short: shortQty,
+      shortValue: (shortQty * unit).toFixed(2),
+      excess: 0,
+      excessValue: "0.00",
+      remarks: `Negative stock — sold ${shortQty.toLocaleString()} more than available`,
+    });
+  }
+  for (const p of zeroStock) {
+    summary.push({
+      id: p.id,
+      name: p.name,
+      app: p.locationName ?? "—",
+      short: 0,
+      shortValue: "0.00",
+      excess: 0,
+      excessValue: "0.00",
+      remarks: "Out of stock — restock recommended",
+    });
+  }
+
   res.json({
     generatedAt: new Date().toISOString(),
     scope,
+    summary,
+    summaryCount: summary.length,
     negativeStock: { count: negStock.length, items: negStock },
     zeroStock:     { count: zeroStock.length, items: zeroStock.slice(0, 50) },
     unpaidSales:   {
