@@ -16,6 +16,8 @@ import {
   dollarWalletTable,
   walletsTable,
   locationsTable,
+  usdPurchasesTable,
+  creditPaymentsTable,
 } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { tenantWhere } from "../lib/tenant.js";
@@ -475,20 +477,93 @@ router.get("/inventory/ledger", requireAuth, async (req, res): Promise<void> => 
     ))
     .groupBy(purchaseItemsTable.productId);
 
+  // USD-Bridge product OUT in range (coins given to customer when buying USD)
+  // Valued at PKR sale price (coinsPkr already = qty × unitPrice at txn time)
+  const tenantUsd = tenantWhere(req, usdPurchasesTable.businessId);
+  const usdOutInRange = productIds.length === 0 ? [] : await db.select({
+    productId: usdPurchasesTable.coinsProductId,
+    qty: sql<string>`coalesce(sum(cast(${usdPurchasesTable.coinsQty} as numeric)), 0)`,
+    value: sql<string>`coalesce(sum(cast(${usdPurchasesTable.coinsPkr} as numeric)), 0)`,
+  }).from(usdPurchasesTable)
+    .where(and(
+      inArray(usdPurchasesTable.coinsProductId, productIds),
+      gte(usdPurchasesTable.createdAt, start),
+      lte(usdPurchasesTable.createdAt, end),
+      tenantUsd,
+    ))
+    .groupBy(usdPurchasesTable.coinsProductId);
+
+  // USD-Bridge product OUT AFTER end (for balance back-walking)
+  const usdOutAfterEnd = productIds.length === 0 ? [] : await db.select({
+    productId: usdPurchasesTable.coinsProductId,
+    qty: sql<string>`coalesce(sum(cast(${usdPurchasesTable.coinsQty} as numeric)), 0)`,
+  }).from(usdPurchasesTable)
+    .where(and(
+      inArray(usdPurchasesTable.coinsProductId, productIds),
+      gt(usdPurchasesTable.createdAt, end),
+      tenantUsd,
+    ))
+    .groupBy(usdPurchasesTable.coinsProductId);
+
+  // Credit "coins_withdraw" payments — products given to settle a payable, valued at PKR
+  const tenantCp = tenantWhere(req, creditPaymentsTable.businessId);
+  const cpCondBase = and(
+    eq(creditPaymentsTable.paymentMethod, "coins_withdraw"),
+    tenantCp,
+  );
+  const cpOutInRange = productIds.length === 0 ? [] : await db.select({
+    productId: creditPaymentsTable.productId,
+    qty: sql<string>`coalesce(sum(cast(${creditPaymentsTable.productQty} as numeric)), 0)`,
+    value: sql<string>`coalesce(sum(cast(coalesce(${creditPaymentsTable.productValuePkr}, ${creditPaymentsTable.amount}) as numeric)), 0)`,
+  }).from(creditPaymentsTable)
+    .where(and(
+      cpCondBase,
+      inArray(creditPaymentsTable.productId, productIds),
+      gte(creditPaymentsTable.createdAt, start),
+      lte(creditPaymentsTable.createdAt, end),
+    ))
+    .groupBy(creditPaymentsTable.productId);
+
+  const cpOutAfterEnd = productIds.length === 0 ? [] : await db.select({
+    productId: creditPaymentsTable.productId,
+    qty: sql<string>`coalesce(sum(cast(${creditPaymentsTable.productQty} as numeric)), 0)`,
+  }).from(creditPaymentsTable)
+    .where(and(
+      cpCondBase,
+      inArray(creditPaymentsTable.productId, productIds),
+      gt(creditPaymentsTable.createdAt, end),
+    ))
+    .groupBy(creditPaymentsTable.productId);
+
   const salesInMap        = new Map(salesInRange.map(r => [r.productId, { qty: parseInt(r.qty), value: parseFloat(r.value) }]));
   const purchasesInMap    = new Map(purchasesInRange.map(r => [r.productId, { qty: parseInt(r.qty), value: parseFloat(r.value) }]));
   const salesAfterMap     = new Map(salesAfterEnd.map(r => [r.productId, parseInt(r.qty)]));
   const purchasesAfterMap = new Map(purchasesAfterEnd.map(r => [r.productId, parseInt(r.qty)]));
+  const usdOutInMap       = new Map(usdOutInRange.flatMap(r => r.productId ? [[r.productId, { qty: parseFloat(r.qty), value: parseFloat(r.value) }] as const] : []));
+  const usdOutAfterMap    = new Map(usdOutAfterEnd.flatMap(r => r.productId ? [[r.productId, parseFloat(r.qty)] as const] : []));
+  const cpOutInMap        = new Map(cpOutInRange.flatMap(r => r.productId ? [[r.productId, { qty: parseFloat(r.qty), value: parseFloat(r.value) }] as const] : []));
+  const cpOutAfterMap     = new Map(cpOutAfterEnd.flatMap(r => r.productId ? [[r.productId, parseFloat(r.qty)] as const] : []));
 
   // Build rows
   const rows = products.map(p => {
-    const recv  = purchasesInMap.get(p.id)    ?? { qty: 0, value: 0 };
-    const sold  = salesInMap.get(p.id)        ?? { qty: 0, value: 0 };
-    const recAf = purchasesAfterMap.get(p.id) ?? 0;
-    const solAf = salesAfterMap.get(p.id)     ?? 0;
+    const recv   = purchasesInMap.get(p.id)    ?? { qty: 0, value: 0 };
+    const saleIn = salesInMap.get(p.id)        ?? { qty: 0, value: 0 };
+    const usdIn  = usdOutInMap.get(p.id)       ?? { qty: 0, value: 0 };
+    const cpIn   = cpOutInMap.get(p.id)        ?? { qty: 0, value: 0 };
+    const recAf  = purchasesAfterMap.get(p.id) ?? 0;
+    const solAf  = salesAfterMap.get(p.id)     ?? 0;
+    const usdAf  = usdOutAfterMap.get(p.id)    ?? 0;
+    const cpAf   = cpOutAfterMap.get(p.id)     ?? 0;
 
-    // balanceAtEnd = currentStock - purchasesAfterEnd + salesAfterEnd
-    const balanceAtEnd = (p.stock ?? 0) - recAf + solAf;
+    // Total OUT in range = sales + USD-bridge coin payouts + credit "coins_withdraw"
+    // All valued in PKR (sales: line total, USD bridge: coinsPkr, credit: productValuePkr/amount).
+    const sold = {
+      qty:   saleIn.qty   + usdIn.qty   + cpIn.qty,
+      value: saleIn.value + usdIn.value + cpIn.value,
+    };
+
+    // balanceAtEnd = currentStock - (all-after-end IN) + (all-after-end OUT)
+    const balanceAtEnd = (p.stock ?? 0) - recAf + solAf + usdAf + cpAf;
     const opening      = balanceAtEnd - recv.qty + sold.qty;
 
     const unitPrice = parseFloat(p.unitPrice ?? "0");

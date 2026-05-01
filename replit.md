@@ -141,6 +141,11 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
+### May 1, 2026 — USDT Bridge fixes (UI value + inventory ledger inclusion)
+- **UI fix** (`artifacts/mobile/app/usd-bridge.tsx`): Coins payment "Value" displayed ₨0 because Product type read `.price` but `/api/products` returns `unitPrice`. Updated interface + `coinsPkr` calc + product picker subtext to read `unitPrice` (with `price` fallback).
+- **Inventory ledger fix** (`artifacts/api-server/src/routes/dashboard.ts /api/inventory/ledger`): USDT-Bridge product OUT (coins-as-payment) and credit `coins_withdraw` payments were decrementing `productsTable.stock` directly without inserting into `salesTable`, so they were INVISIBLE in the inventory in/out ledger. Added 4 new aggregations (in-range + after-end for both sources) and merged into the SOLD column at PKR sale-price value (`usd_purchases.coinsPkr` and `credit_payments.productValuePkr ?? amount`). `balanceAtEnd` back-walk now also reverses USD/credit outflows after end. Tenant-scoped via `tenantWhere(... .businessId)`. Architect review PASSED.
+- Rebuilt deploy bundle: `api-server/dist/index.mjs` (2.6 MB), `coins-sale-source.tar.gz` (1.6 MB), `coins-sale-source.zip` (1.8 MB).
+
 ### Apr 30, 2026 — Self-host deployment package + multi-tenant scoping completion
 - Finished multi-tenant scoping pass: `dollar-wallet.ts` (all account/wallet/supplier/customer/product/dwEntry lookups now use `ownsRow`), `cash-management.ts /accounts` (added `tenantWhere`), `dashboard.ts` (both locations queries scoped).
 - **Critical bug fix:** `...tenantStamp(req)` was silently dropping `businessId` from inserts because `tenantStamp` returns `number|null`, not an object. Replaced 9 spread-call sites in `dollar-wallet.ts` and `app-wallets.ts` with `businessId: tenantStamp(req)`.
