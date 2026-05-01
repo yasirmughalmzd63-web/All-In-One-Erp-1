@@ -125,13 +125,9 @@ router.post("/usd-bridge", requireAuth, async (req, res): Promise<void> => {
       res.status(422).json({ error: `Account "${acct.name}" is inactive and cannot be used for payments.` });
       return;
     }
-    const acctBal = parseFloat(acct.balance);
-    if (acctBal < cashVal) {
-      res.status(422).json({
-        error: `Insufficient funds in "${acct.name}". Available: ₨${acctBal.toFixed(2)}, Required: ₨${cashVal.toFixed(2)}.`,
-      });
-      return;
-    }
+    // Insufficient-funds is allowed: account may go negative (deficit shown in
+    // its record). User accepts this so they can record real-world payouts
+    // even when the cash account hasn't been topped up yet.
   } else if (cashVal > 0 && !cashAccountId) {
     res.status(422).json({ error: "A cash account must be selected when using cash payment." });
     return;

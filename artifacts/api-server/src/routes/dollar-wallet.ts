@@ -132,13 +132,9 @@ router.post("/dollar-wallet/purchase", requireAuth, async (req, res): Promise<vo
     res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for USD purchases.` });
     return;
   }
-  const acctBal = parseFloat(account.balance);
-  if (acctBal < totalPkr) {
-    res.status(422).json({
-      error: `Insufficient funds in "${account.name}". Available: ₨${acctBal.toFixed(2)}, Required: ₨${totalPkr.toFixed(2)} ($${usd} × ₨${r}).`,
-    });
-    return;
-  }
+  // Insufficient-funds is allowed: account may go negative (deficit shown
+  // in its record). User can record a USD purchase even when the PKR
+  // account hasn't been topped up yet.
 
   const [wallet] = await db.select().from(walletsTable).where(and(eq(walletsTable.id, walletId), eq(walletsTable.currency, "USD")));
   if (!wallet) { res.status(404).json({ error: "Dollar wallet not found." }); return; }

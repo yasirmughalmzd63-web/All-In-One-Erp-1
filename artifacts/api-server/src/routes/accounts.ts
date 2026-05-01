@@ -76,12 +76,9 @@ router.post("/accounts/transfer", requireAuth, async (req, res): Promise<void> =
       return;
     }
     const fromBal = parseFloat(from.balance);
-    if (fromBal < amt) {
-      res.status(422).json({
-        error: `Insufficient funds in "${from.name}". Available: ₨${fromBal.toFixed(2)}, Required: ₨${amt.toFixed(2)}.`,
-      });
-      return;
-    }
+    // Insufficient-funds is allowed: source account may go negative (deficit
+    // shown in its record). User can record a transfer even when the source
+    // account hasn't been topped up yet.
     await db.update(accountsTable).set({ balance: (fromBal - amt).toFixed(8) }).where(eq(accountsTable.id, fromAccountId));
   }
   if (toAccountId) {

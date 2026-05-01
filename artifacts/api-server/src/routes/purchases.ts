@@ -166,13 +166,9 @@ router.post("/purchases", requireAuth, async (req, res): Promise<void> => {
       res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for payments.` });
       return;
     }
-    const currentBal = parseFloat(account.balance);
-    if (currentBal < paid) {
-      res.status(422).json({
-        error: `Insufficient funds in "${account.name}". Available: ₨${currentBal.toFixed(2)}, Required: ₨${paid.toFixed(2)}.`,
-      });
-      return;
-    }
+    // Insufficient-funds is allowed: account may go negative (deficit shown
+    // in its record). User can record real-world payments even when the
+    // account hasn't been topped up yet.
   }
 
   const invoiceNo = genInvoiceNo();

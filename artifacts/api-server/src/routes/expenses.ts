@@ -60,13 +60,9 @@ router.post("/expenses", requireAuth, async (req, res): Promise<void> => {
       res.status(422).json({ error: `Account "${account.name}" is inactive and cannot be used for expenses.` });
       return;
     }
-    const currentBal = parseFloat(account.balance);
-    if (currentBal < amtNum) {
-      res.status(422).json({
-        error: `Insufficient funds in "${account.name}". Available: ₨${currentBal.toFixed(2)}, Required: ₨${amtNum.toFixed(2)}.`,
-      });
-      return;
-    }
+    // Insufficient-funds is allowed: account may go negative (deficit shown
+    // in its record). User can record real-world expenses even when the
+    // account hasn't been topped up yet.
   }
 
   const [row] = await db.insert(expensesTable).values({

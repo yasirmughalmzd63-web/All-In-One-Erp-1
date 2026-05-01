@@ -141,6 +141,16 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
+### May 1, 2026 — Allow account balances to go negative (removed "Insufficient funds" 422 gates)
+- Per user request: when a selected account has less balance than the deduct amount, do NOT block with red error. Instead let the transaction proceed and let the account balance go negative (deficit shown in the account's record). Removed the `acctBal < amount` 422 guards in 5 places, keeping all other checks (account exists, tenant ownership, isActive) intact:
+  - `usd-bridge.ts` (cash leg of USDT Bridge sale)
+  - `purchases.ts` (paying supplier from PKR account)
+  - `expenses.ts` (paying expense from PKR account)
+  - `accounts.ts` (account-to-account transfer; preserved the `fromBal` arithmetic that updates balance)
+  - `dollar-wallet.ts` (PKR-account leg of Buy USD; deliberately LEFT the wallet-to-wallet USD `Insufficient balance` check at line ~582 since that's USD wallet stock, not a PKR account).
+- Architect review PASSED: no stale variable references, tenant scoping intact, balance update arithmetic produces clean negatives in numeric/decimal columns.
+- Rebuilt deploy bundle: `api-server/dist/index.mjs` (2.6 MB), `coins-sale-source.tar.gz` (1.6 MB), `coins-sale-source.zip` (1.8 MB).
+
 ### May 1, 2026 — USDT Bridge fixes (UI value + inventory ledger inclusion)
 - **UI fix** (`artifacts/mobile/app/usd-bridge.tsx`): Coins payment "Value" displayed ₨0 because Product type read `.price` but `/api/products` returns `unitPrice`. Updated interface + `coinsPkr` calc + product picker subtext to read `unitPrice` (with `price` fallback).
 - **Inventory ledger fix** (`artifacts/api-server/src/routes/dashboard.ts /api/inventory/ledger`): USDT-Bridge product OUT (coins-as-payment) and credit `coins_withdraw` payments were decrementing `productsTable.stock` directly without inserting into `salesTable`, so they were INVISIBLE in the inventory in/out ledger. Added 4 new aggregations (in-range + after-end for both sources) and merged into the SOLD column at PKR sale-price value (`usd_purchases.coinsPkr` and `credit_payments.productValuePkr ?? amount`). `balanceAtEnd` back-walk now also reverses USD/credit outflows after end. Tenant-scoped via `tenantWhere(... .businessId)`. Architect review PASSED.
