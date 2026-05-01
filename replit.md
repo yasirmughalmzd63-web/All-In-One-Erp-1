@@ -141,6 +141,26 @@ lib/db/src/schema/   — 14 table definitions
 
 ## Recent Changes
 
+### May 1, 2026 — Pivoted from Hostinger + Expo to Vercel-only deployment
+- **Removed the entire Expo mobile app** at the user's request:
+  - Deleted `artifacts/mobile/` (the artifact and all source).
+  - The auto-generated workflow `artifacts/mobile: expo` was cleaned up automatically when the artifact directory was removed.
+- **Removed all Hostinger deployment artifacts**:
+  - Deleted `deploy-package/` (prebuilt bundle, Hostinger README, source archives `coins-sale-source.tar.gz`/`zip`, mobile-app README).
+  - Deleted root `README.md` (Hostinger quick-start) and rewrote a fresh Vercel-focused one.
+  - Removed `start` script from root `package.json` (was pointing at the deleted `deploy-package/`).
+  - `.gitattributes` slimmed to just normalization rules.
+  - `.gitignore` rewrote: dropped Hostinger un-ignore (`!deploy-package/api-server/dist/**`), dropped Android/APK rules, added `.vercel/`.
+- **Configured the api-server to run on Vercel** as a serverless function:
+  - `artifacts/api-server/src/index.ts` refactored: now exports `app` as default and only calls `app.listen(PORT)` when `PORT` env is present. Same source file works for both long-running mode (Replit, VPS) and serverless (Vercel imports the bundle and uses the default export per request).
+  - New root `api/index.mjs`: Vercel-discovered function that re-exports the bundled Express app from `artifacts/api-server/dist/index.mjs`.
+  - New root `vercel.json`: `installCommand: pnpm install --frozen-lockfile`, `buildCommand: pnpm --filter @workspace/api-server run build`, rewrites `/api` and `/api/*` to the function, `maxDuration: 30s`.
+  - New root `.env.example` documenting `DATABASE_URL`, `SESSION_SECRET`, `NODE_ENV`, `PUBLIC_BASE_URL`, `UPLOADS_DIR`.
+  - `artifacts/api-server/src/routes/upload.ts`: detects `process.env.VERCEL` and defaults `UPLOADS_DIR` to `/tmp/uploads` (writable but ephemeral). Comment + README warn that real persistence on Vercel needs Vercel Blob / S3 / R2.
+  - `artifacts/api-server/src/app.ts`: comment updated to drop "Hostinger" reference (trust-proxy still applies, just for any upstream proxy).
+- **Verified locally**: rebuilt bundle (`dist/index.mjs` 2.5 MB), `import('./api/index.mjs')` returns the Express app function, dev workflow restart succeeded, `/api/healthz` → 200.
+- **Active artifacts now**: `api-server` (production target, deploys to Vercel) and `mockup-sandbox` (dev-only UI prototyping).
+
 ### May 1, 2026 — Replaced @replit/object-storage with local-FS uploads (Hostinger crash fix)
 - **Bug found via Hostinger build log**: `pnpm install` succeeded at the workspace root (1137 pkgs) but the start phase would have crashed because the bundle imports `@google-cloud/storage` (transitively, via `@replit/object-storage` which esbuild bundles) and that package can't be esbuild-bundled (uses `.proto` path traversal). Hostinger has neither package installed, so `node dist/index.mjs` fails with `ERR_MODULE_NOT_FOUND: Cannot find package '@google-cloud/storage'`. Confirmed by simulating Hostinger boot in `/tmp/hostinger-sim/` against a clean dir.
 - **Fix**: switched product-image and payment-proof storage from Replit object storage to local filesystem. The same bundle now runs identically on Replit, Hostinger, VPS, Docker — no cloud SDK required.

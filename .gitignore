@@ -5,13 +5,6 @@ dist/
 tmp/
 out-tsc/
 *.tsbuildinfo
-.expo/
-.expo-shared/
-
-# IMPORTANT: keep the pre-built backend bundle in the repo so Hostinger
-# can run it directly without an `npm install` / build step.
-!deploy-package/api-server/dist/
-!deploy-package/api-server/dist/**
 
 # ── Dependencies ───────────────────────────────────────────────
 node_modules/
@@ -23,18 +16,9 @@ node_modules/
 *.pem
 *.key
 
-# ── User-uploaded files (product images, payment proofs) ──────
+# ── User-uploaded files ────────────────────────────────────────
 uploads/
 artifacts/api-server/uploads/
-
-# ── Android build output (mobile) ──────────────────────────────
-artifacts/mobile/android/build/
-artifacts/mobile/android/app/build/
-artifacts/mobile/android/.gradle/
-artifacts/mobile/ios/build/
-*.apk
-*.aab
-*.keystore
 
 # ── Replit-only (do not push to GitHub) ────────────────────────
 .cache/
@@ -45,6 +29,9 @@ artifacts/mobile/ios/build/
 .upm/
 attached_assets/
 replit.md
+
+# ── Vercel ─────────────────────────────────────────────────────
+.vercel/
 
 # ── Logs ───────────────────────────────────────────────────────
 npm-debug.log*

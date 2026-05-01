@@ -7,8 +7,9 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-// Honour X-Forwarded-Proto/Host from Hostinger / any reverse proxy so
-// req.protocol returns "https" and signed/public URLs are correct.
+// Honour X-Forwarded-Proto / X-Forwarded-Host from any upstream proxy
+// (Vercel, nginx, etc.) so req.protocol returns "https" and the URLs we
+// build for uploaded files are correct.
 app.set("trust proxy", 1);
 
 app.use(

@@ -5,13 +5,23 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 
 const router = Router();
 
-// Local-filesystem image storage. Works on any Node host (Replit, Hostinger,
-// VPS, Docker) — no cloud SDK required.
+// Local-filesystem image storage. Works on any Node host (Replit, VPS,
+// Docker) — no cloud SDK required.
 //
-// Files are written to UPLOADS_DIR (defaults to ./uploads next to the server)
-// and served back over HTTPS at `${PUBLIC_BASE_URL}/api/uploads/<key>` via
-// the express.static middleware mounted in app.ts.
-const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR ?? path.join(process.cwd(), "uploads"));
+// Files are written to UPLOADS_DIR and served back at
+// `${PUBLIC_BASE_URL}/api/uploads/<key>` via the express.static middleware
+// mounted in app.ts.
+//
+// On Vercel (serverless) the project root is read-only — only /tmp is
+// writable, and that storage is ephemeral (cleared between invocations and
+// not shared across instances). For real persistence on Vercel, swap this
+// route for Vercel Blob, S3, R2, or any other object store. See README.
+function defaultUploadsDir(): string {
+  if (process.env.UPLOADS_DIR) return path.resolve(process.env.UPLOADS_DIR);
+  if (process.env.VERCEL) return "/tmp/uploads";
+  return path.join(process.cwd(), "uploads");
+}
+const UPLOADS_DIR = defaultUploadsDir();
 
 async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
@@ -22,7 +32,7 @@ function publicUrlFor(req: Request, key: string): string {
   if (base) return `${base}/api/uploads/${key}`;
   // Fallback: derive from incoming request (works when the server is reached
   // directly on its public domain). `app.set("trust proxy", 1)` in app.ts
-  // makes req.protocol respect X-Forwarded-Proto from Hostinger's reverse proxy.
+  // makes req.protocol respect X-Forwarded-Proto from any upstream proxy.
   const host = req.get("host") ?? "localhost";
   return `${req.protocol}://${host}/api/uploads/${key}`;
 }

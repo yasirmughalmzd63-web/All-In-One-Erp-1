@@ -1,15 +1,8 @@
-# Keep Unix line endings on all text files so the bundle runs identically
-# on Linux (Hostinger) regardless of who pushed from Windows/macOS.
+# Normalize line endings to LF on all text files
 * text=auto eol=lf
 
-# Treat the bundled JS as binary so git doesn't try to merge it.
-deploy-package/api-server/dist/*.mjs binary
-deploy-package/api-server/dist/*.mjs.map binary
-deploy-package/coins-sale-source.tar.gz binary
-deploy-package/coins-sale-source.zip binary
+# Mark common binary asset types so git doesn't try to merge or diff them
 *.png binary
 *.jpg binary
 *.jpeg binary
 *.webp binary
-*.apk binary
-*.aab binary
